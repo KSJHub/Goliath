@@ -21,7 +21,7 @@ if (!globalThis[PATCH_KEY]) {
     const configured = String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim();
     const url = new URL(configured);
     // Appeal URLs use browser pathname routing, never a legacy hash router.
-    return url.origin;
+    return url.origin + require('../config/dashboardRouting').dashboardBasePath();
   };
   const noticeAlreadyAttempted = (modCase) => Boolean(modCase?.metadata?.appealNotice?.attemptedAt);
   const departureNoticeKey = (guildId, userId) => `${String(guildId)}:${String(userId)}`;

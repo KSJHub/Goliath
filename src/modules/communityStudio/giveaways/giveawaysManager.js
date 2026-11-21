@@ -3,11 +3,11 @@
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   PermissionFlagsBits,
 } = require('discord.js');
 
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const giveawaysStore = require('./giveawaysStore');
 const guildManager = require('../../../core/guild/guildManager');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
@@ -140,14 +140,8 @@ function buildGiveawayRows(giveaway) {
   if (giveaway.status !== 'active') return [];
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`giveaways:enter:${giveaway.giveawayId}`)
-        .setLabel(`Enter (${giveaway.entries?.length || 0})`)
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`giveaways:end:${giveaway.giveawayId}`)
-        .setLabel('End')
-        .setStyle(ButtonStyle.Danger)
+      navigationButton(`giveaways:enter:${giveaway.giveawayId}`, `Enter (${giveaway.entries?.length || 0})`, ButtonStyle.Success),
+      navigationButton(`giveaways:end:${giveaway.giveawayId}`, 'End', ButtonStyle.Danger)
     ),
   ];
 }

@@ -1,6 +1,6 @@
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
@@ -8,6 +8,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
+const { navigationButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const leveling = require('../../../modules/communityStudio/leveling/leveling');
 const levelingTracking = require('../../../modules/communityStudio/leveling/levelingTracking');
@@ -211,15 +212,15 @@ async function showLevelingLeaderboard(interaction, sortBy = 'xp', pageIndex = 0
 
   const components = [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:xp:0`).setLabel('XP').setStyle(safeSort === 'xp' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:level:0`).setLabel('Level').setStyle(safeSort === 'level' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:messages:0`).setLabel('Messages').setStyle(safeSort === 'messages' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:voice:0`).setLabel('Voice').setStyle(safeSort === 'voice' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:xp:0`, 'XP', safeSort === 'xp' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:level:0`, 'Level', safeSort === 'level' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:messages:0`, 'Messages', safeSort === 'messages' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:voice:0`, 'Voice', safeSort === 'voice' ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`).setLabel('Previous').setEmoji('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`).setLabel('Next').setEmoji('➡️').setStyle(ButtonStyle.Primary).setDisabled(safePage >= totalPages - 1),
-      new ButtonBuilder().setCustomId('user:module:leveling').setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`, 'Previous', ButtonStyle.Secondary, safePage === 0).setEmoji(EMOJIS.BACK),
+      navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`, 'Next', ButtonStyle.Primary, safePage >= totalPages - 1).setEmoji(EMOJIS.NEXT),
+      navigationButton('user:module:leveling', 'Back', ButtonStyle.Secondary).setEmoji(EMOJIS.BACK),
     ),
   ];
 
@@ -230,7 +231,7 @@ async function showLevelingLeaderboard(interaction, sortBy = 'xp', pageIndex = 0
   return updatePanel(interaction, {
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('🏆 Server Leveling Leaderboard')
+      .setTitle(`${EMOJIS.TROPHY} Server Leveling Leaderboard`)
       .setDescription([
         `Sorted by **${label}**`,
         position,
@@ -299,7 +300,7 @@ async function handleUserManageProfileSubmit(interaction) {
     notes: interaction.fields.getTextInputValue('notes'),
   });
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  await interaction.followUp({ content: '✅ Creator profile updated.', flags: 64 }).catch(() => null);
+  await interaction.followUp({ content: emojiLabel('SUCCESS', 'Creator profile updated.'), flags: 64 }).catch(() => null);
   return updatePanel(interaction, socialStudio.user.buildProfile(interaction, result.creator, socialStudio.getAccountsForCreator(interaction.guildId, result.creator)));
 }
 
@@ -326,7 +327,7 @@ function getOwnedCreatorAndAccounts(interaction) {
 }
 
 function userAccountButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+  return navigationButton(customId, label, style, disabled);
 }
 
 function accountDisplayName(account) {
@@ -355,14 +356,14 @@ function buildUserManageAccountPanel(interaction, creator, accounts, selectedId 
   }
   if (selected) {
     components.push(new ActionRowBuilder().addComponents(
-      userAccountButton('user:social:manage-account:edit', '✏️ Edit Account', ButtonStyle.Primary),
-      userAccountButton('user:social:manage-account:toggle', selected.enabled === false ? '▶️ Resume Account' : '⏸️ Pause Account', selected.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
-      userAccountButton('user:social:manage-account:check', '🔍 Check Account', ButtonStyle.Secondary),
-      userAccountButton('user:social:manage-account:delete', '🗑️ Delete Account', ButtonStyle.Danger),
+      userAccountButton('user:social:manage-account:edit', `${EMOJIS.EDIT} Edit Account`, ButtonStyle.Primary),
+      userAccountButton('user:social:manage-account:toggle', selected.enabled === false ? `${EMOJIS.PLAY} Resume Account` : `${EMOJIS.PAUSE} Pause Account`, selected.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
+      userAccountButton('user:social:manage-account:check', `${EMOJIS.SEARCH} Check Account`, ButtonStyle.Secondary),
+      userAccountButton('user:social:manage-account:delete', `${EMOJIS.DELETE} Delete Account`, ButtonStyle.Danger),
     ));
   }
   components.push(new ActionRowBuilder().addComponents(
-    userAccountButton('user:social:open', '⬅️ Back', ButtonStyle.Secondary),
+    userAccountButton('user:social:open', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
   ));
 
   const description = selected
@@ -382,7 +383,7 @@ function buildUserManageAccountPanel(interaction, creator, accounts, selectedId 
       : 'No social accounts are connected to your Creator Profile.';
 
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🛠️ Manage Account').setDescription(description).setFooter({ text: `Requested by ${getMemberDisplayName(interaction)}` }).setTimestamp()],
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.BUILDER} Manage Account`).setDescription(description).setFooter({ text: `Requested by ${getMemberDisplayName(interaction)}` }).setTimestamp()],
     components,
   };
 }
@@ -507,7 +508,7 @@ async function handleUserManageAccountEditSubmit(interaction) {
   };
   saveUserSocialSection(interaction, section);
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  await interaction.followUp({ content: '✅ Social account updated.', flags: 64 }).catch(() => null);
+  await interaction.followUp({ content: emojiLabel('SUCCESS', 'Social account updated.'), flags: 64 }).catch(() => null);
   const refreshed = getOwnedCreatorAndAccounts(interaction);
   return updatePanel(interaction, buildUserManageAccountPanel(interaction, refreshed.creator, refreshed.accounts, context.account.accountId));
 }
@@ -594,7 +595,7 @@ async function handleUserManageAccountCheck(interaction) {
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
   const ownedAccountIds = Array.isArray(context.creator?.accountIds) ? context.creator.accountIds.filter((accountId) => context.accounts?.some?.((account) => account.accountId === accountId)) : [];
   const result = await checkGuildAccounts(interaction.client, interaction.guildId, { accountIds: ownedAccountIds });
-  await interaction.followUp({ content: `🔍 Provider check complete. ${Number(result?.checked || 0)} account(s) checked.`, flags: 64 }).catch(() => null);
+  await interaction.followUp({ content: `${EMOJIS.SEARCH} Provider check complete. ${Number(result?.checked || 0)} account(s) checked.`, flags: 64 }).catch(() => null);
   const refreshed = getOwnedCreatorAndAccounts(interaction);
   return updatePanel(interaction, buildUserManageAccountPanel(interaction, refreshed.creator, refreshed.accounts, context.account.accountId));
 }
@@ -606,10 +607,10 @@ async function handleUserManageAccountDelete(interaction) {
     return true;
   }
   return updatePanel(interaction, {
-    embeds: [new EmbedBuilder().setColor(0xED4245).setTitle('⚠️ Delete Social Account').setDescription(`Delete **${accountDisplayName(context.account)}** from your Creator Profile?\n\nThis removes its monitoring and notification settings.`).setFooter({ text: `Requested by ${getMemberDisplayName(interaction)}` }).setTimestamp()],
+    embeds: [new EmbedBuilder().setColor(0xED4245).setTitle(emojiLabel('WARNING', 'Delete Social Account')).setDescription(`Delete **${accountDisplayName(context.account)}** from your Creator Profile?\n\nThis removes its monitoring and notification settings.`).setFooter({ text: `Requested by ${getMemberDisplayName(interaction)}` }).setTimestamp()],
     components: [new ActionRowBuilder().addComponents(
-      userAccountButton('user:social:manage-account:delete:cancel', '⬅️ Cancel', ButtonStyle.Secondary),
-      userAccountButton('user:social:manage-account:delete:confirm', '🗑️ Delete Account', ButtonStyle.Danger),
+      userAccountButton('user:social:manage-account:delete:cancel', emojiLabel('BACK', 'Cancel'), ButtonStyle.Secondary),
+      userAccountButton('user:social:manage-account:delete:confirm', `${EMOJIS.DELETE} Delete Account`, ButtonStyle.Danger),
     )],
   });
 }
@@ -631,7 +632,7 @@ async function handleUserManageAccountDeleteConfirm(interaction) {
   if (section.accounts) delete section.accounts[context.account.accountId];
   saveUserSocialSection(interaction, section);
   setManagedAccount(interaction, null);
-  await interaction.followUp({ content: '🗑️ Social account deleted.', flags: 64 }).catch(() => null);
+  await interaction.followUp({ content: `${EMOJIS.DELETE} Social account deleted.`, flags: 64 }).catch(() => null);
   const refreshed = getOwnedCreatorAndAccounts(interaction);
   return updatePanel(interaction, buildUserManageAccountPanel(interaction, refreshed.creator, refreshed.accounts, null));
 }
@@ -745,12 +746,12 @@ async function handleUserManualPostLive(interaction) {
     .filter(Boolean);
 
   if (!accountIds.length) {
-    await interaction.reply({ content: '📣 Manual Post LIVE is unavailable. Your Creator Profile has no enabled social accounts.', flags: 64 });
+    await interaction.reply({ content: `${EMOJIS.SOCIAL} Manual Post LIVE is unavailable. Your Creator Profile has no enabled social accounts.`, flags: 64 });
     return true;
   }
 
   await interaction.reply({
-    content: '🔍 **Checking your LIVE status...**\nVerifying your connected account before posting.',
+    content: `${EMOJIS.SEARCH} **Checking your LIVE status...**\nVerifying your connected account before posting.`,
     flags: 64,
   });
 
@@ -764,7 +765,7 @@ async function handleUserManualPostLive(interaction) {
     });
   } catch (error) {
     await reportUserLivePostFailure(interaction, creator, accounts, error?.message || error, { phase: 'provider_check' });
-    await interaction.editReply({ content: '❌ We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.' });
+    await interaction.editReply({ content: emojiLabel('ERROR', 'We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.') });
     return true;
   }
 
@@ -780,7 +781,7 @@ async function handleUserManualPostLive(interaction) {
       phase: 'provider_check',
       providerStatuses: (check?.results || []).map((result) => ({ accountId: result.accountId, platform: result.platform, status: result.status })),
     });
-    await interaction.editReply({ content: '❌ We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.' });
+    await interaction.editReply({ content: emojiLabel('ERROR', 'We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.') });
     return true;
   }
 
@@ -790,9 +791,9 @@ async function handleUserManualPostLive(interaction) {
     const anyChecked = accounts.some((account) => account?.state?.lastCheckedAt);
     const anyLive = accounts.some((account) => account?.enabled !== false && account?.state?.isLive === true);
     if (anyChecked && !anyLive) {
-      await interaction.editReply({ content: '⚫ **No LIVE stream detected.** Your LIVE post was not sent.' });
+      await interaction.editReply({ content: `${EMOJIS.RULE_INACTIVE} **No LIVE stream detected.** Your LIVE post was not sent.` });
     } else {
-      await interaction.editReply({ content: `📣 Manual Post LIVE is unavailable. ${state.reason}` });
+      await interaction.editReply({ content: `${EMOJIS.SOCIAL} Manual Post LIVE is unavailable. ${state.reason}` });
     }
     return true;
   }
@@ -808,16 +809,16 @@ async function handleUserManualPostLive(interaction) {
     if (!sent.length || failed.length) {
       const reason = failed.map((item) => item?.error || item?.reason).filter(Boolean).join(' | ') || 'LIVE delivery returned no successful posts.';
       await reportUserLivePostFailure(interaction, creator, accounts, reason, { phase: 'delivery', sent: sent.length, failed: failed.length });
-      await interaction.editReply({ content: '❌ Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.' });
+      await interaction.editReply({ content: emojiLabel('ERROR', 'Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.') });
       return true;
     }
     const channels = [...new Set(sent.map((item) => item.channelId).filter(Boolean))];
     const channelText = channels.length === 1 ? ` in <#${channels[0]}>` : channels.length > 1 ? ` across ${channels.length} channels` : '';
-    await interaction.editReply({ content: `✅ **LIVE confirmed — your LIVE post has been sent${channelText}.**` });
+    await interaction.editReply({ content: `${EMOJIS.SUCCESS} **LIVE confirmed — your LIVE post has been sent${channelText}.**` });
     return updatePanel(interaction, socialStudio.user.buildProfile(interaction, creator, socialStudio.getAccountsForCreator(interaction.guildId, creator)));
   } catch (error) {
     await reportUserLivePostFailure(interaction, creator, accounts, error?.message || error, { phase: 'delivery' });
-    await interaction.editReply({ content: '❌ Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.' });
+    await interaction.editReply({ content: emojiLabel('ERROR', 'Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.') });
     return true;
   }
 }
@@ -920,9 +921,9 @@ async function handleUserPanelInteraction(interaction) {
     if (moduleKey === 'serverinfo') return executeUtilityCommand(interaction, userUtilities.adapters.serverinfo);
     if (moduleKey === 'translate') return executeUtilityCommand(interaction, userUtilities.adapters.translate);
     const placeholders = {
-      'role-history': ['📜 Role History — Development', 'Role history access will be designed and connected in a later stage.'],
-      'security-notifications': ['🔔 Security Notifications — Development', 'Member security notifications will be designed and connected in a later stage.'],
-      verification: ['✅ Verification — Development', 'Member verification status will be designed and connected in a later stage.'],
+      'role-history': [`${EMOJIS.SCROLL} Role History — Development`, 'Role history access will be designed and connected in a later stage.'],
+      'security-notifications': [`${EMOJIS.BELL} Security Notifications — Development`, 'Member security notifications will be designed and connected in a later stage.'],
+      verification: [emojiLabel('SUCCESS', 'Verification — Development'), 'Member verification status will be designed and connected in a later stage.'],
     };
     if (placeholders[moduleKey]) return updatePanel(interaction, profileDevelopmentPage.buildSimpleDevelopmentPanel(interaction, placeholders[moduleKey][0], placeholders[moduleKey][1]));
     return updatePanel(interaction, buildModulePanel(moduleKey, memberDisplayName));

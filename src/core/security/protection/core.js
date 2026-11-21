@@ -1,3 +1,4 @@
+const { EMOJIS } = require('../../ui/emojis');
 const { PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { isDevOwnerHierarchyOverride } = require('../../../owner/dev/DevOverrideManager');
 
@@ -105,15 +106,15 @@ async function safeDeny(interaction, message) {
 async function enforceInteractionSecurity(interaction, options = {}) {
   const { level = null, cooldownKey = null, cooldownMs = DEFAULT_COOLDOWN_MS, guildOnly = true, ownerOnly = false, allowGuildOwner = true } = options;
   if (!interaction?.user) return { allowed: false, reason: 'Invalid interaction.' };
-  if (guildOnly && !interaction.guild) { await safeDeny(interaction, '❌ This can only be used inside a server.'); return { allowed: false, reason: 'Guild only.' }; }
+  if (guildOnly && !interaction.guild) { await safeDeny(interaction, `${EMOJIS.ERROR} This can only be used inside a server.`); return { allowed: false, reason: 'Guild only.' }; }
   if (ownerOnly) {
     const allowed = isBotOwner(interaction.user.id) || (allowGuildOwner && isGuildOwner(interaction));
-    if (!allowed) { await safeDeny(interaction, '❌ Only the Goliath Owner or Guild Owner can do this.'); return { allowed: false, reason: 'Owner only.' }; }
+    if (!allowed) { await safeDeny(interaction, `${EMOJIS.ERROR} Only the Goliath Owner or Guild Owner can do this.`); return { allowed: false, reason: 'Owner only.' }; }
   }
-  if (level && !hasPermission(interaction, level)) { await safeDeny(interaction, '❌ You do not have permission to do this.'); return { allowed: false, reason: `Missing permission level: ${level}` }; }
+  if (level && !hasPermission(interaction, level)) { await safeDeny(interaction, `${EMOJIS.ERROR} You do not have permission to do this.`); return { allowed: false, reason: `Missing permission level: ${level}` }; }
   if (cooldownKey) {
     const cooldown = checkCooldown(interaction.user.id, cooldownKey, cooldownMs);
-    if (!cooldown.allowed) { const seconds = Math.ceil(cooldown.remainingMs / 1000); await safeDeny(interaction, `⏱️ Slow down. Try again in ${seconds}s.`); return { allowed: false, reason: 'Cooldown active.', remainingMs: cooldown.remainingMs }; }
+    if (!cooldown.allowed) { const seconds = Math.ceil(cooldown.remainingMs / 1000); await safeDeny(interaction, `${EMOJIS.AUTOMOD_LIMITS} Slow down. Try again in ${seconds}s.`); return { allowed: false, reason: 'Cooldown active.', remainingMs: cooldown.remainingMs }; }
   }
   return { allowed: true, reason: null };
 }

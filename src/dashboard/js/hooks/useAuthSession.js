@@ -1,6 +1,8 @@
+import { goDashboard } from '../services/dashboardPath.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../services/apiClient.js';
+import { removeStorage } from '../storage.js';
 
 function normalizeUser(payload) {
   return payload?.user || payload?.me || payload?.data?.user || payload?.data || null;
@@ -52,9 +54,9 @@ export function useAuthSession({
     }
   }, [clearGuilds]);
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async ({ background = false } = {}) => {
     try {
-      setAuthLoading(true);
+      if (!background) setAuthLoading(true);
 
       const authResponse = await api.getAuthMe();
 
@@ -91,19 +93,21 @@ export function useAuthSession({
         });
       }
 
-        if (loadGuilds) {
-      loadGuilds();
-    }
-
-    if (loadBotStatus) {
-      loadBotStatus();
-    }
+      if (authResponse.user?.isOwner !== true) removeStorage('owner_managed_guild');
+      if (authResponse.user?.dashboardAllowed !== true && authResponse.user?.isOwner !== true) {
+        clearGuilds?.();
+        return;
+      }
+      if (loadGuilds) await loadGuilds();
+      if (loadBotStatus) await loadBotStatus();
     } catch (error) {
       console.error('Session check failed:', error);
       clearAuthState();
     } finally {
-      setAuthLoading(false);
-      setLoginPending(false);
+      if (!background) {
+        setAuthLoading(false);
+        setLoginPending(false);
+      }
     }
   }, [applyBotProfile, clearAuthState, loadBotStatus, loadGuilds]);
 
@@ -114,9 +118,17 @@ export function useAuthSession({
     loadSession();
   }, [loadSession]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    const refresh = () => loadSession({ background: true });
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer); };
+  }, [isAuthenticated, loadSession]);
+
   const handleLogin = useCallback(() => {
     setLoginPending(true);
-    window.location.href = api.getLoginUrl();
+    goDashboard(api.getLoginUrl());
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -144,3 +156,4 @@ export function useAuthSession({
     clearAuthState,
   };
 }
+

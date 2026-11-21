@@ -1,12 +1,13 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
 } = require('discord.js');
 
+const { navigationButton, actionButton } = require('../../core/guild/goliathNavigation');
 const guildManager = require('../../core/guild/guildManager');
 const autoroles = require('./autoRoles/autoRoles');
 const timedRoles = require('./timedRoles/timedRoles');
@@ -18,15 +19,11 @@ const roleSelector = require('./roleSelector/roleSelector');
 const roleSelectorHealth = require('./roleSelector/roleSelectorHealth');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId)
-  .setLabel(label)
-  .setStyle(style)
-  .setDisabled(Boolean(disabled));
+const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => navigationButton(customId, label, style, disabled);
 
 const statusLabel = (enabled) => enabled ? 'Enabled' : 'Disabled';
-const statusIcon = (enabled) => enabled ? '🟢' : '⏸️';
-const healthLabel = (healthy, detail = '') => healthy ? '✅ Healthy' : `⚠️ Needs attention${detail ? ` — ${detail}` : ''}`;
+const statusIcon = (enabled) => enabled ? EMOJIS.ACTIVE : EMOJIS.USER_PAUSE;
+const healthLabel = (healthy, detail = '') => healthy ? emojiLabel('HEALTHY', 'Healthy') : `${EMOJIS.WARNING} Needs attention${detail ? ` — ${detail}` : ''}`;
 
 async function getRoleStudioState(guild) {
   const auto = autoroles.getAutoRolesSection(guild.id);
@@ -72,8 +69,8 @@ async function getRoleStudioState(guild) {
 }
 
 function moduleHealthLabel({ enabled, configured, healthy, detail = '' }) {
-  if (!enabled) return '⏸️ Not active while disabled';
-  if (!configured) return 'ℹ️ Ready — nothing configured yet';
+  if (!enabled) return emojiLabel('USER_PAUSE', 'Not active while disabled');
+  if (!configured) return emojiLabel('INFO', 'Ready — nothing configured yet');
   return healthLabel(healthy, detail);
 }
 
@@ -96,15 +93,15 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
 
   const embed = new EmbedBuilder()
     .setColor(!state.canManageRoles ? 0xED4245 : overallHealthy ? 0x57F287 : 0xFAA61A)
-    .setTitle('🎭 Role Studio')
+    .setTitle(emojiLabel('USER_ROLES', 'Role Studio'))
     .setDescription([
       'Choose a role system to configure. Current status, health and recent activity are shown below.',
       '',
-      `**👥 Auto Roles** — ${statusIcon(state.autoEnabled)} ${statusLabel(state.autoEnabled)}`,
+      `**${EMOJIS.ROLE_MEMBERS} Auto Roles** — ${statusIcon(state.autoEnabled)} ${statusLabel(state.autoEnabled)}`,
       `Configured: \`${state.autoRoleCount}\` • Assigned: \`${state.auto.analytics?.assigned || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.autoEnabled, configured: autoConfigured, healthy: state.autoHealth.healthy })}`,
       '',
-      `**😊 Reaction Roles** — ${statusIcon(state.reactionEnabled)} ${statusLabel(state.reactionEnabled)}`,
+      `**${EMOJIS.ROLE_REACTIONS} Reaction Roles** — ${statusIcon(state.reactionEnabled)} ${statusLabel(state.reactionEnabled)}`,
       `Panels: \`${state.reactionDeployments.length}\` • Added: \`${state.reaction.analytics?.assigned || 0}\` • Removed: \`${state.reaction.analytics?.removed || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.reactionEnabled, configured: reactionConfigured, healthy: state.reactionHealth.healthy, detail: `${state.reactionHealth.unhealthy || 0} panel(s)` })}`,
       '',
@@ -116,13 +113,13 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
       `Active: \`${state.tempAssignments.length}\` • Assigned: \`${state.temporary.analytics?.assigned || 0}\` • Expired: \`${state.temporary.analytics?.expired || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.temporaryEnabled, configured: temporaryConfigured, healthy: state.temporaryHealth.healthy, detail: `${state.temporaryHealth.issues?.length || 0} issue(s) • ${state.temporaryHealth.warnings?.length || 0} warning(s)` })}`,
       '',
-      `**🎭 Role Selector** — ${statusIcon(state.selectorEnabled)} ${statusLabel(state.selectorEnabled)}`,
+      `**${EMOJIS.USER_ROLES} Role Selector** — ${statusIcon(state.selectorEnabled)} ${statusLabel(state.selectorEnabled)}`,
       `Groups: \`${roleSelector.listGroups(guild.id).length}\` • Using selectors: \`${state.selectorHealth.totalUsing || 0}\` • Managed roles: \`${state.selectorHealth.managedRoleCount || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.selectorEnabled, configured: selectorConfigured, healthy: state.selectorHealth.healthy, detail: `${state.selectorHealth.issues?.length || 0} issue(s)` })}`,
       '',
       state.canManageRoles
-        ? `> Overall: ${activeSystemsHealthy ? '✅ All active role systems are healthy.' : '⚠️ One or more active role systems need attention.'}`
-        : '❌ **Goliath is missing Manage Roles.** Enable this permission on the Goliath role, then press **Refresh Status**.',
+        ? `> Overall: ${activeSystemsHealthy ? emojiLabel('HEALTHY', 'All active role systems are healthy.') : emojiLabel('WARNING', 'One or more active role systems need attention.')}`
+        : emojiLabel('ERROR', '**Goliath is missing Manage Roles.** Enable this permission on the Goliath role, then press **Refresh Status**.'),
     ].join('\n'))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
@@ -131,17 +128,17 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
     embeds: [embed],
     components: [
       row(
-        button('admin:autoRoles', '👥 Auto Roles', ButtonStyle.Primary),
-        button('admin:reactionRoles:open', '😊 Reaction Roles', ButtonStyle.Primary),
-        button('admin:temporaryRoles', '⚡ Temporary Roles', ButtonStyle.Primary),
+        button('admin:autoRoles', emojiLabel('MOD_STAFF', 'Auto Roles'), ButtonStyle.Primary),
+        button('admin:reactionRoles:open', emojiLabel('HAPPY', 'Reaction Roles'), ButtonStyle.Primary),
+        button('admin:temporaryRoles', emojiLabel('THREAT', 'Temporary Roles'), ButtonStyle.Primary),
       ),
       row(
-        button('admin:timedRoles', '⏳ Timed Roles', ButtonStyle.Primary),
-        button('admin:roleSelector', '🎭 Role Selector', ButtonStyle.Primary),
+        button('admin:timedRoles', emojiLabel('TIMEOUT', 'Timed Roles'), ButtonStyle.Primary),
+        button('admin:roleSelector', emojiLabel('USER_ROLES', 'Role Selector'), ButtonStyle.Primary),
       ),
       row(
-        button('admin:studio:roleStudio', '🔄 Refresh Status', ButtonStyle.Secondary),
-        button('admin:modules', '⬅️ Back to Modules', ButtonStyle.Secondary),
+        button('admin:studio:roleStudio', emojiLabel('REFRESH', 'Refresh Status'), ButtonStyle.Secondary),
+        actionButton('admin:modules', 'back'),
       ),
     ],
   };
@@ -152,7 +149,7 @@ async function buildRoleAnalyticsPanel(guild, memberDisplayName = 'Unknown User'
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('📊 Role Studio Activity')
+      .setTitle(emojiLabel('ANALYTICS', 'Role Studio Activity'))
       .setDescription([
         `**Auto Roles assigned:** \`${state.auto.analytics?.assigned || 0}\``,
         `**Reaction Roles added:** \`${state.reaction.analytics?.assigned || 0}\``,
@@ -167,7 +164,7 @@ async function buildRoleAnalyticsPanel(guild, memberDisplayName = 'Unknown User'
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
-    components: [row(button('admin:studio:roleStudio', '⬅️ Back to Role Studio', ButtonStyle.Secondary))],
+    components: [row(actionButton('admin:studio:roleStudio', 'back', { label: 'Back to Role Studio' }))],
   };
 }
 
@@ -183,9 +180,9 @@ async function buildRoleHealthPanel(guild, memberDisplayName = 'Unknown User') {
   return {
     embeds: [new EmbedBuilder()
       .setColor(healthy ? 0x57F287 : 0xFAA61A)
-      .setTitle('🩺 Role Studio Health')
+      .setTitle(emojiLabel('WELCOME_DIAGNOSTICS', 'Role Studio Health'))
       .setDescription([
-        `**Overall status:** ${healthy ? '✅ Healthy' : '⚠️ Needs attention'}`,
+        `**Overall status:** ${healthy ? emojiLabel('HEALTHY', 'Healthy') : emojiLabel('WARNING', 'Needs attention')}`,
         '',
         `**Auto Roles:** ${healthLabel(state.autoHealth.healthy)}`,
         `**Reaction Roles:** ${healthLabel(state.reactionHealth.healthy, state.reactionHealth.healthy ? '' : `${state.reactionHealth.unhealthy || 0} panel(s)`)}`,
@@ -194,11 +191,11 @@ async function buildRoleHealthPanel(guild, memberDisplayName = 'Unknown User') {
         `**Role Selector:** ${healthLabel(state.selectorHealth.healthy, state.selectorHealth.healthy ? '' : `${state.selectorHealth.issues?.length || 0} issue(s)`)}`,
         '',
         `**Goliath highest role:** ${guild.members.me?.roles.highest ? `<@&${guild.members.me.roles.highest.id}>` : 'Unavailable'}`,
-        `**Manage Roles permission:** ${state.canManageRoles ? '✅ Granted' : '❌ Missing'}`,
+        `**Manage Roles permission:** ${state.canManageRoles ? emojiLabel('HEALTHY', 'Granted') : emojiLabel('ERROR', 'Missing')}`,
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
-    components: [row(button('admin:studio:roleStudio', '⬅️ Back to Role Studio', ButtonStyle.Secondary))],
+    components: [row(actionButton('admin:studio:roleStudio', 'back', { label: 'Back to Role Studio' }))],
   };
 }
 

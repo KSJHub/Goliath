@@ -1,3 +1,5 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
+import { dashboardPath } from '../../services/dashboardPath.js';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -6,13 +8,13 @@ const TOOLS = [
   {
     key: 'gif',
     label: 'GIF Maker',
-    icon: '🎞️',
+    icon: E.FILM,
     description: 'Create Discord-ready GIFs from short videos or animated uploads.',
   },
   {
     key: 'emoji',
     label: 'Emoji Maker',
-    icon: '😀',
+    icon: E.EMOJI,
     description: 'Create emoji and role-icon assets for Discord servers.',
   },
 ];
@@ -407,7 +409,7 @@ export default function MediaTools(props) {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <a href={asset.downloadUrl} style={{ color: '#93c5fd', fontWeight: 900 }}>Download</a>
+                    <a href={dashboardPath(asset.downloadUrl)} style={{ color: '#93c5fd', fontWeight: 900 }}>Download</a>
                     <button type="button" onClick={() => deleteAsset(asset.id)} disabled={locked} style={{ border: 0, background: 'transparent', color: '#fca5a5', cursor: locked ? 'not-allowed' : 'pointer', fontWeight: 900 }}>Delete</button>
                   </div>
                 </div>

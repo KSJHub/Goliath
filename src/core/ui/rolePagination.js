@@ -1,6 +1,7 @@
 'use strict';
+const { paginationButtons } = require('../guild/goliathNavigation');
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 
 const PAGE_SIZE = 25;
 function rolePages(guild, selected = [], page = 0) {
@@ -15,8 +16,10 @@ function rolePages(guild, selected = [], page = 0) {
 }
 function rolePager(prefix, page, pages) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`${prefix}:prev`).setLabel('◀ Roles').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-    new ButtonBuilder().setCustomId(`${prefix}:next`).setLabel('Roles ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= pages - 1),
+    ...paginationButtons('role', `${prefix}:prev`, `${prefix}:next`, {
+      previousDisabled: page === 0,
+      nextDisabled: page >= pages - 1,
+    }),
   );
 }
 function rolePageSelect(customId, placeholder, info) {

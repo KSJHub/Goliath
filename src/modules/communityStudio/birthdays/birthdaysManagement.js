@@ -1,14 +1,16 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
+  ActionRowBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
   EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const birthdays = require('./birthdays');
 
 const PAGE_SIZE = 25;
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
-const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
 const clampPage = (page, total) => Math.max(0, Math.min(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1), Number(page) || 0));
 const dateLabel = (record) => `${String(record.day).padStart(2, '0')}/${String(record.month).padStart(2, '0')}${record.year ? `/${record.year}` : ''}`;
 
@@ -36,7 +38,7 @@ function managementPayload(interaction) {
         button('admin:birthdays:members', '👥 Member Birthdays', ButtonStyle.Primary),
         button('admin:birthdays:board', '📅 Board Settings'),
       ),
-      row(button('admin:birthdays', '⬅️ Back')),
+      row(button('admin:birthdays', emojiLabel('BACK', 'Back'))),
     ],
   };
 }
@@ -63,7 +65,7 @@ function rolePayload(interaction, requestedPage = 0) {
     ));
   }
   components.push(row(
-    button('admin:birthdays:management', '⬅️ Back'),
+    button('admin:birthdays:management', emojiLabel('BACK', 'Back')),
     button('admin:birthdays:role:clear', '🧹 Clear Role', ButtonStyle.Secondary, !section.settings.birthdayRoleId),
   ));
   const desc = pages > 1 ? `Page **${page + 1}/${pages}**` : `Current role: ${section.settings.birthdayRoleId ? `<@&${section.settings.birthdayRoleId}>` : '**Not set**'}`;
@@ -100,7 +102,7 @@ function memberListPayload(interaction, requestedPage = 0) {
       button(`admin:birthdays:members:page:${page + 1}`, 'Next ▶️', ButtonStyle.Secondary, page >= pages - 1),
     ));
   }
-  components.push(row(button('admin:birthdays:management', '⬅️ Back')));
+  components.push(row(button('admin:birthdays:management', emojiLabel('BACK', 'Back'))));
   const pageLine = pages > 1 ? `\n\nPage **${page + 1}/${pages}**` : '';
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Member Birthdays').setDescription(`Registered birthdays: **${records.length}**${pageLine}`).setFooter({ text: 'Goliath Birthdays · Member Management' }).setTimestamp()],
@@ -136,7 +138,7 @@ function memberPayload(interaction, userId) {
         button(`admin:birthdays:member:age:${userId}`, record.year ? (record.showAge ? '🎈 Age: On' : '🎈 Age: Off') : '🎈 Age: Unavailable', record.year && record.showAge ? ButtonStyle.Success : ButtonStyle.Secondary, !record.year),
         button(`admin:birthdays:member:remove:${userId}`, '🗑️ Remove Birthday', ButtonStyle.Danger),
       ),
-      row(button('admin:birthdays:members', '⬅️ Back')),
+      row(button('admin:birthdays:members', emojiLabel('BACK', 'Back'))),
     ],
   };
 }
@@ -146,7 +148,7 @@ function addMemberPayload() {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('➕ Add Birthday').setDescription('Select member').setFooter({ text: 'Goliath Birthdays · Member Management' }).setTimestamp()],
     components: [
       row(new UserSelectMenuBuilder().setCustomId('admin:birthdays:members:add:select').setPlaceholder('Select member').setMinValues(1).setMaxValues(1)),
-      row(button('admin:birthdays:members', '⬅️ Back')),
+      row(button('admin:birthdays:members', emojiLabel('BACK', 'Back'))),
     ],
   };
 }
@@ -172,7 +174,7 @@ function boardPayload(interaction) {
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('admin:birthdays:monthly:channel').setPlaceholder('Monthly Board Channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1).setDefaultChannels(section.settings.monthlyBoardChannelId ? [section.settings.monthlyBoardChannelId] : [])),
       row(button('admin:birthdays:board:edit', '🗓️ Date & Time', ButtonStyle.Primary), button('admin:birthdays:board:preview', '👁️ Preview Board')),
-      row(button('admin:birthdays:management', '⬅️ Back')),
+      row(button('admin:birthdays:management', emojiLabel('BACK', 'Back'))),
     ],
   };
 }

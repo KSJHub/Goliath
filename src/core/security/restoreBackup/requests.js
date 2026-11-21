@@ -4,10 +4,10 @@ const { resolveRuntimePath } = require('../../../config/runtimePaths');
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
 
+const { navigationButton } = require('../../guild/goliathNavigation');
 const serverBackup = require('./backup');
 const serverRestore = require('./restore');
 
@@ -493,17 +493,9 @@ function getApprovalBlockers(request) {
 
 function buildDecisionButtons(requestId, disabled = false) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`restore_request_approve:${requestId}`)
-      .setLabel('Approve Restore')
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(disabled),
+    navigationButton(`restore_request_approve:${requestId}`, 'Approve Restore', ButtonStyle.Success, disabled),
 
-    new ButtonBuilder()
-      .setCustomId(`restore_request_deny:${requestId}`)
-      .setLabel('Deny Restore')
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(false)
+    navigationButton(`restore_request_deny:${requestId}`, 'Deny Restore', ButtonStyle.Danger, false)
   );
 }
 

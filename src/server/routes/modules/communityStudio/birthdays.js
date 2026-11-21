@@ -5,6 +5,8 @@ const guildManager = require('../../../../core/guild/guildManager');
 const birthdays = require('../../../../modules/communityStudio/birthdays/birthdays');
 const { validateRoleSelection, isGoliathPermissionError } = require('../../../../core/security/protection/permissions');
 
+const { resolveGuildAccess } = require('../../../middleware/dashboardAccess');
+
 const router = express.Router();
 const ok = (res, payload = {}) => res.json({ success: true, ...payload });
 
@@ -37,12 +39,15 @@ async function guild(req, id) {
 async function overview(req, id) {
   const enabled = guildManager.isModuleEnabled(id, 'birthdays');
   const config = birthdays.getSection(id);
+  const access = await resolveGuildAccess(client(req), String(req.session?.user?.id || ''), id);
+  const canViewYear = access.allowed && access.permissions.some((key) => key === '*' || key === 'admin.birthdays.export');
+  const safeMember = (member) => canViewYear ? member : { ...member, year: null };
   const target = await guild(req, id);
   const upcoming = birthdays.listUpcoming(id, 100, 60).map((item) => ({
     userId: item.member.userId,
     month: item.member.month,
     day: item.member.day,
-    year: item.member.year,
+    year: canViewYear ? item.member.year : null,
     listPublic: item.member.listPublic,
     announce: item.member.announce,
     showAge: item.member.showAge,
@@ -51,12 +56,12 @@ async function overview(req, id) {
     displayName: target?.members?.cache?.get(item.member.userId)?.displayName || null,
   }));
   const members = Object.values(config.members || {}).map((item) => ({
-    ...item,
+    ...safeMember(item),
     displayName: target?.members?.cache?.get(item.userId)?.displayName || null,
   })).sort((a, b) => `${String(a.month).padStart(2, '0')}-${String(a.day).padStart(2, '0')}`.localeCompare(`${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')}`));
   return {
     guildId: id,
-    config: { ...config, enabled },
+    config: { ...config, members: Object.fromEntries(Object.entries(config.members || {}).map(([key, member]) => [key, safeMember(member)])), enabled },
     overview: {
       enabled,
       memberCount: members.length,
@@ -115,7 +120,9 @@ router.put('/:guildId/members/:userId', async (req, res) => {
     const id = guildId(req); const uid = userId(req);
     const input = req.body?.birthday || req.body || {};
     const saved = birthdays.setBirthday(id, uid, input, { actorId: actor(req), action: 'birthdays_dashboard_set_member' });
-    return ok(res, { saved, ...(await overview(req, id)) });
+    const view = await overview(req, id);
+    const visibleSaved = view.config.members?.[uid] || { ...saved, year: null };
+    return ok(res, { saved: visibleSaved, ...view });
   } catch (error) { return fail(res, error); }
 });
 
@@ -124,7 +131,10 @@ router.delete('/:guildId/members/:userId', async (req, res) => {
     const id = guildId(req); const uid = userId(req);
     const removed = birthdays.removeBirthday(id, uid, { actorId: actor(req), action: 'birthdays_dashboard_remove_member' });
     if (!removed) return fail(res, new Error('Birthday record not found.'), 404);
-    return ok(res, { removed, ...(await overview(req, id)) });
+    const view = await overview(req, id);
+    const access = await resolveGuildAccess(client(req), String(req.session?.user?.id || ''), id);
+    const canViewYear = access.allowed && access.permissions.some((permission) => permission === '*' || permission === 'admin.birthdays.export');
+    return ok(res, { removed: canViewYear ? removed : (typeof removed === 'object' ? { ...removed, year: null } : removed), ...view });
   } catch (error) { return fail(res, error); }
 });
 
@@ -144,9 +154,16 @@ router.post('/:guildId/reset', async (req, res) => {
   } catch (error) { return fail(res, error); }
 });
 
-router.get('/:guildId/export', (req, res) => {
+router.get('/:guildId/export', async (req, res) => {
   try {
     const id = guildId(req);
+    const actorId = String(req.session?.user?.id || '').trim();
+    if (!actorId) return res.status(401).json({ success: false, error: 'Sign in required.' });
+    const access = await resolveGuildAccess(client(req), actorId, id);
+    if (!access.allowed || !access.permissions.some((permission) => permission === '*' || permission === 'admin.birthdays.export')) {
+      return res.status(403).json({ success: false, error: 'Birthday data export permission required.' });
+    }
+    res.set('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="goliath-birthdays-${id}.json"`);
     return res.send(JSON.stringify(birthdays.exportData(id), null, 2));

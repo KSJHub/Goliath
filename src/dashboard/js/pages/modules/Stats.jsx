@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 
 import { api } from '../../services/apiClient';
 import ModuleShell, { MODULE_TABS } from '../../shared/ModuleShell.jsx';
-import { EmptyState, LoadingPanel, PrimaryButton, SectionCard, StatGrid, SummaryStat } from '../../shared/PageShell';
+import { EmptyState, LoadingPanel, PrimaryButton, SectionCard, StatGrid, SummaryStat, DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 
 const TYPE_OPTIONS = [
-  ['members', '👥 Members'], ['status', '🟢 Members with Status'], ['role', '🎭 Members in Role'], ['voice', '🔊 Members in Voice'],
-  ['channels', '📁 Channels'], ['roles', '🏷️ Roles'], ['datetime', '📅 Date & Time'], ['countdown', '⏳ Countdown / Timer'],
-  ['messages', '💬 Message Count'], ['voiceMinutes', '🎙️ Voice Minutes'], ['joins', '📥 Member Joins'], ['leaves', '📤 Member Leaves'],
-  ['boosts', '🚀 Server Boosts'], ['emojis', '😀 Emojis'],
+  ['members', `${E.MEMBERS} Members`], ['status', `${E.ACTIVE} Members with Status`], ['role', `${E.ROLES} Members in Role`], ['voice', `${E.VOICE} Members in Voice`],
+  ['channels', `${E.FOLDER} Channels`], ['roles', `${E.ROLE_TAG} Roles`], ['datetime', `${E.DATE} Date & Time`], ['countdown', `${E.TIMER} Countdown / Timer`],
+  ['messages', `${E.MESSAGES} Message Count`], ['voiceMinutes', `${E.MICROPHONE} Voice Minutes`], ['joins', `${E.JOIN} Member Joins`], ['leaves', `${E.LEAVE} Member Leaves`],
+  ['boosts', `${E.BOOST} Server Boosts`], ['emojis', `${E.EMOJI} Emojis`],
 ];
 const STATUS_OPTIONS = [['online', 'Online'], ['idle', 'Idle'], ['dnd', 'Do Not Disturb'], ['offline', 'Offline']];
 const TYPE_LABEL = Object.fromEntries(TYPE_OPTIONS);
@@ -41,13 +41,13 @@ function defaultSegment(type = 'members') {
   return { type, options: {} };
 }
 function newDraft(settings = {}) {
-  return { name: 'Members', channelType: 'voice', template: '👥 Members: {value}', frequencyMinutes: Number(settings.defaultFrequencyMinutes || 10), segments: [defaultSegment('members')] };
+  return { name: 'Members', channelType: 'voice', template: `${E.MEMBERS} Members: {value}`, frequencyMinutes: Number(settings.defaultFrequencyMinutes || 10), segments: [defaultSegment('members')] };
 }
 function presenceDraft(settings = {}) {
   return {
     name: 'Presence Trio',
     channelType: 'voice',
-    template: '🟢 {1} ⛔ {2} 🌙 {3}',
+    template: `${E.ACTIVE} {1} ${E.DND} {2} ${E.IDLE} {3}`,
     frequencyMinutes: Number(settings.defaultFrequencyMinutes || 10),
     segments: [
       { type: 'status', options: { statuses: ['online'] } },
@@ -295,10 +295,10 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
       </StatGrid>
       <SectionCard theme={theme} title="Server Counter Setup" subtitle="Live read-only text or voice channels that display your server numbers at a glance.">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <PrimaryButton onClick={quickSetup} disabled={busy}>⚡ Quick Setup</PrimaryButton>
-          <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>🟢⛔🌙 Presence Trio</SecondaryButton>
-          <SecondaryButton onClick={refreshCounters} disabled={busy}>🔄 Refresh Now</SecondaryButton>
-          <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>➕ Create Counter</SecondaryButton>
+          <PrimaryButton onClick={quickSetup} disabled={busy}>{E.AUTOMATION} Quick Setup</PrimaryButton>
+          <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ACTIVE}{E.DND}{E.IDLE} Presence Trio</SecondaryButton>
+          <SecondaryButton onClick={refreshCounters} disabled={busy}>{E.REFRESH} Refresh Now</SecondaryButton>
+          <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ADD} Create Counter</SecondaryButton>
         </div>
       </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,300px),1fr))', gap: 16 }}>
@@ -312,7 +312,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     <div style={{ display: 'grid', gap: 16 }}>
       <SectionCard theme={theme} title="Your Counters" subtitle="Turn counters on or off, edit them, choose text or voice output, or combine up to four values in one channel name.">
         {counters.length ? <div style={{ display: 'grid', gap: 10 }}>{counters.map((counter) => <div key={counter.id} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 12, padding: 14, display: 'grid', gap: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><strong>{counter.enabled ? '🟢' : '⚫'} {counter.channelType === 'text' ? '#️⃣' : '🔊'} {counter.name || 'Counter'}</strong><div style={{ color: theme.mutedText, marginTop: 4 }}>{counter.segments?.map((segment) => TYPE_LABEL[segment.type] || segment.type).join(' + ')} · every {counter.frequencyMinutes || 10}m</div></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><SecondaryButton onClick={() => { setDraft(normalizeDraft(counter, config?.settings)); setPreview(''); }}>Edit</SecondaryButton><SecondaryButton onClick={() => toggleCounter(counter)} disabled={busy}>{counter.enabled ? 'Turn Off' : 'Turn On'}</SecondaryButton><SecondaryButton danger onClick={() => deleteCounter(counter)} disabled={busy}>Delete</SecondaryButton></div></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><strong>{counter.enabled ? E.ACTIVE : E.INACTIVE} {counter.channelType === 'text' ? E.TEXT_CHANNEL : E.VOICE} {counter.name || 'Counter'}</strong><div style={{ color: theme.mutedText, marginTop: 4 }}>{counter.segments?.map((segment) => TYPE_LABEL[segment.type] || segment.type).join(' + ')} · every {counter.frequencyMinutes || 10}m</div></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><SecondaryButton onClick={() => { setDraft(normalizeDraft(counter, config?.settings)); setPreview(''); }}>Edit</SecondaryButton><SecondaryButton onClick={() => toggleCounter(counter)} disabled={busy}>{counter.enabled ? 'Turn Off' : 'Turn On'}</SecondaryButton><SecondaryButton danger onClick={() => deleteCounter(counter)} disabled={busy}>Delete</SecondaryButton></div></div>
           <div style={{ borderRadius: 9, padding: '9px 11px', background: 'rgba(148,163,184,0.10)', fontWeight: 800 }}>{counter.template}</div>
         </div>)}</div> : <div style={{ color: theme.mutedText }}>No counters yet. Use Quick Setup or create your first one.</div>}
       </SectionCard>
@@ -321,12 +321,12 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'grid', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} style={control(theme)} /></label>
-            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<select value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">🔊 Voice Channel</option><option value="text">#️⃣ Text Channel</option></select></label>
+            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<select value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">{E.VOICE} Voice Channel</option><option value="text">{E.TEXT_CHANNEL} Text Channel</option></select></label>
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Update frequency<select value={draft.frequencyMinutes} onChange={(event) => setDraft({ ...draft, frequencyMinutes: Number(event.target.value) })} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
           </div>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel text<input value={draft.template} onChange={(event) => setDraft({ ...draft, template: event.target.value })} maxLength={100} style={control(theme)} /><span style={{ color: theme.mutedText, fontWeight: 600 }}>Use <code>{'{value}'}</code> for one counter. With multiple counters use <code>{'{1}'}</code>, <code>{'{2}'}</code>, <code>{'{3}'}</code>, <code>{'{4}'}</code>. Emojis and normal text are supported.</span></label>
           {draft.segments.map((segment, index) => <SegmentEditor key={index} theme={theme} segment={segment} index={index} roles={roles} channels={channels} canRemove={draft.segments.length > 1} onRemove={() => setDraft({ ...draft, segments: draft.segments.filter((_, itemIndex) => itemIndex !== index) })} onChange={(next) => setDraft({ ...draft, segments: draft.segments.map((item, itemIndex) => itemIndex === index ? next : item) })} />)}
-          {draft.segments.length < 4 ? <SecondaryButton onClick={() => setDraft({ ...draft, segments: [...draft.segments, defaultSegment('members')], template: draft.segments.length === 1 && draft.template.includes('{value}') ? '{1} · {2}' : draft.template })}>➕ Add another value</SecondaryButton> : null}
+          {draft.segments.length < 4 ? <SecondaryButton onClick={() => setDraft({ ...draft, segments: [...draft.segments, defaultSegment('members')], template: draft.segments.length === 1 && draft.template.includes('{value}') ? '{1} · {2}' : draft.template })}>{E.ADD} Add another value</SecondaryButton> : null}
           {preview ? <div style={{ padding: 14, borderRadius: 12, border: `1px solid ${theme.cardBorder}` }}><div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', marginBottom: 6 }}>Discord channel preview</div><strong>{preview}</strong></div> : null}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><PrimaryButton onClick={saveDraft} disabled={busy}>{busy ? 'Saving...' : 'Save Counter'}</PrimaryButton><SecondaryButton onClick={previewDraft} disabled={busy}>Preview</SecondaryButton><SecondaryButton onClick={() => { setDraft(null); setPreview(''); }}>Cancel</SecondaryButton></div>
         </div>
@@ -338,11 +338,11 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     <div style={{ display: 'grid', gap: 16 }}>
       <SectionCard theme={theme} title="Counter Settings" subtitle="Defaults used when Goliath creates new counter channels.">
         <div style={{ display: 'grid', gap: 12 }}>
-          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter category name<input value={config?.settings?.categoryName || '📊 SERVER STATS'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), categoryName: event.target.value } })} onBlur={(event) => saveSettings({ categoryName: event.target.value })} style={control(theme)} /></label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter category name<input value={config?.settings?.categoryName || `${E.CHART} SERVER STATS`} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), categoryName: event.target.value } })} onBlur={(event) => saveSettings({ categoryName: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default timezone<input value={config?.settings?.timeZone || 'Europe/London'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), timeZone: event.target.value } })} onBlur={(event) => saveSettings({ timeZone: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default update frequency<select value={config?.settings?.defaultFrequencyMinutes || 10} onChange={(event) => { const value = Number(event.target.value); setConfig({ ...config, settings: { ...(config?.settings || {}), defaultFrequencyMinutes: value } }); saveSettings({ defaultFrequencyMinutes: value }); }} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Activity retention (days)<input type="number" min="1" max="365" value={config?.settings?.retentionDays || 30} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), retentionDays: Number(event.target.value) } })} onBlur={(event) => saveSettings({ retentionDays: Number(event.target.value) })} style={control(theme)} /></label>
-          <div><PrimaryButton onClick={toggleModule} disabled={busy}>{config?.enabled === false ? '▶️ Enable Server Counters' : '⏸️ Disable Server Counters'}</PrimaryButton></div>
+          <div><PrimaryButton onClick={toggleModule} disabled={busy}>{config?.enabled === false ? `${E.PLAY} Enable Server Counters` : `${E.PAUSE} Disable Server Counters`}</PrimaryButton></div>
         </div>
       </SectionCard>
 
@@ -371,12 +371,12 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
       <SectionCard theme={theme} title="Diagnostics" subtitle="Check missing counter channels and tracking configuration before they become a problem.">
         <div style={{ display: 'grid', gap: 10 }}>
           {health ? <>
-            <Row theme={theme} label="Health" value={health.healthy ? '✅ Healthy' : '⚠️ Needs attention'} />
+            <Row theme={theme} label="Health" value={health.healthy ? `${E.SUCCESS} Healthy` : `${E.WARNING} Needs attention`} />
             <Row theme={theme} label="Configured counters" value={health.counters?.configured ?? 0} />
             <Row theme={theme} label="Missing channels" value={health.counters?.missing ?? 0} />
             {health.issues?.length ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>{health.issues.map((issue, index) => <div key={`${issue.code}-${index}`}>• {issue.code.replaceAll('_', ' ')}</div>)}</div> : <div style={{ color: theme.mutedText }}>No issues found.</div>}
           </> : <div style={{ color: theme.mutedText }}>Run a health check to inspect the live counter setup.</div>}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton><SecondaryButton onClick={exportStats} disabled={busy}>📤 Export</SecondaryButton><SecondaryButton danger onClick={resetStats} disabled={busy}>🗑️ Reset Stats</SecondaryButton></div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>{E.HEALTH} Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>{E.REPAIR} Repair Issues</SecondaryButton><SecondaryButton onClick={exportStats} disabled={busy}>{E.LEAVE} Export</SecondaryButton><SecondaryButton danger onClick={resetStats} disabled={busy}>{E.DELETE} Reset Stats</SecondaryButton></div>
         </div>
       </SectionCard>
 

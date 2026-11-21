@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React from 'react';
 
 function panelInput(theme) {
@@ -69,7 +70,7 @@ export default function BillingSettingsPanel({ theme, settings, onChange, onSave
       <label style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center', border: `1px solid ${safeSettings.publicLifetimeEnabled ? 'rgba(250,204,21,0.55)' : theme.cardBorder}`, background: safeSettings.publicLifetimeEnabled ? 'rgba(250,204,21,0.12)' : 'rgba(15,23,42,0.22)', borderRadius: 14, padding: 14, cursor: 'pointer' }}>
         <input type="checkbox" checked={safeSettings.publicLifetimeEnabled} onChange={(event) => onChange((current) => normalizeBillingSettings({ ...current, publicLifetimeEnabled: event.target.checked }))} />
         <span>
-          <strong style={{ color: theme.cardText }}>💎 Public Lifetime Sales</strong>
+          <strong style={{ color: theme.cardText }}>{E.DIAMOND} Public Lifetime Sales</strong>
           <span style={{ display: 'block', marginTop: 4, color: theme.mutedText, fontSize: 13 }}>
             {safeSettings.publicLifetimeEnabled ? 'Lifetime is visible on the client Billing page.' : 'Lifetime is hidden from clients and can only be granted by KSJ Digital.'}
           </span>

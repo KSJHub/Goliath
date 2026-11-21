@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const Discord = require('discord.js');
 const { safeReply, safeUpdate } = require('../../../core/ui/interactionResponse');
@@ -19,6 +20,8 @@ const { openCaseSearch, handleCaseSearchAction, handleCaseSearchSelect, handleCa
 const memberIntelligence = require('./intelligence');
 const caseProceeding = require('./caseProceeding');
 const quarantineInteractions = require('./quarantineInteractions');
+const verificationStore = require('../../../modules/securityStudio/verification/verificationStore');
+const verificationQuarantine = require('../../../modules/securityStudio/verification/verificationQuarantine');
 const { quarantineMember, restoreQuarantinedMember, getQuarantineState } = require('../../security/protection/quarantine');
 const {
   renderDashboard,
@@ -77,7 +80,7 @@ function investigationAuditRows(guildId, targetId, limit = 200) {
     const rows = db.prepare("SELECT audit_id, actor_id, event, after_value, metadata, created_at FROM case_audit WHERE guild_id = ? AND event IN ('moderation.member_scan.note_added','moderation.member_scan.watch_updated') ORDER BY created_at DESC LIMIT ?").all(String(guildId), Math.max(1, Math.min(500, Number(limit) || 200)));
     return rows.filter((row) => String(parseJson(row.metadata, {}).targetId || '') === String(targetId));
   } catch (error) {
-    console.error('❌ Member investigation state query failed:', error);
+    console.error(emojiLabel('ERROR', 'Member investigation state query failed:'), error);
     return [];
   }
 }
@@ -122,7 +125,7 @@ function scanAuditRows(guildId, targetId, limit = 25) {
     const rows = db.prepare("SELECT audit_id, actor_id, after_value, metadata, created_at FROM case_audit WHERE guild_id = ? AND event = 'moderation.member_scan.completed' ORDER BY created_at DESC LIMIT ?").all(String(guildId), Math.max(1, Math.min(100, Number(limit) || 25)));
     return rows.filter((row) => String(parseJson(row.metadata, {}).targetId || '') === String(targetId));
   } catch (error) {
-    console.error('❌ Member scan history query failed:', error);
+    console.error(emojiLabel('ERROR', 'Member scan history query failed:'), error);
     return [];
   }
 }
@@ -151,7 +154,7 @@ function getCrossGuildModeration(userId, currentGuildId) {
       rows: outside.slice(0, 5),
     };
   } catch (error) {
-    console.error('❌ Cross-guild moderation intelligence query failed:', error);
+    console.error(emojiLabel('ERROR', 'Cross-guild moderation intelligence query failed:'), error);
     return { guildCount: 0, caseCount: 0, rows: [] };
   }
 }
@@ -206,7 +209,7 @@ function calculateModerationRisk(summary, crossGuild) {
   if (timeouts) { score += timeouts; reasons.push(`${summary.timeouts} timeout case(s)`); }
   if (network) { score += network; reasons.push(`${crossGuild.caseCount} case(s) for the same Discord ID in other Goliath guilds`); }
   score = Math.min(100, score);
-  const label = score >= 70 ? '🔴 High' : score >= 40 ? '🟠 Elevated' : score >= 20 ? '🟡 Moderate' : '🟢 Low';
+  const label = score >= 70 ? emojiLabel('DISABLED', "High") : score >= 40 ? emojiLabel('SEVERITY_HIGH', "Elevated") : score >= 20 ? emojiLabel('SEVERITY_MEDIUM', "Moderate") : emojiLabel('ENABLED', "Low");
   return { score, label, reasons };
 }
 function buildInvestigationNoteModal(targetId) {
@@ -246,8 +249,8 @@ function buildMemberScanPayload(i, target) {
   const risk = calculateModerationRisk(summary, crossGuild);
   const historicalNames = [...new Set([...history.names, ...history.globals, ...history.displays])].filter((name) => name && name !== target.user.username && name !== target.user.globalName && name !== target.displayName);
   const suspectText = suspects.length
-    ? suspects.map(({ member, score, signals }) => `${score >= 70 ? '🔴 **STRONG MATCH**' : '🟠 **POSSIBLE MATCH**'} — ${member.user} • **${score}%**\n${signals.map((signal) => `• ${signal}`).join('\n')}`).join('\n\n')
-    : '⚪ **NO LINK FOUND** — No evidence-based suspected account match in the current guild cache.';
+    ? suspects.map(({ member, score, signals }) => `${score >= 70 ? emojiLabel('DISABLED', "**STRONG MATCH**") : emojiLabel('SEVERITY_HIGH', "**POSSIBLE MATCH**")} — ${member.user} • **${score}%**\n${signals.map((signal) => `• ${signal}`).join('\n')}`).join('\n\n')
+    : emojiLabel('INACTIVE', "**NO LINK FOUND** — No evidence-based suspected account match in the current guild cache.");
   const recent = cases.slice(0, 3).map((entry) => `#${entry.caseId} • ${entry.action} • ${entry.status || 'active'} • ${(entry.reason || 'No reason').slice(0, 120)}`).join('\n') || 'No recorded moderation cases.';
   const scanId = `scan_${Date.now().toString(36)}_${target.id.slice(-6)}`;
   const identityLines = [
@@ -286,12 +289,12 @@ function buildMemberScanPayload(i, target) {
   if (access.links) investigationLines.push('Confirmed links: ' + (persistentLinks.length ? '**' + persistentLinks.length + ' evidence record(s)**' : 'None'));
 
   const fields = [
-    { name: '🪪 Identity & History', value: identityLines.join('\n').slice(0, 1024), inline: false },
-    { name: '🏠 Membership & Access', value: membershipLines.join('\n').slice(0, 1024), inline: false },
-    { name: '⚖️ Moderation & Risk', value: moderationLines.join('\n').slice(0, 1024), inline: false },
-    { name: '🕘 Recent Cases', value: recent.slice(0, 1024), inline: false },
+    { name: `${EMOJIS.MOD_IDENTITY} Identity & History`, value: identityLines.join('\n').slice(0, 1024), inline: false },
+    { name: emojiLabel('USER_HOME', 'Membership & Access'), value: membershipLines.join('\n').slice(0, 1024), inline: false },
+    { name: emojiLabel('ACTIONS', 'Moderation & Risk'), value: moderationLines.join('\n').slice(0, 1024), inline: false },
+    { name: emojiLabel('MOD_SCAN_HISTORY', 'Recent Cases'), value: recent.slice(0, 1024), inline: false },
   ];
-  if (investigationLines.length) fields.push({ name: '👁️ Investigation Intelligence', value: investigationLines.join('\n').slice(0, 1024), inline: false });
+  if (investigationLines.length) fields.push({ name: emojiLabel('WELCOME_PREVIEW', 'Investigation Intelligence'), value: investigationLines.join('\n').slice(0, 1024), inline: false });
 
   const sources = ['Discord API', 'guild member cache', 'Goliath moderation cases', 'warnings', 'case metadata', 'appeals', 'evidence'];
   if (access.history) sources.push('scan history');
@@ -303,7 +306,7 @@ function buildMemberScanPayload(i, target) {
 
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`🔎 Member Intelligence Scan • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.INVESTIGATE} Member Intelligence Scan • ${target.user.tag}`)
     .setDescription([
       `**Scan ID:** \`${scanId}\``,
       `**Target:** ${target.user} (\`${target.id}\`)`,
@@ -315,17 +318,17 @@ function buildMemberScanPayload(i, target) {
     .setTimestamp();
 
   const primaryButtons = [
-    new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji('🔄').setStyle(Discord.ButtonStyle.Primary),
+    new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji(EMOJIS.REFRESH).setStyle(Discord.ButtonStyle.Primary),
   ];
-  if (access.history) primaryButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji('🕘').setStyle(Discord.ButtonStyle.Secondary));
+  if (access.history) primaryButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji(EMOJIS.MOD_SCAN_HISTORY).setStyle(Discord.ButtonStyle.Secondary));
   const components = [new Discord.ActionRowBuilder().addComponents(...primaryButtons)];
   const intelligenceButtons = [];
-  if (access.links) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_links:${target.id}`).setLabel(`Correlations (${persistentLinks.length})`.slice(0, 80)).setEmoji('🔗').setStyle(Discord.ButtonStyle.Secondary));
-  if (access.notes) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji('📝').setStyle(Discord.ButtonStyle.Secondary));
-  if (access.watch) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(investigation.watched ? 'Remove Watch' : 'Watch Status').setEmoji('👁️').setStyle(investigation.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
+  if (access.links) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_links:${target.id}`).setLabel(`Correlations (${persistentLinks.length})`.slice(0, 80)).setEmoji(EMOJIS.AUTOMOD_LINKS).setStyle(Discord.ButtonStyle.Secondary));
+  if (access.notes) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji(EMOJIS.NOTE).setStyle(Discord.ButtonStyle.Secondary));
+  if (access.watch) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(investigation.watched ? 'Remove Watch' : 'Watch Status').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(investigation.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
   if (intelligenceButtons.length) components.push(new Discord.ActionRowBuilder().addComponents(...intelligenceButtons));
-  const navButtons = [new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel('⬅️ Back').setStyle(Discord.ButtonStyle.Secondary)];
-  if (access.cases) navButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel('📤 Export').setStyle(Discord.ButtonStyle.Secondary));
+  const navButtons = [new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary)];
+  if (access.cases) navButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel(emojiLabel('MOD_EXPORT', 'Export')).setStyle(Discord.ButtonStyle.Secondary));
   components.push(new Discord.ActionRowBuilder().addComponents(...navButtons));
   return { scanId, cases, suspects, history, crossGuild, investigation, persistentLinks, risk, access, embed, components };
 }
@@ -342,7 +345,7 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
   const identity = historicalIdentitySnapshot(i.guild.id, target.id);
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`🕘 Member Scan History • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.MOD_SCAN_HISTORY} Member Scan History • ${target.user.tag}`)
     .setDescription(`**Target:** ${target.user} (\`${target.id}\`)\n\n${historyText.slice(0, 3500)}`)
     .addFields(
       { name: 'Captured Usernames', value: identity.names.length ? identity.names.slice(0, 20).map((value) => `\`${value}\``).join(' • ') : 'None captured yet.', inline: false },
@@ -356,7 +359,7 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
   if (canManageHistory) {
     const select = new Discord.StringSelectMenuBuilder()
       .setCustomId(`mod_scan_delete_select:${target.id}:${origin}`)
-      .setPlaceholder('🗑️ Select a scan to delete')
+      .setPlaceholder(emojiLabel('DELETE', "Select a scan to delete"))
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(rows.slice(0, 10).map((row) => {
@@ -371,10 +374,10 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
     components.push(new Discord.ActionRowBuilder().addComponents(select));
   }
   const buttons = [];
-  if (origin === 'landing') buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel('⬅️ Back to Intelligence').setStyle(Discord.ButtonStyle.Secondary));
-  else if (canScanCapability(i, 'scan_run')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary));
-  if (canScanCapability(i, 'scan_compare')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history_compare:${target.id}:${origin}`).setLabel('Compare Account').setEmoji('🧬').setStyle(Discord.ButtonStyle.Secondary));
-  if (canManageHistory) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history:${target.id}:${origin}`).setLabel('Clear History').setEmoji('🧹').setStyle(Discord.ButtonStyle.Danger));
+  if (origin === 'landing') buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back to Intelligence')).setStyle(Discord.ButtonStyle.Secondary));
+  else if (canScanCapability(i, 'scan_run')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel(emojiLabel('BACK', 'Back to Scan')).setStyle(Discord.ButtonStyle.Secondary));
+  if (canScanCapability(i, 'scan_compare')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history_compare:${target.id}:${origin}`).setLabel('Compare Account').setEmoji(EMOJIS.MOD_ACCOUNT_COMPARE).setStyle(Discord.ButtonStyle.Secondary));
+  if (canManageHistory) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history:${target.id}:${origin}`).setLabel('Clear History').setEmoji(EMOJIS.ADMIN_PURGE).setStyle(Discord.ButtonStyle.Danger));
   if (buttons.length) components.push(new Discord.ActionRowBuilder().addComponents(...buttons));
   return { embed, components };
 }
@@ -382,12 +385,12 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
   const correlation = compareIdentitySignals(primary, secondary);
   const left = moderationSummary(i.guild.id, primary.id);
   const right = moderationSummary(i.guild.id, secondary.id);
-  const label = correlation.score >= 70 ? '🔴 STRONG MATCH' : correlation.score >= 35 ? '🟠 POSSIBLE MATCH' : '⚪ LOW CORRELATION';
+  const label = correlation.score >= 70 ? emojiLabel('DISABLED', "STRONG MATCH") : correlation.score >= 35 ? emojiLabel('SEVERITY_HIGH', "POSSIBLE MATCH") : emojiLabel('INACTIVE', "LOW CORRELATION");
   const deltaCreated = Math.abs((primary.user.createdTimestamp || 0) - (secondary.user.createdTimestamp || 0));
   const deltaJoined = Math.abs((primary.joinedTimestamp || 0) - (secondary.joinedTimestamp || 0));
   const embed = new Discord.EmbedBuilder()
     .setColor(correlation.score >= 70 ? 0xED4245 : correlation.score >= 35 ? 0xFEE75C : 0x5865F2)
-    .setTitle('🧬 Goliath Account Comparison')
+    .setTitle(`${EMOJIS.MOD_ACCOUNT_COMPARE} Goliath Account Comparison`)
     .setDescription([
       `${primary.user} (\`${primary.id}\`)`,
       'vs',
@@ -397,24 +400,24 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
       'This score is an investigation aid, not proof that both Discord accounts belong to the same person.',
     ].join('\n'))
     .addFields(
-      { name: '🔎 Correlation Signals', value: correlation.signals.length ? correlation.signals.map((signal) => `• ${signal}`).join('\n') : 'No meaningful identity correlation signals detected.', inline: false },
-      { name: `🪪 ${primary.user.username}`, value: [`Global: ${primary.user.globalName || 'None'}`, `Display: ${primary.displayName}`, `Created: ${scanTimestamp(primary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(primary.joinedTimestamp)}`, `Warnings: ${left.warningCount} • Cases: ${left.cases.length} • Bans: ${left.bans}`].join('\n'), inline: true },
-      { name: `🪪 ${secondary.user.username}`, value: [`Global: ${secondary.user.globalName || 'None'}`, `Display: ${secondary.displayName}`, `Created: ${scanTimestamp(secondary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(secondary.joinedTimestamp)}`, `Warnings: ${right.warningCount} • Cases: ${right.cases.length} • Bans: ${right.bans}`].join('\n'), inline: true },
-      { name: '⏱️ Timeline Difference', value: [`Account creation gap: **${Math.round(deltaCreated / 3600000)}h**`, `Guild join gap: **${Math.round(deltaJoined / 3600000)}h**`].join('\n'), inline: false },
+      { name: emojiLabel('INVESTIGATE', 'Correlation Signals'), value: correlation.signals.length ? correlation.signals.map((signal) => `• ${signal}`).join('\n') : 'No meaningful identity correlation signals detected.', inline: false },
+      { name: `${EMOJIS.MOD_IDENTITY} ${primary.user.username}`, value: [`Global: ${primary.user.globalName || 'None'}`, `Display: ${primary.displayName}`, `Created: ${scanTimestamp(primary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(primary.joinedTimestamp)}`, `Warnings: ${left.warningCount} • Cases: ${left.cases.length} • Bans: ${left.bans}`].join('\n'), inline: true },
+      { name: `${EMOJIS.MOD_IDENTITY} ${secondary.user.username}`, value: [`Global: ${secondary.user.globalName || 'None'}`, `Display: ${secondary.displayName}`, `Created: ${scanTimestamp(secondary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(secondary.joinedTimestamp)}`, `Warnings: ${right.warningCount} • Cases: ${right.cases.length} • Bans: ${right.bans}`].join('\n'), inline: true },
+      { name: emojiLabel('AUTOMOD_LIMITS', 'Timeline Difference'), value: [`Account creation gap: **${Math.round(deltaCreated / 3600000)}h**`, `Guild join gap: **${Math.round(deltaJoined / 3600000)}h**`].join('\n'), inline: false },
     )
     .setFooter({ text: 'Evidence-based comparison • no private Discord data is exposed to bots' })
     .setTimestamp();
   const buttons = [
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primary.id}:${origin}`).setLabel('⬅️ Back to Scan History').setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primary.id}:${origin}`).setLabel(emojiLabel('BACK', 'Back to Scan History')).setStyle(Discord.ButtonStyle.Secondary),
   ];
   return { correlation, embed, components: [new Discord.ActionRowBuilder().addComponents(...buttons)] };
 }
 async function runMemberScan(i, targetId, { record = true } = {}) {
-  const allowed = await ensureScanCapability(i, 'scan_run', '❌ You do not have permission to run a member intelligence scan.');
+  const allowed = await ensureScanCapability(i, 'scan_run', emojiLabel('ERROR', "You do not have permission to run a member intelligence scan."));
   if (!allowed) return true;
   if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
   const target = await fetchTarget(i.guild, targetId);
-  if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
+  if (!target) return safeReply(i, { content: emojiLabel('ERROR', "Could not find that member in this server."), flags: 64 });
   const report = buildMemberScanPayload(i, target);
   await memberIntelligence.decorateScan(i, target, report);
   if (record) recordModerationSystemEvent({
@@ -446,52 +449,52 @@ async function runMemberScan(i, targetId, { record = true } = {}) {
   return safeUpdate(i, { content: null, embeds: [report.embed], components: report.components });
 }
 async function showMemberScanHistory(i, targetId, origin = 'scan') {
-  const allowed = await ensureScanCapability(i, 'scan_history', '❌ You do not have permission to view member scan history.');
+  const allowed = await ensureScanCapability(i, 'scan_history', emojiLabel('ERROR', "You do not have permission to view member scan history."));
   if (!allowed) return true;
   const target = await fetchTarget(i.guild, targetId);
-  if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
+  if (!target) return safeReply(i, { content: emojiLabel('ERROR', "Could not find that member in this server."), flags: 64 });
   const payload = buildScanHistoryPayload(i, target, origin);
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.history_viewed', action: 'member_scan_history', targetId: target.id });
   return safeUpdate(i, { content: null, embeds: [payload.embed], components: payload.components });
 }
 async function showScanDeleteConfirmation(i, targetId, auditId, origin = 'scan') {
-  const allowed = await ensureScanCapability(i, 'scan_notes', '❌ You do not have permission to delete intelligence scan snapshots.', 'add_case_note');
+  const allowed = await ensureScanCapability(i, 'scan_notes', emojiLabel('ERROR', "You do not have permission to delete intelligence scan snapshots."), 'add_case_note');
   if (!allowed) return true;
   const row = db.prepare("SELECT audit_id, after_value, metadata FROM case_audit WHERE guild_id = ? AND audit_id = ? AND event = 'moderation.member_scan.completed' LIMIT 1").get(String(i.guild.id), String(auditId));
-  if (!row || String(parseJson(row.metadata, {}).targetId || '') !== String(targetId)) return safeUpdate(i, { content: '❌ That scan snapshot no longer exists.', embeds: [], components: [] });
+  if (!row || String(parseJson(row.metadata, {}).targetId || '') !== String(targetId)) return safeUpdate(i, { content: emojiLabel('ERROR', "That scan snapshot no longer exists."), embeds: [], components: [] });
   const after = parseJson(row.after_value, {});
   const label = after.scanId || row.audit_id;
   const components = [new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_delete_confirm:${targetId}:${row.audit_id}:${origin}`).setLabel('Delete Scan').setEmoji('🗑️').setStyle(Discord.ButtonStyle.Danger),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_delete_confirm:${targetId}:${row.audit_id}:${origin}`).setLabel('Delete Scan').setEmoji(EMOJIS.DELETE).setStyle(Discord.ButtonStyle.Danger),
     new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${targetId}:${origin}`).setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary),
   )];
-  return safeUpdate(i, { content: `⚠️ Delete scan snapshot \`${String(label).slice(0, 80)}\`? This removes only the stored scan snapshot, not cases, warnings, evidence, notes, watchlist records or other audit history.`, embeds: [], components });
+  return safeUpdate(i, { content: `${EMOJIS.WARNING} Delete scan snapshot \`${String(label).slice(0, 80)}\`? This removes only the stored scan snapshot, not cases, warnings, evidence, notes, watchlist records or other audit history.`, embeds: [], components });
 }
 
 async function deleteScanSnapshot(i, targetId, auditId, origin = 'scan') {
-  const allowed = await ensureScanCapability(i, 'scan_notes', '❌ You do not have permission to delete intelligence scan snapshots.', 'add_case_note');
+  const allowed = await ensureScanCapability(i, 'scan_notes', emojiLabel('ERROR', "You do not have permission to delete intelligence scan snapshots."), 'add_case_note');
   if (!allowed) return true;
   const row = db.prepare("SELECT audit_id, metadata FROM case_audit WHERE guild_id = ? AND audit_id = ? AND event = 'moderation.member_scan.completed' LIMIT 1").get(String(i.guild.id), String(auditId));
-  if (!row || String(parseJson(row.metadata, {}).targetId || '') !== String(targetId)) return safeUpdate(i, { content: '❌ That scan snapshot no longer exists.', embeds: [], components: [] });
+  if (!row || String(parseJson(row.metadata, {}).targetId || '') !== String(targetId)) return safeUpdate(i, { content: emojiLabel('ERROR', "That scan snapshot no longer exists."), embeds: [], components: [] });
   db.prepare("DELETE FROM case_audit WHERE guild_id = ? AND audit_id = ? AND event = 'moderation.member_scan.completed'").run(String(i.guild.id), String(auditId));
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.snapshot_deleted', action: 'member_scan_history_delete', targetId, metadata: { deletedAuditId: String(auditId) } });
   return showMemberScanHistory(i, targetId, origin);
 }
 
 async function showClearScanHistoryConfirmation(i, targetId, origin = 'scan') {
-  const allowed = await ensureScanCapability(i, 'scan_notes', '❌ You do not have permission to clear intelligence scan history.', 'add_case_note');
+  const allowed = await ensureScanCapability(i, 'scan_notes', emojiLabel('ERROR', "You do not have permission to clear intelligence scan history."), 'add_case_note');
   if (!allowed) return true;
   const count = scanAuditRows(i.guild.id, targetId, 100).length;
   if (!count) return showMemberScanHistory(i, targetId, origin);
   const components = [new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history_confirm:${targetId}:${origin}`).setLabel('Clear All Scan History').setEmoji('🧹').setStyle(Discord.ButtonStyle.Danger),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history_confirm:${targetId}:${origin}`).setLabel('Clear All Scan History').setEmoji(EMOJIS.ADMIN_PURGE).setStyle(Discord.ButtonStyle.Danger),
     new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${targetId}:${origin}`).setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary),
   )];
-  return safeUpdate(i, { content: `⚠️ Clear all **${count}** stored Member Intelligence scan snapshot(s) for <@${targetId}>? Cases, warnings, evidence, notes, watchlist records and other moderation audit events will be retained.`, embeds: [], components });
+  return safeUpdate(i, { content: `${EMOJIS.WARNING} Clear all **${count}** stored Member Intelligence scan snapshot(s) for <@${targetId}>? Cases, warnings, evidence, notes, watchlist records and other moderation audit events will be retained.`, embeds: [], components });
 }
 
 async function clearScanHistory(i, targetId, origin = 'scan') {
-  const allowed = await ensureScanCapability(i, 'scan_notes', '❌ You do not have permission to clear intelligence scan history.', 'add_case_note');
+  const allowed = await ensureScanCapability(i, 'scan_notes', emojiLabel('ERROR', "You do not have permission to clear intelligence scan history."), 'add_case_note');
   if (!allowed) return true;
   const rows = db.prepare("SELECT audit_id, metadata FROM case_audit WHERE guild_id = ? AND event = 'moderation.member_scan.completed'").all(String(i.guild.id));
   const ids = rows.filter((row) => String(parseJson(row.metadata, {}).targetId || '') === String(targetId)).map((row) => String(row.audit_id));
@@ -509,30 +512,30 @@ async function handleMemberScanStringSelect(i) {
   const targetId = parts[1];
   const origin = parts[2] || 'scan';
   const auditId = i.values?.[0];
-  if (!targetId || !auditId) return safeUpdate(i, { content: '❌ Select a scan snapshot to delete.', embeds: [], components: [] });
+  if (!targetId || !auditId) return safeUpdate(i, { content: emojiLabel('ERROR', "Select a scan snapshot to delete."), embeds: [], components: [] });
   return showScanDeleteConfirmation(i, targetId, auditId, origin);
 }
 
 async function runMemberComparison(i, primaryId, secondaryId, origin = 'scan') {
-  const allowed = await ensureScanCapability(i, 'scan_compare', '❌ You do not have permission to compare member intelligence.');
+  const allowed = await ensureScanCapability(i, 'scan_compare', emojiLabel('ERROR', "You do not have permission to compare member intelligence."));
   if (!allowed) return true;
-  if (!primaryId || !secondaryId || String(primaryId) === String(secondaryId)) return safeReply(i, { content: '❌ Select a different member to compare against.', flags: 64 });
+  if (!primaryId || !secondaryId || String(primaryId) === String(secondaryId)) return safeReply(i, { content: emojiLabel('ERROR', "Select a different member to compare against."), flags: 64 });
   if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
   const [primary, secondary] = await Promise.all([fetchTarget(i.guild, primaryId), fetchTarget(i.guild, secondaryId)]);
-  if (!primary || !secondary) return safeReply(i, { content: '❌ One of those members could not be found in this server.', flags: 64 });
+  if (!primary || !secondary) return safeReply(i, { content: emojiLabel('ERROR', "One of those members could not be found in this server."), flags: 64 });
   const payload = buildComparisonPayload(i, primary, secondary, origin);
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.compared', action: 'member_compare', targetId: primary.id, after: { comparedUserId: secondary.id, score: payload.correlation.score, signals: payload.correlation.signals } });
   return safeUpdate(i, { content: null, embeds: [payload.embed], components: payload.components });
 }
 async function showPersistentLinkEvidence(i, targetId) {
-  const allowed = await ensureScanCapability(i, 'scan_links', '❌ You do not have permission to view persistent link evidence.');
+  const allowed = await ensureScanCapability(i, 'scan_links', emojiLabel('ERROR', "You do not have permission to view persistent link evidence."));
   if (!allowed) return true;
   const target = await fetchTarget(i.guild, targetId);
-  if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
+  if (!target) return safeReply(i, { content: emojiLabel('ERROR', "Could not find that member in this server."), flags: 64 });
   const evidence = aggregateSuspectedEvidence(i.guild.id, target.id);
   const text = evidence.length ? evidence.map((entry) => {
   const member = i.guild.members.cache.get(entry.userId);
-  const label = entry.maxScore >= 70 ? '🔴 Strong historical correlation' : '🟠 Possible historical correlation';
+  const label = entry.maxScore >= 70 ? emojiLabel('DISABLED', "Strong historical correlation") : emojiLabel('SEVERITY_HIGH', "Possible historical correlation");
   const firstSeen = entry.firstSeen ? scanTimestamp(new Date(entry.firstSeen).getTime()) : 'Unknown';
   const lastSeen = entry.lastSeen ? scanTimestamp(new Date(entry.lastSeen).getTime()) : 'Unknown';
   return [
@@ -550,25 +553,25 @@ async function showPersistentLinkEvidence(i, targetId) {
 ].join('\n');
 const embed = new Discord.EmbedBuilder()
   .setColor(evidence.length ? 0x5865F2 : 0x57F287)
-  .setTitle(`🔗 Correlation Evidence • ${target.user.tag}`)
+  .setTitle(`${EMOJIS.AUTOMOD_LINKS} Correlation Evidence • ${target.user.tag}`)
   .setDescription(text.slice(0, 3800))
   .setFooter({ text: evidence.length ? 'Historical correlation only • review scan history before drawing conclusions' : 'No repeated correlation signals recorded' })
   .setTimestamp();
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.link_evidence_viewed', action: 'member_scan_links', targetId: target.id, after: { matchCount: evidence.length } });
-  const components = canScanCapability(i, 'scan_run') ? [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('Back to Scan').setEmoji('🔎').setStyle(Discord.ButtonStyle.Primary))] : [];
+  const components = canScanCapability(i, 'scan_run') ? [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('Back to Scan').setEmoji(EMOJIS.INVESTIGATE).setStyle(Discord.ButtonStyle.Primary))] : [];
   return safeUpdate(i, { content: null, embeds: [embed], components });
 }
 async function showInvestigationWatch(i, targetId) {
-  const allowed = await ensureScanCapability(i, 'scan_watch', '❌ You do not have permission to view investigation watch state.');
+  const allowed = await ensureScanCapability(i, 'scan_watch', emojiLabel('ERROR', "You do not have permission to view investigation watch state."));
   if (!allowed) return true;
   const target = await fetchTarget(i.guild, targetId);
-  if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
+  if (!target) return safeReply(i, { content: emojiLabel('ERROR', "Could not find that member in this server."), flags: 64 });
   const state = getInvestigationState(i.guild.id, target.id);
   const embed = new Discord.EmbedBuilder()
     .setColor(state.watched ? 0xF0A202 : 0x5865F2)
-    .setTitle(`👁️ Investigation Watch • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.WELCOME_PREVIEW} Investigation Watch • ${target.user.tag}`)
     .setDescription([
-      `**Status:** ${state.watched ? '🟠 ON' : '⚪ OFF'}`,
+      `**Status:** ${state.watched ? emojiLabel('SEVERITY_HIGH', "ON") : emojiLabel('INACTIVE', "OFF")}`,
       state.watch?.reason ? `**Reason:** ${state.watch.reason}` : '**Reason:** No active investigation watch reason.',
       state.watch?.at ? `**Updated:** ${scanTimestamp(new Date(state.watch.at).getTime())}` : '**Updated:** Never',
       '',
@@ -576,16 +579,16 @@ async function showInvestigationWatch(i, targetId) {
     ].join('\n'))
     .setTimestamp();
   const buttons = [
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_watch_toggle:${target.id}`).setLabel(state.watched ? 'Remove Investigation Watch' : 'Enable Investigation Watch').setEmoji('👁️').setStyle(state.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Primary),
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_watch_toggle:${target.id}`).setLabel(state.watched ? 'Remove Investigation Watch' : 'Enable Investigation Watch').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(state.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Primary),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel(emojiLabel('BACK', 'Back to Scan')).setStyle(Discord.ButtonStyle.Secondary),
   ];
   return safeUpdate(i, { content: null, embeds: [embed], components: [new Discord.ActionRowBuilder().addComponents(...buttons)] });
 }
 async function toggleMemberWatch(i, targetId) {
-  const allowed = await ensureScanCapability(i, 'scan_watch', '❌ You do not have permission to change investigation watch state.');
+  const allowed = await ensureScanCapability(i, 'scan_watch', emojiLabel('ERROR', "You do not have permission to change investigation watch state."));
   if (!allowed) return true;
   const target = await fetchTarget(i.guild, targetId);
-  if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
+  if (!target) return safeReply(i, { content: emojiLabel('ERROR', "Could not find that member in this server."), flags: 64 });
   const state = getInvestigationState(i.guild.id, target.id);
   const enabled = !state.watched;
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.watch_updated', action: 'member_watch', targetId: target.id, before: { enabled: state.watched }, after: { enabled, reason: enabled ? 'Manual management investigation watch.' : 'Removed from manual management investigation watch.' } });
@@ -595,20 +598,20 @@ async function submitInvestigationNote(i) {
   const id = String(i.customId || '');
   if (!id.startsWith('mod_scan_note_submit:')) return false;
   const targetId = id.split(':')[1];
-  const allowed = await ensureScanCapability(i, 'scan_notes', '❌ You do not have permission to add investigation notes.', 'add_case_note');
+  const allowed = await ensureScanCapability(i, 'scan_notes', emojiLabel('ERROR', "You do not have permission to add investigation notes."), 'add_case_note');
   if (!allowed) return true;
   const note = fieldValue(i, 'note').slice(0, 1000);
-  if (!note) return safeReply(i, { content: '❌ Investigation note cannot be empty.', flags: 64 });
+  if (!note) return safeReply(i, { content: emojiLabel('ERROR', "Investigation note cannot be empty."), flags: 64 });
   const target = await fetchTarget(i.guild, targetId);
-  if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
+  if (!target) return safeReply(i, { content: emojiLabel('ERROR', "Could not find that member in this server."), flags: 64 });
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.note_added', action: 'member_scan_note', targetId: target.id, after: { note } });
   if (canScanCapability(i, 'scan_run')) return runMemberScan(i, target.id, { record: false });
-  return safeReply(i, { content: `✅ Investigation note added for ${target.user}.`, flags: 64 });
+  return safeReply(i, { content: `${EMOJIS.SUCCESS} Investigation note added for ${target.user}.`, flags: 64 });
 }
 async function handleMemberScanSelect(i) {
   if (i.customId === 'mod_scan_user_select') {
     const targetId = i.values?.[0];
-    if (!targetId) return safeReply(i, { content: '❌ No member selected.', flags: 64 });
+    if (!targetId) return safeReply(i, { content: emojiLabel('ERROR', "No member selected."), flags: 64 });
     return runMemberScan(i, targetId);
   }
   if (String(i.customId || '').startsWith('mod_scan_history_compare_select:')) {
@@ -616,7 +619,7 @@ async function handleMemberScanSelect(i) {
     const primaryId = parts[1];
     const origin = parts[2] || 'scan';
     const secondaryId = i.values?.[0];
-    if (!secondaryId) return safeReply(i, { content: '❌ No comparison member selected.', flags: 64 });
+    if (!secondaryId) return safeReply(i, { content: emojiLabel('ERROR', "No comparison member selected."), flags: 64 });
     return runMemberComparison(i, primaryId, secondaryId, origin);
   }
   return false;
@@ -631,18 +634,18 @@ async function handleMemberScanButton(i) {
     const [, targetId = 'none', requested = 'actions'] = id.split(':');
     if (requested === 'intelligence') {
       if (targetId && targetId !== 'none') return runMemberScan(i, targetId, { record: false });
-      const allowed = await ensureScanCapability(i, 'scan_run', '❌ You do not have permission to run a member intelligence scan.');
+      const allowed = await ensureScanCapability(i, 'scan_run', emojiLabel('ERROR', "You do not have permission to run a member intelligence scan."));
       if (!allowed) return true;
-      const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder('👤 Select a member to investigate').setMinValues(1).setMaxValues(1);
-      const back = new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:actions').setLabel('⬅️ Back').setStyle(Discord.ButtonStyle.Secondary);
-      return safeUpdate(i, { content: '🧠 **Member Intelligence** — select a server member to open the unified intelligence workspace.', embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)] });
+      const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder(emojiLabel('USER', "Select a member to investigate")).setMinValues(1).setMaxValues(1);
+      const back = new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:actions').setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary);
+      return safeUpdate(i, { content: emojiLabel('MOD_INTELLIGENCE', '**Member Intelligence** — select a server member to open the unified intelligence workspace.'), embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)] });
     }
   }
   if (id === 'mod_select_user' || id === 'mod_member_scan') {
-    const allowed = await ensureScanCapability(i, 'scan_run', '❌ You do not have permission to run a member intelligence scan.');
+    const allowed = await ensureScanCapability(i, 'scan_run', emojiLabel('ERROR', "You do not have permission to run a member intelligence scan."));
     if (!allowed) return true;
-    const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder('🔎 Select a member to scan').setMinValues(1).setMaxValues(1);
-    return safeUpdate(i, { content: '🔎 **Goliath Member Scan** — select a server member to run a permission-filtered intelligence report.', embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select)] });
+    const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder(emojiLabel('INVESTIGATE', 'Select a member to scan')).setMinValues(1).setMaxValues(1);
+    return safeUpdate(i, { content: emojiLabel('INVESTIGATE', '**Goliath Member Scan** — select a server member to run a permission-filtered intelligence report.'), embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select)] });
   }
   if (id.startsWith('mod_member_scan:')) return runMemberScan(i, id.split(':')[1], { record: true });
   if (id.startsWith('mod_scan_view:')) return runMemberScan(i, id.split(':')[1], { record: false });
@@ -657,7 +660,7 @@ async function handleMemberScanButton(i) {
   if (id.startsWith('mod_scan_watch:')) return showInvestigationWatch(i, id.split(':')[1]);
   if (id.startsWith('mod_scan_note:')) {
     const targetId = id.split(':')[1];
-    const allowed = await ensureScanCapability(i, 'scan_notes', '❌ You do not have permission to add investigation notes.', 'add_case_note');
+    const allowed = await ensureScanCapability(i, 'scan_notes', emojiLabel('ERROR', "You do not have permission to add investigation notes."), 'add_case_note');
     if (!allowed) return true;
     await i.showModal(buildInvestigationNoteModal(targetId));
     return true;
@@ -666,12 +669,12 @@ async function handleMemberScanButton(i) {
     const parts = id.split(':');
     const primaryId = parts[1];
     const origin = parts[2] || 'scan';
-    const allowed = await ensureScanCapability(i, 'scan_compare', '❌ You do not have permission to compare member intelligence.');
+    const allowed = await ensureScanCapability(i, 'scan_compare', emojiLabel('ERROR', "You do not have permission to compare member intelligence."));
     if (!allowed) return true;
-    const select = new Discord.UserSelectMenuBuilder().setCustomId(`mod_scan_history_compare_select:${primaryId}:${origin}`).setPlaceholder('🧬 Select another member to compare').setMinValues(1).setMaxValues(1);
-    const back = new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primaryId}:${origin}`).setLabel('⬅️ Back to Scan History').setStyle(Discord.ButtonStyle.Secondary);
+    const select = new Discord.UserSelectMenuBuilder().setCustomId(`mod_scan_history_compare_select:${primaryId}:${origin}`).setPlaceholder(emojiLabel('MOD_ACCOUNT_COMPARE', 'Select another member to compare')).setMinValues(1).setMaxValues(1);
+    const back = new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primaryId}:${origin}`).setLabel(emojiLabel('BACK', 'Back to Scan History')).setStyle(Discord.ButtonStyle.Secondary);
     return safeUpdate(i, {
-      content: `🧬 **Compare Accounts** — select another server member to compare against <@${primaryId}>.`,
+      content: `${EMOJIS.MOD_ACCOUNT_COMPARE} **Compare Accounts** — select another server member to compare against <@${primaryId}>.`,
       embeds: [],
       components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)],
     });
@@ -680,22 +683,22 @@ async function handleMemberScanButton(i) {
 }
 
 async function showPunishmentModal(i, action, targetId) { if (!PUNISHMENT_ACTIONS.has(action)) return false; const target = await requireModeratableTarget(i, targetId, action); if (!target) return true; await i.showModal(buildPunishmentModal(action, target.id)); return true; }
-async function requestRemoveTimeout(i, targetId) { const target = await requireModeratableTarget(i, targetId, 'remove_timeout'); if (!target) return true; return createConfirmation(i, target.id, 'remove-timeout', {}, `✅ Remove timeout from **${target.user.tag}**?`); }
+async function requestRemoveTimeout(i, targetId) { const target = await requireModeratableTarget(i, targetId, 'remove_timeout'); if (!target) return true; return createConfirmation(i, target.id, 'remove-timeout', {}, `${EMOJIS.SUCCESS} Remove timeout from **${target.user.tag}**?`); }
 async function showQuarantineModal(i, targetId) {
   const target = await requireModeratableTarget(i, targetId, 'quarantine');
   if (!target) return true;
-  if (getQuarantineState(i.guild.id)?.users?.[target.id]) return safeReply(i, { content: `⚠️ **${target.user.tag}** is already quarantined.`, flags: 64 });
+  if (getQuarantineState(i.guild.id)?.users?.[target.id]) return safeReply(i, { content: `${EMOJIS.WARNING} **${target.user.tag}** is already quarantined.`, flags: 64 });
   await i.showModal(buildQuarantineModal(target.id));
   return true;
 }
 async function removeQuarantine(i, targetId) {
   const target = await requireModeratableTarget(i, targetId, 'remove_quarantine');
   if (!target) return true;
-  if (!getQuarantineState(i.guild.id)?.users?.[target.id]) return safeReply(i, { content: `⚠️ **${target.user.tag}** is not currently quarantined.`, flags: 64 });
+  if (!getQuarantineState(i.guild.id)?.users?.[target.id]) return safeReply(i, { content: `${EMOJIS.WARNING} **${target.user.tag}** is not currently quarantined.`, flags: 64 });
   const result = await restoreQuarantinedMember(i.guild, target, { reason: `Quarantine removed by ${i.user?.tag || i.user?.id || 'moderator'}` });
   recordModerationSystemEvent({ interaction: i, event: result.success ? 'moderation.quarantine.removed' : 'moderation.quarantine.remove_failed', action: 'remove_quarantine', targetId: target.id, after: result });
-  if (!result.success) return safeReply(i, { content: `❌ Failed to remove quarantine from **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`, flags: 64 });
-  await safeReply(i, { content: `🔓 Quarantine removed from **${target.user.tag}** • restored **${result.restoredRoles || 0}** role(s).`, flags: 64 });
+  if (!result.success) return safeReply(i, { content: `${EMOJIS.ERROR} Failed to remove quarantine from **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`, flags: 64 });
+  await safeReply(i, { content: `${EMOJIS.UNLOCK} Quarantine removed from **${target.user.tag}** • restored **${result.restoredRoles || 0}** role(s).`, flags: 64 });
   await refreshDashboard(Discord, i, target, { view: 'actions' });
   return true;
 }
@@ -705,7 +708,7 @@ async function handleCaseToolButton(i) { const caseResult = await openCaseTool(i
 async function handleBulkButton(i) {
   if (!String(i.customId || '').startsWith('mod_bulk_')) return false;
   const action = getBulkAction(i.customId); if (!action) return false;
-  const allowed = await ensureActionAccess(i, `bulk_${action}`, `❌ No permission to use bulk ${action}.`); if (!allowed) return true;
+  const allowed = await ensureActionAccess(i, `bulk_${action}`, `${EMOJIS.ERROR} No permission to use bulk ${action}.`); if (!allowed) return true;
   await i.showModal(buildBulkModal(action)); return true;
 }
 async function handleConfirmButton(i) {
@@ -715,7 +718,7 @@ async function handleConfirmButton(i) {
   const lockKey = `${i.guild?.id || 'none'}:${token}`;
   if (CONFIRM_LOCKS.has(lockKey)) {
     recordModerationSystemEvent({ interaction: i, event: 'moderation.confirmation.duplicate_blocked', metadata: { tokenPresent: true } });
-    return safeReply(i, { content: '⏳ That moderation action is already being processed.', flags: 64 });
+    return safeReply(i, { content: emojiLabel('TIMEOUT', "That moderation action is already being processed."), flags: 64 });
   }
   CONFIRM_LOCKS.add(lockKey);
   try {
@@ -748,17 +751,17 @@ async function handleCancelButton(i) {
   }
   recordModerationSystemEvent({ interaction: i, event: 'moderation.action.cancelled', targetId: targetId === 'none' ? null : targetId, metadata: { pendingActionsRemoved: removed, scopedToToken: Boolean(token), returnView: context.view } });
   if (i.message && typeof i.update === 'function') {
-    await i.update({ content: '❌ Cancelled — no moderation action was applied.', embeds: [], components: [] });
+    await i.update({ content: emojiLabel('ERROR', 'Cancelled — no moderation action was applied.'), embeds: [], components: [] });
     const target = targetId !== 'none' ? await fetchTarget(i.guild, targetId) : null;
     await refreshDashboard(Discord, i, target, target ? context : { view: 'member', actionFilter: 'all', statusFilter: 'all', page: 0 });
     return true;
   }
-  return safeReply(i, { content: '❌ Cancelled — no moderation action was applied.', flags: 64 });
+  return safeReply(i, { content: emojiLabel('ERROR', 'Cancelled — no moderation action was applied.'), flags: 64 });
 }
 async function handleBulkModal(i) {
   if (!String(i.customId || '').startsWith('mod_submit_bulk_')) return false;
   const action = getBulkAction(i.customId); if (!action) return false;
-  const allowed = await ensureActionAccess(i, `bulk_${action}`, `❌ No permission to use bulk ${action}.`); if (!allowed) return true;
+  const allowed = await ensureActionAccess(i, `bulk_${action}`, `${EMOJIS.ERROR} No permission to use bulk ${action}.`); if (!allowed) return true;
   if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
   recordModerationSystemEvent({ interaction: i, event: 'moderation.bulk.requested', action, metadata: { operation: fieldValue(i, 'operation') || action } });
   return submitBulkModal(i, action);
@@ -771,8 +774,8 @@ async function handleActionModal(i) {
     const reason = fieldValue(i, 'reason');
     const result = await quarantineMember(i.guild, target, { reason, quarantinedBy: i.user?.id || null });
     recordModerationSystemEvent({ interaction: i, event: result.success ? 'moderation.quarantine.applied' : 'moderation.quarantine.failed', action: 'quarantine', targetId: target.id, reason, after: result });
-    if (!result.success) return safeReply(i, { content: `❌ Failed to quarantine **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`, flags: 64 });
-    await safeReply(i, { content: result.dryRun ? `🧪 Quarantine dry-run completed for **${target.user.tag}**.` : `🚫 **${target.user.tag}** has been quarantined.`, flags: 64 });
+    if (!result.success) return safeReply(i, { content: `${EMOJIS.ERROR} Failed to quarantine **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`, flags: 64 });
+    await safeReply(i, { content: result.dryRun ? `${EMOJIS.TEST_SEND} Quarantine dry-run completed for **${target.user.tag}**.` : `${EMOJIS.AUTOMOD_SPAM} **${target.user.tag}** has been quarantined.`, flags: 64 });
     await refreshDashboard(Discord, i, target, { view: 'actions' });
     return true;
   }
@@ -817,12 +820,352 @@ async function handleCaseModal(i) {
   return hardenAppealDecisionResult(i, result);
 }
 async function routeHandlers(i, handlers) { for (const handler of handlers) { const result = await handler(i); if (result) return result; } return false; }
+async function handleVerificationCases(i) {
+ const id=String(i.customId||'');
+ if(id!=='mod_verification_cases'&&!id.startsWith('mod_verification_case:'))return false;
+ if(!canUseModAction(i.member,i.guild,'view_cases'))return safeReply(i,{content:'You cannot view Verification cases.',flags:64});
+ const sessions=verificationStore.getVerificationSection(i.guild.id)?.sessions||{};
+ const active=Object.entries(sessions).filter(([,v])=>v?.state==='quarantined');
+ const row=(...buttons)=>new Discord.ActionRowBuilder().addComponents(...buttons);
+ const button=(customId,label,style=Discord.ButtonStyle.Secondary)=>new Discord.ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+ const show=async payload=>{if(i.isMessageComponent?.())return i.update(payload);return i.reply({...payload,flags:64});};
+ if(id==='mod_verification_cases') return renderDashboard(i, 'none', 'cases', { actionFilter: 'quarantine' });
+
+ const parts=id.split(':'),uid=parts[1],action=parts[2],confirm=parts[3];
+ if(!/^\d{15,22}$/.test(uid)||sessions[uid]?.state!=='quarantined')return safeReply(i,{content:'This Verification case is no longer active.',flags:64});
+ if(!action){
+  const v=sessions[uid];
+  const embed=new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('Verification Quarantine Review').setDescription(`Member: <@${uid}>\nFailures: ${Number(v.failedAttempts||0)}\nCase: ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'Unavailable'}\n\nRelease returns to Pending Verification; Reject ends entry; Escalate transfers to Mod Hub investigations.`);
+  return show({embeds:[embed],components:[row(button('mod_verification_case:'+uid+':release','Release',Discord.ButtonStyle.Success),button('mod_verification_case:'+uid+':reject','Reject',Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid+':escalate','Escalate',Discord.ButtonStyle.Primary)),row(button('mod_dashboard:none:cases',emojiLabel('BACK', 'Back to Cases')))]});
+ }
+ if(!['release','reject','escalate'].includes(action))return false;
+ const permission=action==='release'?'remove_quarantine':action==='reject'?'kick':'quarantine';
+ if(!canUseModAction(i.member,i.guild,permission))return safeReply(i,{content:'You lack authority for this action.',flags:64});
+ if(confirm!=='confirm')return show({embeds:[new Discord.EmbedBuilder().setColor(0xed4245).setTitle('Confirm Verification Case Action').setDescription(`Member: <@${uid}>\nAction: **${action}**\nThis changes member security state and roles.`)],components:[row(button('mod_verification_case:'+uid+':'+action+':confirm','Confirm '+action,Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid,'Cancel'))]});
+ await i.deferUpdate();
+ const result=await verificationQuarantine.resolveQuarantineCase(i.guild,uid,action,i.user.id,'Mod Hub Verification review');
+ if(!result?.ok)return i.editReply({content:EMOJIS.ERROR + ' ' + String(result?.message || 'Action failed'),embeds:[],components:[row(button('mod_verification_case:'+uid,'Back'))]});
+ recordModerationSystemEvent({interaction:i,event:'moderation.verification_case_resolved',action,targetId:uid,reason:'Mod Hub Verification review'});
+ return i.editReply({content:EMOJIS.SUCCESS+' '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases',emojiLabel('BACK', 'Back to Cases')))]});
+}
+function isGuildOwner(i) { return Boolean(i.guild?.ownerId && String(i.user?.id) === String(i.guild.ownerId)); }
+
+function ensureOwnerArchiveTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS owner_case_archive (
+      guild_id TEXT NOT NULL,
+      case_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      case_data TEXT NOT NULL,
+      warning_data TEXT NOT NULL,
+      audit_data TEXT NOT NULL,
+      archived_by TEXT NOT NULL,
+      archived_at TEXT NOT NULL,
+      PRIMARY KEY (guild_id, case_id)
+    );
+    CREATE TABLE IF NOT EXISTS owner_case_history (
+      guild_id TEXT NOT NULL,
+      case_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      disposition TEXT NOT NULL CHECK (disposition IN ('archived','deleted','restored')),
+      actor_id TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      PRIMARY KEY (guild_id, case_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_owner_case_history_user ON owner_case_history(guild_id, user_id);
+  `);
+}
+function ownerArchiveCount(guildId) {
+  ensureOwnerArchiveTables();
+  return db.prepare('SELECT COUNT(*) AS n FROM owner_case_archive WHERE guild_id = ?').get(String(guildId)).n;
+}
+function ownerCaseDisplay(value, fallback = 'Unknown') {
+  const raw = String(value || fallback).replace(/_/g, ' ').trim();
+  if (raw.toLowerCase() === 'reversed') return 'Closed';
+  return raw.replace(/\b\w/g, char => char.toUpperCase());
+}
+function ownerCaseRows(i, page = 0, archived = false) {
+  ensureOwnerArchiveTables();
+  const guildId = String(i.guildId);
+  const rows = archived
+    ? db.prepare('SELECT case_id, user_id, archived_at FROM owner_case_archive WHERE guild_id = ? ORDER BY archived_at DESC').all(guildId)
+    : db.prepare('SELECT case_id, user_id, action, status FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(guildId);
+  const pages = Math.max(1, Math.ceil(rows.length / 25));
+  const current = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const selection = rows.slice(current * 25, (current + 1) * 25);
+  const components = [];
+  if (selection.length) components.push(new Discord.ActionRowBuilder().addComponents(new Discord.StringSelectMenuBuilder()
+    .setCustomId(archived ? 'mod_owner_archive_select' : 'mod_owner_case_select')
+    .setPlaceholder(archived ? 'Select an archived case' : 'Select a case to manage')
+    .addOptions(selection.map(entry => ({
+      label: `Case #${entry.case_id} • ${archived ? 'Archived' : ownerCaseDisplay(entry.action)}`.slice(0, 100),
+      description: `Member: ${entry.user_id} • Status: ${archived ? 'Archived' : ownerCaseDisplay(entry.status)}`.slice(0, 100),
+      value: String(entry.case_id),
+    })))));
+  const nav = new Discord.ActionRowBuilder();
+  if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
+  if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId(archived ? 'mod_owner_management:0' : 'mod_owner_archive_list:0').setLabel(archived ? 'Available Cases' : 'Archived Cases').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History').setStyle(Discord.ButtonStyle.Secondary));
+  components.push(nav);
+  components.push(new Discord.ActionRowBuilder().addComponents(
+    new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary)));
+  const embed = new Discord.EmbedBuilder()
+    .setColor(0x5865F2).setTitle(archived ? emojiLabel('WELCOME_PRESET', "Archived Cases") : emojiLabel('WORKSPACE', "Case Management"))
+    .setDescription(archived
+      ? 'Owner-only archived records. Select a case to review or restore it. Archived records are excluded from member profiles and active moderation.'
+      : 'Review an existing case and choose to archive or permanently delete it. Selecting a case does not change its records.')
+    .addFields(
+      { name: emojiLabel('MOD_CASE_FOLDER', "Available Cases"), value: String(archived ? db.prepare('SELECT COUNT(*) AS n FROM cases WHERE guild_id = ?').get(guildId).n : rows.length), inline: true },
+      { name: emojiLabel('WELCOME_PRESET', "Archived Cases"), value: String(archived ? rows.length : ownerArchiveCount(guildId)), inline: true },
+      { name: emojiLabel('DOCUMENT', "Page"), value: `${current + 1} of ${pages}`, inline: true },
+      { name: emojiLabel('PERMISSION_GUARD', "Record Management"), value: '**Archive:** Privately preserve the case for the owner to restore later.\n**Delete:** Permanently remove the case and its linked records.\nNeither action changes existing Discord punishments.', inline: false },
+    ).setFooter({ text: 'Goliath • Case Management • Server owner only' }).setTimestamp();
+  return { embeds: [embed], components };
+}
+async function handleOwnerCaseManagement(i) {
+  const id = String(i.customId || '');
+  if (!id.startsWith('mod_owner_')) return false;
+  if (!isGuildOwner(i)) return safeReply(i, { content: emojiLabel('ERROR', "Only the server owner can manage archived or deleted cases."), flags: 64 });
+  ensureOwnerArchiveTables();
+  if (id.startsWith('mod_owner_history:')) {
+    const guildId = String(i.guildId);
+    const page = Math.max(0, Number(id.split(':')[1]) || 0);
+    const total = db.prepare('SELECT COUNT(*) AS n FROM owner_case_history WHERE guild_id = ?').get(guildId).n;
+    const pages = Math.max(1, Math.ceil(total / 15));
+    const current = Math.min(page, pages - 1);
+    const records = db.prepare('SELECT case_id, user_id, disposition, occurred_at FROM owner_case_history WHERE guild_id = ? ORDER BY occurred_at DESC LIMIT 15 OFFSET ?').all(guildId, current * 15);
+    const description = records.length ? records.map(r => `**Case #${r.case_id}** · ${r.disposition.charAt(0).toUpperCase() + r.disposition.slice(1)} · <@${r.user_id}>\n${r.occurred_at}`).join('\n\n') : 'No archived or deleted case history.';
+    const nav = new Discord.ActionRowBuilder();
+    if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_history:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
+    if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_history:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
+    nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary));
+    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('CASES', "Case History"))
+      .setDescription(description.slice(0, 4000)).setFooter({ text: `Goliath • Owner only • Page ${current + 1} of ${pages}` })], components: [nav] });
+    return true;
+  }
+  if (id.startsWith('mod_owner_management:')) { await i.update(ownerCaseRows(i, id.split(':')[1])); return true; }
+  if (id.startsWith('mod_owner_archive_list:')) { await i.update(ownerCaseRows(i, id.split(':')[1], true)); return true; }
+  if (id === 'mod_owner_case_select') {
+    const caseId = Number(i.values?.[0]);
+    const record = Number.isSafeInteger(caseId) && caseId > 0 ? getCaseById(i.guildId, caseId) : null;
+    if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
+    const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
+    const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
+    const review = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.WORKSPACE} Manage Case #${caseId}`)
+      .setDescription('Choose how this case should be handled. Both actions remove it from normal moderation records and member profiles.')
+      .addFields(
+        { name: emojiLabel('USER', "Member"), value: `<@${record.userId}>`, inline: false },
+        { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: ownerCaseDisplay(record.action), inline: true },
+        { name: emojiLabel('SECURITY', "Status"), value: ownerCaseDisplay(record.status), inline: true },
+        { name: emojiLabel('NOTE', "Reason"), value: String(record.reason || 'None').slice(0, 1024), inline: false },
+        { name: emojiLabel('MOD_CASE_FOLDER', "Linked Records"), value: `**Warnings:** ${warningCount}\n**Audit Entries:** ${auditCount}`, inline: false },
+        { name: emojiLabel('WELCOME_PRESET', "Archive Case"), value: 'Securely retain the complete record for owner-only access. The owner can restore it later.', inline: false },
+        { name: emojiLabel('DELETE', "Delete Case"), value: 'Permanently remove the case and linked records. Only a minimal private history marker remains. This cannot be undone.', inline: false });
+    await i.update({ embeds: [review], components: [
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setEmoji(EMOJIS.BULK).setStyle(Discord.ButtonStyle.Primary),
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setEmoji(EMOJIS.DELETE).setStyle(Discord.ButtonStyle.Danger)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back to Case Management').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary))
+    ] });
+    return true;
+  }
+  if (id === 'mod_owner_archive_select') {
+    const caseId = Number(i.values?.[0]);
+    const row = Number.isSafeInteger(caseId) && caseId > 0
+      ? db.prepare('SELECT * FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId)
+      : null;
+    if (!row) return safeReply(i, { content: 'Archived case not found.', flags: 64 });
+    const original = JSON.parse(row.case_data);
+    const warnings = JSON.parse(row.warning_data);
+    const audits = JSON.parse(row.audit_data);
+    const embed = new Discord.EmbedBuilder().setColor(0x5865F2)
+      .setTitle(`${EMOJIS.BULK} Archived Case #${caseId}`)
+      .setDescription('This case is archived. Its details are restricted to the server owner and excluded from active moderation and member profiles.')
+      .addFields(
+        { name: emojiLabel('USER', "Member"), value: `<@${row.user_id}>`, inline: false },
+        { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: ownerCaseDisplay(original.action), inline: true },
+        { name: emojiLabel('SECURITY', "Previous Status"), value: ownerCaseDisplay(original.status), inline: true },
+        { name: emojiLabel('NOTE', "Reason"), value: String(original.reason || 'None').slice(0, 1024), inline: false },
+        { name: emojiLabel('MOD_CASE_FOLDER', "Preserved Records"), value: `Warnings: ${warnings.length} · Audit Entries: ${audits.length}`, inline: false },
+        { name: emojiLabel('WELCOME_SCHEDULED', "Archived At"), value: row.archived_at, inline: false })
+      .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp();
+    await i.update({ embeds: [embed], components: [
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_restore_prompt:${caseId}`).setLabel('Restore Case').setEmoji(EMOJIS.UPDATE).setStyle(Discord.ButtonStyle.Primary)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_archive_list:0').setLabel('Back to Archived Cases').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary))
+    ] });
+    return true;
+  }
+  if (id.startsWith('mod_owner_archive_prompt:') || id.startsWith('mod_owner_restore_prompt:') || id.startsWith('mod_owner_delete_prompt:')) {
+    const operation = id.includes('archive_prompt') ? 'ARCHIVE' : id.includes('restore_prompt') ? 'RESTORE' : 'DELETE';
+    const caseId = Number(id.split(':')[1]);
+    const exists = operation === 'RESTORE'
+      ? db.prepare('SELECT 1 FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId)
+      : getCaseById(i.guildId, caseId);
+    if (!Number.isSafeInteger(caseId) || caseId <= 0 || !exists) return safeReply(i, { content: 'Case not found.', flags: 64 });
+    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel(`Type ${operation} to confirm`).setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
+    await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_${operation.toLowerCase()}_submit:${caseId}`).setTitle(`${operation === 'DELETE' ? 'Delete' : operation === 'RESTORE' ? 'Restore' : 'Archive'} Case`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+    return true;
+  }
+  if (/^mod_owner_(archive|restore|delete)_submit:/.test(id)) {
+    const operation = id.split('_')[2].toUpperCase();
+    const caseId = Number(id.split(':')[1]);
+    const entered = String(i.fields?.getTextInputValue('confirmation') || '').trim().toUpperCase();
+    if (!Number.isSafeInteger(caseId) || caseId <= 0 || entered !== operation) return safeReply(i, { content: `${EMOJIS.ERROR} Enter exactly ${operation}. No records were changed.`, flags: 64 });
+    const guildId = String(i.guildId);
+    const result = db.transaction(() => {
+      const timestamp = new Date().toISOString();
+      if (operation === 'RESTORE') {
+        const saved = db.prepare('SELECT * FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
+        if (!saved) return null;
+        if (db.prepare('SELECT 1 FROM cases WHERE case_id = ?').get(caseId)) throw new Error('Case ID is already in use; restoration stopped');
+        const record = JSON.parse(saved.case_data);
+        const warningRows = JSON.parse(saved.warning_data);
+        const auditRows = JSON.parse(saved.audit_data);
+        if (!record || String(record.guild_id) !== guildId || Number(record.case_id) !== caseId || String(record.user_id) !== String(saved.user_id) ||
+            !Array.isArray(warningRows) || !Array.isArray(auditRows)) {
+          throw new Error('Archived case integrity validation failed; restoration stopped');
+        }
+        // Reject conflicting primary keys before attempting any restore writes.
+        for (const [table, rows, idColumn] of [['warnings', warningRows, 'id'], ['case_audit', auditRows, 'audit_id']]) {
+          const seen = new Set();
+          for (const row of rows) {
+            const id = Number(row?.[idColumn]);
+            if (!row || String(row.guild_id) !== guildId || Number(row.case_id) !== caseId ||
+                !Number.isSafeInteger(id) || id <= 0 || seen.has(id) ||
+                db.prepare(`SELECT 1 FROM ${table} WHERE ${idColumn} = ?`).get(id)) {
+              throw new Error(`Archived ${table} record conflict; restoration stopped`);
+            }
+            seen.add(id);
+          }
+        }
+        const keys = Object.keys(record);
+        db.prepare(`INSERT INTO cases (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`).run(...keys.map(k => record[k]));
+        for (const [table, rows] of [['warnings', warningRows], ['case_audit', auditRows]]) {
+          for (const row of rows) {
+            const columns = Object.keys(row);
+            db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...columns.map(k => row[k]));
+          }
+        }
+        db.prepare('DELETE FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
+        db.prepare("INSERT INTO owner_case_history (guild_id,case_id,user_id,disposition,actor_id,occurred_at) VALUES (?,?,?,?,?,?) ON CONFLICT(guild_id,case_id) DO UPDATE SET disposition=excluded.disposition,actor_id=excluded.actor_id,occurred_at=excluded.occurred_at")
+          .run(guildId, caseId, saved.user_id, 'restored', i.user.id, timestamp);
+        return { warnings: JSON.parse(saved.warning_data).length, audits: JSON.parse(saved.audit_data).length };
+      }
+      const record = db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
+      if (!record) return null;
+      const warnings = db.prepare('SELECT * FROM warnings WHERE guild_id = ? AND case_id = ?').all(guildId, caseId);
+      const audits = db.prepare('SELECT * FROM case_audit WHERE guild_id = ? AND case_id = ?').all(guildId, caseId);
+      if (operation === 'ARCHIVE') {
+        db.prepare('INSERT INTO owner_case_archive (guild_id,case_id,user_id,case_data,warning_data,audit_data,archived_by,archived_at) VALUES (?,?,?,?,?,?,?,?)')
+          .run(guildId, caseId, record.user_id, JSON.stringify(record), JSON.stringify(warnings), JSON.stringify(audits), i.user.id, timestamp);
+      }
+      db.prepare('DELETE FROM warnings WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
+      db.prepare('DELETE FROM case_audit WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
+      const deleted = db.prepare('DELETE FROM cases WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
+      if (deleted !== 1) throw new Error('Case record was not removed');
+      db.prepare("INSERT INTO owner_case_history (guild_id,case_id,user_id,disposition,actor_id,occurred_at) VALUES (?,?,?,?,?,?) ON CONFLICT(guild_id,case_id) DO UPDATE SET disposition=excluded.disposition,actor_id=excluded.actor_id,occurred_at=excluded.occurred_at")
+        .run(guildId, caseId, record.user_id, operation === 'ARCHIVE' ? 'archived' : 'deleted', i.user.id, timestamp);
+      // Never store the deleted case payload in the retained audit marker.
+      return { warnings: warnings.length, audits: audits.length };
+    })();
+    if (!result) return safeReply(i, { content: 'Case not found. Nothing changed.', flags: 64 });
+    const title = operation === 'ARCHIVE' ? emojiLabel('WELCOME_PRESET', "Case Archived") : operation === 'RESTORE' ? emojiLabel('SUCCESS', 'Case Restored') : emojiLabel('DELETE', "Case Permanently Deleted");
+    const description = operation === 'ARCHIVE'
+      ? `Case **#${caseId}** has been archived successfully. It is no longer visible in active moderation records or member profiles. Only the server owner can restore it.`
+      : operation === 'RESTORE' ? `Case **#${caseId}** has been restored to case management.`
+      : `Case **#${caseId}** has been permanently deleted. Only a restricted owner-only history marker remains.`;
+    const details = operation === 'ARCHIVE'
+      ? [
+          { name: emojiLabel('INCIDENT_AUDIT', "Case Status"), value: 'Archived', inline: true },
+          { name: emojiLabel('PERMISSION_GUARD', "Access"), value: 'Server Owner Only', inline: true },
+          { name: emojiLabel('MOD_CASE_FOLDER', "Preserved Records"), value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+        ]
+      : operation === 'RESTORE'
+        ? [
+            { name: emojiLabel('INCIDENT_AUDIT', "Case Status"), value: 'Restored', inline: true },
+            { name: emojiLabel('MOD_CASE_FOLDER', "Restored Records"), value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+          ]
+        : [
+            { name: emojiLabel('INCIDENT_AUDIT', "Case Status"), value: 'Deleted', inline: true },
+            { name: emojiLabel('MOD_CASE_FOLDER', "Removed Records"), value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+          ];
+    const destination = operation === 'ARCHIVE' ? 'mod_owner_archive_list:0' : 'mod_owner_management:0';
+    const destinationLabel = operation === 'ARCHIVE' ? 'View Archived Cases' : 'Back to Case Management';
+    const controls = [
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId(destination).setLabel(destinationLabel)
+          .setEmoji(operation === 'ARCHIVE' ? EMOJIS.BULK : EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History')
+          .setEmoji(EMOJIS.CASES).setStyle(Discord.ButtonStyle.Secondary)),
+    ];
+    const response = { embeds: [new Discord.EmbedBuilder()
+      .setColor(operation === 'DELETE' ? 0xED4245 : 0x248B57)
+      .setTitle(title).setDescription(description).addFields(...details)
+      .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp()], components: controls };
+    // Replace the original management message after a modal submit, not just the modal response.
+    // This prevents stale Archive/Delete controls remaining beneath completed cases.
+    if (i.isFromMessage?.() && i.message) {
+      await i.update(response);
+    } else {
+      await i.reply({ ...response, flags: 64 });
+      // Some modal interaction implementations omit isFromMessage(); edit the source
+      // message when it is still accessible so old action buttons cannot remain.
+      if (i.message?.edit) await i.message.edit(response).catch(() => null);
+    }
+    return true;
+  }
+  return false;
+}
 async function routeButtonsAndSelects(i) {
   const denied = ensurePanelAccess(i); if (denied) return denied;
+  if (String(i.customId || '').startsWith('mod_owner_')) return handleOwnerCaseManagement(i);
+  if (i.isButton?.() && (i.customId==='mod_verification_cases'||String(i.customId).startsWith('mod_verification_case:'))) return handleVerificationCases(i);
   if (i.isUserSelectMenu?.()) {
     const scan = await handleMemberScanSelect(i);
     if (scan) return scan;
     return handleUserSelectMenu(i);
+  }
+  if (i.isStringSelectMenu?.() && i.customId === 'mod_appeals_select_filter') {
+    if (!canUseModAction(i.member, i.guild, 'view_appeals')) return safeReply(i, { content: 'You cannot view moderation appeals.', flags: 64 });
+    const filter = String(i.values?.[0] || '');
+    if (!['pending', 'resolved', 'all'].includes(filter)) return safeReply(i, { content: 'Invalid appeal filter.', flags: 64 });
+    return renderDashboard(i, 'none', 'appeals', { appealFilter: filter, appealPage: 0 });
+  }
+  if (i.isStringSelectMenu?.() && i.customId === 'mod_cases_open_record') {
+    if (!canUseModAction(i.member, i.guild, 'view_cases')) return safeReply(i, { content: 'You cannot view moderation cases.', flags: 64 });
+    const value = String(i.values?.[0] || '');
+    const row = (...buttons) => new Discord.ActionRowBuilder().addComponents(...buttons);
+    const button = (id, label) => {
+      const component = new Discord.ButtonBuilder().setCustomId(id).setStyle(Discord.ButtonStyle.Secondary);
+      if (id === 'mod_dashboard:none:cases' && label === 'Back to Cases') {
+        return component.setEmoji(EMOJIS.BACK).setLabel('Back');
+      }
+      return component.setLabel(label);
+    };
+    if (/^q:\d{15,22}$/.test(value)) {
+      const userId = value.slice(2), session = verificationStore.getVerificationSection(i.guild.id)?.sessions?.[userId];
+      if (session?.state !== 'quarantined') return safeReply(i, { content: 'This quarantine is no longer active.', flags: 64 });
+      return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xfee75c).setTitle(emojiLabel('LOCKDOWN', "Quarantine Case"))
+        .setDescription(`**Member:** <@${userId}>\\n**Reason:** Verification security challenge failed\\n**Failed checks:** ${Number(session.failedAttempts || 0)}\\n**Private channel:** ${session.quarantineChannelId ? `<#${session.quarantineChannelId}>` : 'Unavailable'}`)], components: [row(button(`mod_verification_case:${userId}`, 'Review / Decide'), button('mod_dashboard:none:cases', 'Back to Cases'))] });
+    }
+    if (/^c:\d+$/.test(value)) {
+      const caseId = Number(value.slice(2)), record = getCaseById(i.guild.id, caseId);
+      if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
+      if (await caseProceeding.handleProceedingInteraction(i)) return true;
+      return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle(`${EMOJIS.MOD_CASE_FOLDER} Moderation Case #${caseId}`)
+        .addFields(
+          { name: emojiLabel('USER', "Member"), value: `<@${record.userId || record.user_id}>`, inline: false },
+          { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: String(record.action || 'Unknown'), inline: true },
+          { name: emojiLabel('SECURITY', "Status"), value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Active'), inline: true },
+          { name: emojiLabel('NOTE', "Reason"), value: String(record.reason || 'No reason recorded').slice(0, 1024), inline: false }
+        )], components: [row(button('mod_dashboard:none:cases', 'Back to Cases'))] });
+    }
+    return safeReply(i, { content: 'Invalid case selection.', flags: 64 });
   }
   if (i.isStringSelectMenu?.()) return routeHandlers(i, [handleAnalyticsStaffSelect, caseProceeding.handleProceedingInteraction, handleMemberScanStringSelect, handleCaseSearchSelect]);
   if (!i.isButton?.()) return false;
@@ -832,6 +1175,7 @@ async function routeButtonsAndSelects(i) {
 async function routeModModal(i) {
   if (!i?.customId?.startsWith('mod_')) return false;
   const denied = ensurePanelAccess(i); if (denied) return denied;
+  if (String(i.customId || '').startsWith('mod_owner_')) return handleOwnerCaseManagement(i);
   await syncExpiredWarningsToCases(i.guild.id);
   const proceedingResult = await caseProceeding.handleProceedingModal(i);
   if (proceedingResult) return proceedingResult;
@@ -858,6 +1202,7 @@ async function handleModInteraction(i) {
   if (!i?.customId || !isModCustomId(i.customId)) return false;
   if (i.customId.startsWith('nav|')) return false;
   try {
+    i = await require('../../security/protection/quarantine/investigationRooms').privateInvestigationNavigation(i);
     const quarantineId = String(i.customId || '');
     if (
       quarantineId.startsWith('mod_open_quarantine:')
@@ -867,6 +1212,7 @@ async function handleModInteraction(i) {
       || quarantineId.startsWith('mod_submit_quarantine_investigation:')
       || quarantineId.startsWith('mod_submit_quarantine_security:')
       || quarantineId.startsWith('mod_submit_quarantine:')
+      || quarantineId.startsWith('mod_invroom_')
       || quarantineId.startsWith('mod_invroom_note:')
       || quarantineId.startsWith('mod_invroom_note_submit:')
       || quarantineId.startsWith('mod_invroom_access:')
@@ -884,9 +1230,9 @@ async function handleModInteraction(i) {
     if (!handled) recordModerationSystemEvent({ interaction: i, event: 'moderation.interaction.unhandled', metadata: { interactionType: i.componentType || null } });
     return handled;
   } catch (error) {
-    console.error('❌ Moderation interaction failed:', error);
+    console.error(emojiLabel('ERROR', 'Moderation interaction failed:'), error);
     auditFailure(i, 'moderation.interaction.failed', null, getTargetIdFromCustomId(i.customId), error?.message || error, { stack: String(error?.stack || '').slice(0, 1500) });
-    await safeReply(i, { content: '❌ That moderation action failed safely. No further action was taken.', flags: 64 }).catch(() => null);
+    await safeReply(i, { content: emojiLabel('ERROR', 'That moderation action failed safely. No further action was taken.'), flags: 64 }).catch(() => null);
     return true;
   }
 }

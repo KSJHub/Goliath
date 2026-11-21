@@ -76,6 +76,18 @@ let presetStoreApi;
       name: 'Welcome Default', module: 'welcome', templateType: 'welcome', content: 'Welcome {userMention}!',
       embed: { ...DEFAULT_EMBED, title: 'Welcome to {guild}', description: 'Glad to have you here, {username}. You are member #{memberCount}.', color: '#22C55E', footer: { text: 'Joined {createdAt}', iconURL: '{guildIcon}' } },
     },
+    welcome_classic: {
+      name: 'Welcome • Classic', module: 'welcome', templateType: 'welcome', content: '',
+      embed: { ...DEFAULT_EMBED, title: '👋 Welcome to {guild}!', description: 'Hey **{username}**! 🎉\n\nWe’re glad you’re here. Make yourself at home, meet the community and enjoy your stay.\n\n👥 **Member #{memberCount}**', color: '#22C55E', thumbnailURL: '{userAvatar}', footer: { text: '{guild} • Welcome aboard', iconURL: '{guildIcon}' } },
+    },
+    welcome_community: {
+      name: 'Welcome • Community', module: 'welcome', templateType: 'welcome', content: '',
+      embed: { ...DEFAULT_EMBED, title: '🎉 Hey {username}, welcome!', description: 'Welcome to **{guild}**! 💎\n\n👋 Say hello and introduce yourself to the community.\n📜 Read our rules and guidelines before getting started.\n🎭 Explore channels, choose your roles and join the conversation.\n\n👥 You’re member **#{memberCount}**!\n\n✨ **Enjoy your stay and have fun!**', color: '#00C2FF', thumbnailURL: '{userAvatar}', footer: { text: '{guild} • Community Welcome', iconURL: '{guildIcon}' } },
+    },
+    welcome_showcase: {
+      name: 'Welcome • Showcase', module: 'welcome', templateType: 'welcome', content: '',
+      embed: { ...DEFAULT_EMBED, title: '✨ Welcome to {guild}', description: '### 👋 Hello, {username}!\n\nYou’ve joined an amazing community, and we’re glad you’re here.\n\n🏅 **Member #{memberCount}**\n🎉 Make yourself at home and enjoy the adventure!\n\n*Customise this template in Embed Studio: add your own banner or welcome-card image, colours and community information.*', color: '#00D4AA', thumbnailURL: '{userAvatar}', footer: { text: 'Welcome • {guild}', iconURL: '{guildIcon}' } },
+    },
     goodbye_default: {
       name: 'Goodbye Default', module: 'goodbye', templateType: 'goodbye', content: '',
       embed: { ...DEFAULT_EMBED, title: '{username} left {guild}', description: 'We are sorry to see you go. Member count is now {memberCount}.', color: '#F97316', thumbnailURL: '{userAvatar}', footer: { text: 'Left {leftAt}', iconURL: '{guildIcon}' } },

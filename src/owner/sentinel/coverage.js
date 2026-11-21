@@ -62,7 +62,7 @@ function discoveredModuleFolders() {
       if (entry.isDirectory()) names.add(FOLDER_ALIASES[entry.name] || entry.name);
     }
   }
-  if (fs.existsSync(path.join(MODULE_ROOT, 'securityStudio', 'verification.js'))) names.add('verification');
+  if (fs.existsSync(path.join(MODULE_ROOT, 'securityStudio', 'verification', 'verification.js'))) names.add('verification');
   return [...names].sort();
 }
 

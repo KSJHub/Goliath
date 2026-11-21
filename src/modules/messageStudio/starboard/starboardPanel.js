@@ -1,4 +1,6 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const starboardStore = require('./starboardStore');
@@ -6,7 +8,7 @@ const { rolePages, rolePageSelect, mergePageSelection } = require('../../../core
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 const displayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 const formatChannel = (id) => id ? `<#${id}>` : '`Not set`';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ') : '`None`';
@@ -18,17 +20,17 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User', rol
   const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const embed = new EmbedBuilder()
     .setColor(enabled ? 0x57f287 : 0x5865f2)
-    .setTitle('⭐ Starboard')
+    .setTitle(emojiLabel('USER_STARBOARD', 'Starboard'))
     .setDescription([
       'Configure highlighted messages powered by reactions.', '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Starboard Channel:** ${formatChannel(section.channelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
       `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
       `**Emoji:** ${section.emoji || '⭐'}`,
       `**Threshold:** \`${section.threshold || 3}\``,
-      `**Self Star:** ${section.allowSelfStar ? 'Allowed ✅' : 'Blocked ❌'}`, '',
+      `**Self Star:** ${section.allowSelfStar ? `Allowed ${EMOJIS.SUCCESS}` : `Blocked ${EMOJIS.ERROR}`}`, '',
       `Posts: \`${posts.length}\` | Posted: \`${section.analytics?.posted || 0}\` | Updated: \`${section.analytics?.updated || 0}\``,
     ].join('\n'))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
@@ -39,14 +41,14 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     row(new ChannelSelectMenuBuilder().setCustomId('admin:starboard:logChannel').setPlaceholder('Log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:starboard:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
     row(
-      button(enabled ? 'admin:starboard:disable' : 'admin:starboard:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
-      button('admin:starboard:thresholdDown', '➖ Threshold', ButtonStyle.Secondary),
-      button('admin:starboard:thresholdUp', '➕ Threshold', ButtonStyle.Secondary),
-      button('admin:starboard:toggleSelf', '⭐ Self Star', ButtonStyle.Secondary)
+      button(enabled ? 'admin:starboard:disable' : 'admin:starboard:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary),
+      button('admin:starboard:thresholdDown', emojiLabel('REMOVE', 'Threshold'), ButtonStyle.Secondary),
+      button('admin:starboard:thresholdUp', emojiLabel('ADD', 'Threshold'), ButtonStyle.Secondary),
+      button('admin:starboard:toggleSelf', emojiLabel('USER_STARBOARD', 'Self Star'), ButtonStyle.Secondary)
     ),
-    row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
-      button(`admin:starboard:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
-      button(`admin:starboard:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
+    row(button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
+      button(`admin:starboard:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
+      button(`admin:starboard:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
   ] };
 }
 
@@ -97,7 +99,7 @@ async function handleStarboardAdminInteraction(interaction) {
     }
     return safeUpdate(interaction, buildStarboardAdminPanel(interaction.guild, member));
   } catch (error) {
-    const payload = { content: `❌ Starboard setup failed: ${error.message}`, flags: 64 };
+    const payload = { content: `${EMOJIS.ERROR} Starboard setup failed: ${error.message}`, flags: 64 };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;

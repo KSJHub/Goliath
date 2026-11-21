@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -308,7 +309,7 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
       setError('');
       const saved = await api.saveLogConfig(guildId, normalizeLogs(nextLogs));
       if (saved?.config) setLogs(normalizeLogs(saved.config));
-      setSaveMessage(quiet ? '✅ Auto-saved.' : '✅ Logging saved successfully.');
+      setSaveMessage(quiet ? `${E.SUCCESS} Auto-saved.` : `${E.SUCCESS} Logging saved successfully.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to save logging.');
@@ -349,7 +350,7 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
   const refreshResources = useCallback(async () => {
     const nextChannels = await loadResources();
     setChannels(nextChannels);
-    if (!nextChannels.length) setSaveMessage('⚠️ No text channels returned. Check bot guild access.');
+    if (!nextChannels.length) setSaveMessage(`${E.WARNING} No text channels returned. Check bot guild access.`);
   }, [loadResources]);
 
   useEffect(() => {
@@ -405,7 +406,7 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
     return listenForGuildUpdate('logs', (data, payload = {}) => {
       if (payload.source === 'dashboard') return;
       setLogs(normalizeLogs(data));
-      setSaveMessage('🔄 Logs updated live.');
+      setSaveMessage(`${E.REFRESH} Logs updated live.`);
     });
   }, [guildId]);
 

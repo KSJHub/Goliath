@@ -139,7 +139,7 @@ function sourceAudit() {
   section('Source audit');
   const errors = [];
   const mojibake = /[\u00e2\u00f0\u00ef\u00c3\ufffd]/g;
-  const windowsPath = /\b[A-Za-z]:\\[^\r\n'"`]+/g;
+  const windowsPath = /(?:^|[\s'"`])[A-Za-z]:\\[^\r\n'"`]+/g;
   for (const filePath of walk(root, [...JS_EXTENSIONS, '.json', '.md', '.txt', '.yml', '.yaml'])) {
     const source = read(filePath);
     const repoPath = relative(filePath);
@@ -366,6 +366,124 @@ function syncCommands(target = mode) {
     cwd: root, stdio: 'inherit', env: { ...process.env, BOT_MODE: environment },
   });
   return result.status === 0;
+}
+
+function sharedEmojiPaletteAudit() {
+  section('Shared Discord/dashboard emoji palette');
+  const core = read(absolute('src/core/guild/goliathNavigation.js'));
+  const dashboard = read(absolute('src/dashboard/js/shared/PageShell.jsx'));
+  const coreBody = core.match(/const EMOJIS = Object\.freeze\(\{([\s\S]*?)\}\);/);
+  const dashboardBody = dashboard.match(/export const DASHBOARD_EMOJIS = Object\.freeze\(\{([\s\S]*?)\}\);/);
+  if (!coreBody || !dashboardBody) {
+    console.error('Could not locate both emoji palette definitions.');
+    return false;
+  }
+  const parse = (body, label) => {
+    const entries = new Map();
+    const errors = [];
+    for (const match of body.matchAll(/\b([A-Z][A-Z_0-9]*):\s*'([^']+)'/g)) {
+      if (entries.has(match[1])) errors.push(label + ': duplicate key ' + match[1]);
+      entries.set(match[1], match[2]);
+    }
+    return { entries, errors };
+  };
+  const server = parse(coreBody[1], 'Discord');
+  const browser = parse(dashboardBody[1], 'Dashboard');
+  const exceptions = new Map([['INACTIVE', ['⚪', '⚫']], ['REPAIR', ['🩹', '🔧']], ['BUILDER', ['🛠️', '🛠']]]);
+  const errors = [...server.errors, ...browser.errors];
+  for (const [key, glyph] of browser.entries) {
+    if (!server.entries.has(key)) {
+      errors.push('Dashboard-only emoji key: ' + key);
+    } else if (server.entries.get(key) !== glyph) {
+      const allowed = exceptions.get(key);
+      if (!allowed || allowed[0] !== server.entries.get(key) || allowed[1] !== glyph) {
+        errors.push('Emoji glyph mismatch: ' + key);
+      }
+    }
+  }
+  // Validate static palette references in browser code; dynamic guild emoji data is excluded.
+  for (const filePath of walk(absolute('src/dashboard'), JS_EXTENSIONS)) {
+    const source = read(filePath);
+    const hasAlias = /\bimport\s*\{[^}]*\bDASHBOARD_EMOJIS\s+as\s+E\b[^}]*\}/s.test(source);
+    if (!hasAlias) continue;
+    for (const match of source.matchAll(/\bE\.([A-Z][A-Z_0-9]*)\b/g)) {
+      if (!browser.entries.has(match[1])) {
+        errors.push(relative(filePath) + ': unknown dashboard emoji E.' + match[1]);
+      }
+    }
+  }
+  // Check static Discord palette references without evaluating guild-specific overrides.
+  for (const filePath of walk(absolute('src'), JS_EXTENSIONS)) {
+    if (filePath.startsWith(absolute('src/dashboard') + path.sep)) continue;
+    const source = read(filePath);
+    const hasPaletteImport = /(?:\bEMOJIS\b|\bSHARED_EMOJIS\b)\s*(?:,|\}|\s*=)/.test(source) &&
+      /(?:goliathNavigation|core\/ui\/emojis|ui\/emojis)/.test(source);
+    if (!hasPaletteImport) continue;
+    for (const match of source.matchAll(/\b(?:EMOJIS|SHARED_EMOJIS)\.([A-Z][A-Z_0-9]*)\b/g)) {
+      if (!server.entries.has(match[1])) {
+        errors.push(relative(filePath) + ': unknown Discord emoji ' + match[1]);
+      }
+    }
+  }
+  // Track palette aliases imported under the original name or a local alias.
+  for (const filePath of walk(absolute('src/dashboard'), JS_EXTENSIONS)) {
+    const source = read(filePath);
+    const imported = [...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"][^'"]*(?:PageShell|shared\/PageShell)['"]/g)];
+    for (const statement of imported) {
+      for (const spec of statement[1].split(',')) {
+        const match = spec.trim().match(/^DASHBOARD_EMOJIS(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
+        if (!match) continue;
+        const alias = match[1] || 'DASHBOARD_EMOJIS';
+        const refs = new RegExp('\\b' + alias + '\\.([A-Z][A-Z_0-9]*)\\b', 'g');
+        for (const ref of source.matchAll(refs)) {
+          if (!browser.entries.has(ref[1])) errors.push(relative(filePath) + ': unknown dashboard emoji ' + alias + '.' + ref[1]);
+        }
+      }
+    }
+  }
+  // Guard against empty or malformed palette entries (including whitespace-only glyphs).
+  for (const [label, palette] of [['Discord', server.entries], ['Dashboard', browser.entries]]) {
+    for (const [key, glyph] of palette) {
+      if (!glyph.trim()) errors.push(label + ': empty emoji value for ' + key);
+      if (/\r|\n/.test(glyph)) errors.push(label + ': multiline emoji value for ' + key);
+    }
+  }
+  const aligned = [...browser.entries].filter(([key, glyph]) => server.entries.get(key) === glyph).length;
+  const intentional = [...exceptions].filter(([key, [discordGlyph, dashboardGlyph]]) =>
+    server.entries.get(key) === discordGlyph && browser.entries.get(key) === dashboardGlyph).length;
+  for (const error of errors) console.error(' - ' + error);
+  console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size +
+    ', matching: ' + aligned + ', protected differences: ' + intentional +
+    ', issues: ' + errors.length);
+  return errors.length === 0;
+}
+
+// Read-only inventory: reports candidate hardcoded UI emojis without changing guild settings.
+function emojiInventoryAudit() {
+  section('Hardcoded emoji inventory (review only)');
+  const paths = walk(absolute('src'), JS_EXTENSIONS);
+  const findings = [];
+  for (const filePath of paths) {
+    const name = relative(filePath).replace(/\\/g, '/');
+    if (name === 'src/core/guild/goliathNavigation.js' ||
+        name === 'src/dashboard/js/shared/PageShell.jsx') continue;
+    const lines = read(filePath).split(/\r?\n/);
+    let count = 0;
+    for (const line of lines) {
+      if (!/\p{Extended_Pictographic}/u.test(line)) continue;
+      // Count candidates, not defects: user defaults, saved templates and comments may be intentional.
+      if (/^\s*(?:\/\/|\/\*|\*|#)/.test(line)) continue;
+      count++;
+    }
+    if (count) findings.push({ name, count });
+  }
+  findings.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const total = findings.reduce((sum, item) => sum + item.count, 0);
+  console.log('Scanned ' + paths.length + ' source files; ' + findings.length +
+    ' files contain ' + total + ' candidate emoji-bearing lines.');
+  for (const item of findings) console.log(' ' + item.count + '  ' + item.name);
+  console.log('These are candidates, not automatically safe replacements. Preserve guild overrides and visual glyphs.');
+  return true;
 }
 
 function dashboardImportAudit() {
@@ -733,7 +851,226 @@ function internalVersionNamingAudit() {
   
 }
 
-function verificationLifecycleAudit() {
+async function verificationAnswerAudit() {
+  const assert = require('node:assert/strict');
+  const crypto = require('node:crypto');
+  const { createRequire } = require('node:module');
+  const clone = value => JSON.parse(JSON.stringify(value));
+  function load(file, mocks) {
+    const filename = absolute(file), localRequire = createRequire(filename), module = { exports: {} };
+    new Function('require', 'module', 'exports', fs.readFileSync(filename, 'utf8'))(id => {
+      if (Object.hasOwn(mocks, id)) return mocks[id];
+      if (id === 'crypto' || id === 'discord.js' || id.endsWith('/core/guild/goliathNavigation') || id === '../../../core/ui/emojis') return localRequire(id);
+      throw new Error(`Unmocked Verification answer audit dependency: ${id}`);
+    }, module, module.exports);
+    return module.exports;
+  }
+  let data = null, numbers = [];
+  const store = load('src/modules/securityStudio/verification/verificationStore.js', {
+    '../../../core/guild/moduleSectionManager': {
+      getModuleSection: (guild, name, fallback) => clone(data || fallback),
+      saveModuleSection: (guild, name, value) => { data = clone(value); return clone(data); },
+      updateModuleSection: (guild, name, update, fallback) => { data = clone(update(clone(data || fallback))); return clone(data); },
+    }, '../../../core/guild/guildManager': {},
+  });
+  const challenges = load('src/modules/securityStudio/verification/verificationChallenges.js', { './verificationStore': store, crypto: { ...crypto, randomInt: (min, max) => numbers.length ? numbers.shift() : crypto.randomInt(min, max) } });
+  const runtime = () => load('src/modules/securityStudio/verification/verificationChallengeRuntime.js', { './verificationChallenges': challenges, './verificationStore': store });
+  const guild = '1515201360386068642', user = '815257293347880961';
+  const reset = () => { data = store.defaultVerificationSection(); store.upsertSession(guild, user, { state: 'verifying', securityConfigRevision: data.configRevision }); };
+  reset(); numbers = [42, 30, 0];
+  const started = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { maxChallengeAttempts: 3 } } });
+  assert.equal(started.challenge.prompt, 'Security check: what is 42 + 30?');
+  assert.equal(runtime().submitAnswer(guild, user, user, started.challenge.challengeId, '72').ok, true, 'Correct answer to persisted 42 + 30 CAPTCHA must pass through the real runtime and store');
+  assert.equal(data.sessions[user].completedSecurity.includes('captcha'), true);
+  const settings = { security: { captchaConfig: { maxChallengeAttempts: 3 } } };
+  const startMath = () => { reset(); numbers = [42, 30, 0]; return runtime().startStep(guild, user, 'captcha', settings).challenge; };
+  let challenge = startMath();
+  const saved = clone(store.getSession(guild, user).activeChallenge);
+  assert.equal(typeof saved.answerSalt, 'string');
+  assert.match(saved.answerHash, /^[a-f0-9]{64}$/);
+  assert.equal(challenge.answerSalt, undefined);
+  assert.equal(challenge.answerHash, undefined);
+  assert.equal(runtime().startStep(guild, user, 'captcha', settings).reused, true);
+  assert.equal(store.getSession(guild, user).activeChallenge.answerHash, saved.answerHash);
+  const wrong = runtime().submitAnswer(guild, user, user, challenge.challengeId, '73');
+  assert.equal(wrong.reason, 'incorrect');
+  assert.equal(wrong.attempts, 1);
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, ' 72 ').ok, true);
+
+  for (const difficulty of ['easy', 'normal', 'hard']) {
+    for (let index = 0; index < 15; index++) {
+      reset();
+      const c = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { difficulty, maxChallengeAttempts: 3 } } }).challenge;
+      const match = c.prompt.match(/what is (\d+) ([+×-]) (\d+)\?/);
+      assert(match, 'Math prompt must have an unambiguous numeric answer');
+      const a = Number(match[1]), b = Number(match[3]);
+      const answer = match[2] === '+' ? a + b : match[2] === '-' ? a - b : a * b;
+      assert.equal(runtime().submitAnswer(guild, user, user, c.challengeId, String(answer)).ok, true, c.prompt);
+    }
+  }
+  reset();
+  challenge = runtime().startStep(guild, user, 'one_time_challenge', {}).challenge;
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, challenge.prompt.match(/\d{6}/)[0]).ok, true);
+  reset();
+  challenge = runtime().startStep(guild, user, 'minigame', { security: { minigameConfig: { gameType: 'sequence', random: false, rounds: 2, maxChallengeAttempts: 3 } } }).challenge;
+  const sequenceAnswer = c => c.prompt.split(':')[1].replace(/[^0-9]/g, '');
+  const first = runtime().submitAnswer(guild, user, user, challenge.challengeId, sequenceAnswer(challenge));
+  assert.equal(first.reason, 'next_round');
+  assert.equal(first.complete, false);
+  assert.equal(runtime().submitAnswer(guild, user, user, first.challenge.challengeId, sequenceAnswer(first.challenge)).ok, true);
+
+  // Existing broken challenges fail without a strike and are replaced on an explicit restart.
+  challenge = startMath();
+  store.upsertSession(guild, user, { activeChallenge: { ...store.getSession(guild, user).activeChallenge, answerSalt: undefined, answerHash: undefined } });
+  const historyBefore = clone(data.securityHistory[user]);
+  const broken = runtime().submitAnswer(guild, user, user, challenge.challengeId, '72');
+  assert.equal(broken.reason, 'challenge_unavailable');
+  assert.equal(broken.recordFailure, undefined);
+  assert.equal(data.sessions[user].activeChallenge.attempts, 0);
+  assert.deepEqual(data.securityHistory[user], historyBefore);
+  const replies = [];
+  let failureCalls = 0;
+  const interactions = load('src/modules/securityStudio/verification/verificationChallengeInteractions.js', { '../../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
+  await interactions.handleVerificationChallengeInteraction({
+    customId: `verify:answer:${user}:${challenge.challengeId}`, guildId: guild, user: { id: user },
+    isModalSubmit: () => true, fields: { getTextInputValue: () => '72' }, reply: async payload => replies.push(payload),
+  }, { recordVerificationFailure: async () => { failureCalls++; } });
+  assert.equal(failureCalls, 0);
+  assert(replies[0].content.includes('has not counted as a wrong answer'));
+  const repaired = runtime().startStep(guild, user, 'captcha', settings);
+  assert.notEqual(repaired.challenge.challengeId, challenge.challengeId);
+  assert.equal(challenges.hasAnswerVerifier(data.sessions[user].activeChallenge), true);
+  assert.equal(data.sessions[user].activeChallenge.attempts, 0);
+  assert.equal(data.securityHistory[user].some(event => event.type === 'challenge_cleared' && event.reason === 'missing_answer_verifier'), true);
+  const historyAfter = clone(data.securityHistory[user]);
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, '72').reason, 'stale_challenge');
+  assert.deepEqual(data.securityHistory[user], historyAfter);
+  store.upsertSession(guild, user, { state: 'quarantined' });
+  assert.equal(runtime().startStep(guild, user, 'captcha', settings).reason, 'terminal_session');
+  assert.equal(data.sessions[user].state, 'quarantined');
+  reset();
+  challenge = runtime().startStep(guild, user, 'staff_approval', {}).challenge;
+  assert.equal(runtime().startStep(guild, user, 'staff_approval', {}).reused, true);
+  assert.equal(challenge.method, 'staff_approval');
+  // Exhaust every generated arithmetic combination through the real verifier.
+  // A small serialised store keeps exhaustive generation separate from the full-store tests above.
+  let sample = null, draws = [], arithmeticCases = 0, gameCases = 0;
+  const exhaustive = load('src/modules/securityStudio/verification/verificationChallenges.js', {
+    crypto: { ...crypto, randomInt: (min, max) => { const value = draws.length ? draws.shift() : min; assert(value >= min && value < max, 'Fixture random draw out of range'); return value; } },
+    './verificationStore': { getSession: () => clone(sample), upsertSession: (g, u, patch) => { sample = clone({ ...sample, ...patch }); }, addSecurityHistory: () => {}, incrementAnalytics: () => {} },
+  });
+  function begin(method, config, values = []) {
+    sample = { state: 'verifying' }; draws = [...values];
+    const challenge = exhaustive.start(guild, user, method, config);
+    assert.equal(draws.length, 0, 'Every specified generator input must be used');
+    assert.equal(exhaustive.hasAnswerVerifier(sample.activeChallenge), true);
+    assert.equal(challenge.answerHash, undefined); assert.equal(challenge.answerSalt, undefined);
+    return challenge;
+  }
+  function accept(c, answer) {
+    const result = exhaustive.answer(guild, user, c.challengeId, String(answer));
+    assert.equal(result.ok, true, c.prompt);
+    return result;
+  }
+  function checkMath(difficulty, a, b, op = '+') {
+    const values = difficulty === 'normal' ? [a, b, op === '+' ? 0 : 1] : [a, b];
+    const c = begin('captcha', { difficulty, maxChallengeAttempts: 3 }, values);
+    const x = op === '-' ? Math.max(a, b) : a, y = op === '-' ? Math.min(a, b) : b;
+    assert.equal(c.prompt, `Security check: what is ${x} ${op} ${y}?`);
+    const expected = op === '+' ? a + b : op === '-' ? Math.abs(a - b) : a * b;
+    const incorrect = exhaustive.answer(guild, user, c.challengeId, String(expected + 1));
+    assert.equal(incorrect.reason, 'incorrect');
+    assert.equal(incorrect.attempts, 1); assert.equal(incorrect.attemptsRemaining, 2);
+    const correct = accept(c, expected);
+    assert.equal(correct.reason, 'passed'); assert.equal(correct.complete, true);
+    assert.equal(correct.attempts, 2); assert.equal(correct.attemptsRemaining, 1);
+    arithmeticCases++;
+  }
+  for (let a = 2; a <= 20; a++) for (let b = 2; b <= 20; b++) checkMath('easy', a, b);
+  for (let a = 10; a <= 60; a++) for (let b = 2; b <= 30; b++) for (const op of ['+', '-']) checkMath('normal', a, b, op);
+  for (let a = 6; a <= 20; a++) for (let b = 2; b <= 12; b++) checkMath('hard', a, b, '×');
+  assert.equal(arithmeticCases, 3484);
+
+  const gameSolution = c => {
+    const body = c.prompt.split(':').slice(1).join(':').trim();
+    if (c.gameType === 'target_match') return body;
+    if (c.gameType === 'sequence') return body.split('·').map(value => value.trim()).join('');
+    if (c.gameType === 'order') return body.split(',').map(Number).sort((a, b) => a - b).join(' ');
+    if (c.gameType === 'memory_match') return body.split('·').map(value => value.trim()).join(' ');
+    if (c.gameType === 'odd_one_out') return c.prompt.split('?')[1].split('·').at(-1).trim();
+    if (c.gameType === 'reaction') return c.prompt.match(/\*\*(.+?)\*\*/)[1];
+    const terms = c.prompt.match(/\d+/g).map(Number);
+    assert.equal(terms.length, 4);
+    assert.equal(terms[1] - terms[0], terms[2] - terms[1]);
+    assert.equal(terms[2] - terms[1], terms[3] - terms[2]);
+    return String(terms[3] + terms[1] - terms[0]);
+  };
+  const checkGame = (gameType, values, config = {}) => {
+    const c = begin('minigame', { gameType, random: false, rounds: 1, maxChallengeAttempts: 3, ...config }, values);
+    assert.equal(c.gameType, gameType);
+    assert.equal(accept(c, gameSolution(c)).complete, true); gameCases++;
+    return c;
+  };
+  for (let start = 1; start <= 8; start++) for (let step = 2; step <= 6; step++) checkGame('pattern_match', [start, step]);
+  for (const values of [[99, 98, 11, 10, 50], [10, 10, 99, 99, 50], [99, 99, 99, 99, 99], [10, 11, 12, 13, 14]]) checkGame('order', values);
+  for (let index = 0; index < 5; index++) checkGame('target_match', [index]);
+  for (let index = 0; index < 3; index++) {
+    const c = checkGame('odd_one_out', [index]);
+    assert.equal(gameSolution(c), ['banana', 'guitar', 'window'][index]);
+  }
+  for (let index = 0; index < 4; index++) checkGame('reaction', [index]);
+  for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) for (let c = 0; c < 6; c++) checkGame('memory_match', [a, b, c]);
+  for (const [difficulty, length] of [['easy', 4], ['normal', 5], ['hard', 7]]) {
+    for (const digit of [1, 9]) {
+      const c = checkGame('sequence', Array(length).fill(digit), { difficulty });
+      assert.equal(gameSolution(c), String(digit).repeat(length));
+    }
+  }
+  for (const gameType of exhaustive.GAME_TYPES) {
+    for (const rounds of [1, 2, 10]) {
+      let c = begin('minigame', { gameType, random: false, rounds, maxChallengeAttempts: 3 });
+      for (let round = 1; round <= rounds; round++) {
+        assert.equal(c.round, round); assert.equal(c.rounds, rounds);
+        assert.equal(c.passedRounds, round - 1); assert.equal(c.attempts, 0);
+        assert.equal(exhaustive.answer(guild, user, c.challengeId, 'incorrect-fixture').reason, 'incorrect');
+        const previousHash = sample.activeChallenge.answerHash;
+        const result = accept(c, gameSolution(c));
+        assert.equal(result.complete, round === rounds);
+        if (round < rounds) {
+          assert.equal(result.reason, 'next_round');
+          assert.notEqual(sample.activeChallenge.answerHash, previousHash);
+          c = result.challenge;
+        } else assert.equal(result.challenge.passedRounds, rounds);
+      }
+    }
+    const c = begin('minigame', { enabledGames: [gameType], random: true, rounds: 1, maxChallengeAttempts: 3 });
+    assert.equal(c.gameType, gameType); accept(c, gameSolution(c));
+  }
+  for (const code of [100000, 999999]) {
+    const c = begin('one_time_challenge', { maxChallengeAttempts: 3 }, [code]);
+    assert(c.prompt.endsWith(String(code))); accept(c, code);
+  }
+  challenge = begin('captcha', { difficulty: 'easy', maxChallengeAttempts: 3 }, [2, 2]);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const result = exhaustive.answer(guild, user, challenge.challengeId, '5');
+    assert.equal(result.attempts, attempt); assert.equal(result.attemptsRemaining, 3 - attempt);
+    assert.equal(result.complete, attempt === 3);
+  }
+  assert.equal(exhaustive.answer(guild, user, challenge.challengeId, '4').reason, 'challenge_closed');
+  challenge = begin('captcha', { difficulty: 'easy', maxChallengeAttempts: 3 }, [2, 2]);
+  for (let attempt = 0; attempt < 2; attempt++) exhaustive.answer(guild, user, challenge.challengeId, '5');
+  const lastAttempt = accept(challenge, '4');
+  assert.equal(lastAttempt.attempts, 3); assert.equal(lastAttempt.attemptsRemaining, 0);
+  assert.equal(lastAttempt.reason, 'passed');
+  challenge = begin('captcha', { difficulty: 'easy', maxChallengeAttempts: 3 }, [2, 2]);
+  sample.activeChallenge.expiresAt = new Date(Date.now() - 60000).toISOString();
+  assert.equal(exhaustive.answer(guild, user, challenge.challengeId, '4').reason, 'expired');
+  assert.equal(sample.activeChallenge.attempts, 0);
+  console.log(`✅ Verification calculations: all ${arithmeticCases} arithmetic combinations, ${gameCases} fixed mini-game cases, all seven game types across 1/2/10 rounds, attempt limits, expiry and code boundaries.`);
+  console.log('✅ Verification answers: displayed arithmetic, persisted private verifiers, restarts/retries, one-time codes, multi-round games and broken-challenge recovery without failure penalties.');
+}
+
+async function verificationLifecycleAudit() {
   section('Verification lifecycle');
   try {
     const assert = require('node:assert/strict');
@@ -748,17 +1085,126 @@ function verificationLifecycleAudit() {
       assert(source.includes(token), `Verification contract missing: ${label}`);
     }
     
-    const flow = read('./src/modules/securityStudio/verificationFlowContinuation.js');
-    const quarantine = read('./src/modules/securityStudio/verificationQuarantine.js');
+    const flow = read('./src/modules/securityStudio/verification/verificationFlowContinuation.js');
+    const quarantine = read('./src/modules/securityStudio/verification/verificationQuarantine.js');
     const lifecycle = read('./src/events/members/verificationLifecycle.js');
     const risk = read('./src/core/administration/mod/verificationRiskBridge.js');
-    const store = read('./src/modules/securityStudio/verificationStore.js');
-    const manager = read('./src/modules/securityStudio/verificationManager.js');
-    const panel = read('./src/modules/securityStudio/verificationPanel.js');
+    const store = read('./src/modules/securityStudio/verification/verificationStore.js');
+    const manager = read('./src/modules/securityStudio/verification/verificationManager.js');
+    const panel = read('./src/modules/securityStudio/verification/verificationPanel.js');
     const memberIntelligence = read('./src/events/members/memberIntelligence.js');
-    const challengeRuntime = read('./src/modules/securityStudio/verificationChallengeRuntime.js');
-    const challengeInteractions = read('./src/modules/securityStudio/verificationChallengeInteractions.js');
+    const challengeRuntime = read('./src/modules/securityStudio/verification/verificationChallengeRuntime.js');
+    const challengeInteractions = read('./src/modules/securityStudio/verification/verificationChallengeInteractions.js');
     
+    // Exercise the existing Mod Hub Verification review route with real snowflakes.
+    // An over-escaped digit regex previously rejected every legitimate case ID.
+    {
+      const source = read('src/core/administration/mod/interactions.js');
+      const body = source.slice(source.indexOf('async function handleVerificationCases('), source.indexOf('function isGuildOwner(i)'));
+      assert(body.includes('async function handleVerificationCases('));
+      const uid = '815257293347880961'; let allowed = true, resolved = 0;
+      const replies = [];
+      const { EMOJIS, emojiLabel } = require('../src/core/ui/emojis');
+      const review = new Function('Discord', 'canUseModAction', 'safeReply', 'verificationStore', 'renderDashboard', 'verificationQuarantine', 'recordModerationSystemEvent', 'EMOJIS', 'emojiLabel', body + '\nreturn handleVerificationCases;')(
+        require('discord.js'), () => allowed, async (i, payload) => { replies.push(payload); return true; },
+        { getVerificationSection: () => ({ sessions: { [uid]: { state: 'quarantined', failedAttempts: 1, quarantineChannelId: 'room' } } }) },
+        async () => true, { resolveQuarantineCase: async (guild, id, action) => { assert.equal(id, uid); assert.equal(action, 'release'); resolved++; return { ok: true, message: 'Released' }; } }, () => {}, EMOJIS, emojiLabel);
+      const interaction = { customId: `mod_verification_case:${uid}`, guild: { id: 'guild' }, member: {}, user: { id: 'moderator' },
+        isMessageComponent: () => true, update: async payload => { replies.push(payload); return true; }, reply: async payload => { replies.push(payload); return true; },
+        deferUpdate: async () => {}, editReply: async payload => { replies.push(payload); return true; } };
+      await review(interaction); assert.equal(replies.at(-1).embeds?.[0]?.data?.title, 'Verification Quarantine Review', 'Valid quarantined member must open their review');
+      assert(!replies.at(-1).embeds[0].data.description.includes('\\n'), 'Review copy must render line breaks');
+      await review({ ...interaction, customId: `mod_verification_case:${uid}:release` }); assert.equal(resolved, 0, 'Release must still require confirmation');
+      await review({ ...interaction, customId: `mod_verification_case:${uid}:release:confirm` }); assert.equal(resolved, 1);
+      allowed = false; await review(interaction); assert.match(replies.at(-1).content, /cannot view/); assert.equal(resolved, 1);
+      allowed = true; await review({ ...interaction, customId: 'mod_verification_case:invalid' }); assert.match(replies.at(-1).content, /no longer active/);
+    }
+
+    // Regression contracts: relocated panels must retire old buttons, and stale
+    // interactions must fail closed using the current channel and message IDs.
+    contains(manager, 'if(existing&&existing.id!==message.id)', 'relocation cleans up old panel message');
+    contains(manager, 'await existing.delete()', 'relocation deletes old panel message');
+    contains(manager, 'await existing.edit({components:[]})', 'relocation disables old buttons if deletion fails');
+    contains(manager, 's.activePanelId!==id', 'reject inactive verification panels');
+    contains(manager, 'mid!==p.messageId', 'reject stale panel message IDs');
+    contains(manager, 'cid!==p.channelId', 'reject stale panel channel IDs');
+    contains(manager, 'if(!panel)return {ok:false', 'reject outdated panel before member verification');
+    contains(panel, 'admin:verification:panelDefaultConfirm', 'confirm before restoring default design');
+    contains(panel, 'admin:verification:panelSave', 'Discord panel editor uses shared deployment');
+    const dashboard = read('./src/dashboard/js/pages/modules/VerificationEnhanced.jsx');
+    contains(dashboard, 'panelDraftDirty.current', 'preserve unsaved dashboard panel drafts');
+    contains(dashboard, 'window.setInterval', 'refresh dashboard configuration periodically');
+
+    // Exercise the actual active-panel gate with relocated message IDs.
+    {
+      const begin = manager.indexOf('function getActivePanel(');
+      const end = manager.indexOf('async function verifyMember(', begin);
+      assert(begin >= 0 && end > begin, 'Verification active-panel gate must exist');
+      const gate = new Function('verificationStore', 'cleanId', manager.slice(begin, end) + '\nreturn getActivePanel;')(
+        { getVerificationSection: () => ({ activePanelId: 'panel-1', panels: {
+          'panel-1': { panelId: 'panel-1', enabled: true, channelId: 'new-channel', messageId: 'new-message' },
+          'panel-old': { panelId: 'panel-old', enabled: false, channelId: 'old-channel', messageId: 'old-message' },
+        } }) },
+        value => value == null ? null : String(value)
+      );
+      assert(gate('guild', 'panel-1', { channelId: 'new-channel', messageId: 'new-message' }), 'Current panel must be accepted');
+      assert.equal(gate('guild', 'panel-1', { channelId: 'old-channel', messageId: 'old-message' }), null, 'Relocated panel old message must be rejected');
+      assert.equal(gate('guild', 'panel-1', { channelId: 'new-channel', messageId: 'old-message' }), null, 'Stale message ID must be rejected');
+      assert.equal(gate('guild', 'panel-1', { channelId: 'old-channel', messageId: 'new-message' }), null, 'Stale channel ID must be rejected');
+      assert.equal(gate('guild', 'panel-old', { channelId: 'old-channel', messageId: 'old-message' }), null, 'Retired panel must be rejected');
+      assert.equal(gate('guild', 'unknown', { channelId: 'new-channel', messageId: 'new-message' }), null, 'Unknown panel must be rejected');
+    }
+
+    // Run the real verification entry point against stale Discord interactions.
+    {
+      const begin = manager.indexOf('function getRequestedPanelId(');
+      const end = manager.indexOf('async function completeVerification(', begin);
+      assert(begin >= 0 && end > begin);
+      const forbidden = () => { throw new Error('Stale interaction reached a mutation boundary'); };
+      const current = { activePanelId: 'panel-1', panels: {
+        'panel-1': { enabled: true, channelId: '200000000000000001', messageId: '300000000000000001' },
+      } };
+      const store = new Proxy({ getVerificationSection: () => current }, {
+        get: (target, key) => key in target ? target[key] : forbidden,
+      });
+      const verify = new Function('verificationStore', 'cleanId', 'parseVerifyCustomId', 'locks', 'getEffectiveVerificationSection',
+        manager.slice(begin, end) + '\nreturn verifyMember;')(
+        store, value => String(value || ''), value => ({ panelId: value.split(':').at(-1) }),
+        { has: forbidden, add: forbidden, delete: forbidden }, forbidden
+      );
+      const guild = { id: '100000000000000001', members: { fetch: forbidden } };
+      for (const [panelId, channelId, messageId] of [
+        ['panel-1','200000000000000002','300000000000000002'],
+        ['panel-1','200000000000000001','300000000000000002'],
+        ['panel-1','200000000000000002','300000000000000001'],
+        ['retired','200000000000000001','300000000000000001'],
+      ]) {
+        const result = await verify({ guild, user: { id: '400000000000000001' },
+          customId: 'verification:button:' + panelId, channelId, message: { id: messageId } });
+        assert.equal(result.ok, false);
+        assert.match(result.message, /no longer active/);
+      }
+    }
+
+    // Exercise optimistic configuration concurrency without touching guild data.
+    {
+      const source = store.match(/function updateConfiguration\(.*\}/)?.[0];
+      assert(source, 'Configuration revision updater must exist');
+      let state = { configRevision: 7, configHistory: [], settings: {}, panels: {} };
+      const clone = value => JSON.parse(JSON.stringify(value));
+      const update = new Function('updateVerificationSection', 'clone', 'now', 'CONFIG_HISTORY_LIMIT', source + '\nreturn updateConfiguration;')(
+        (guildId, updater) => { state = updater(clone(state)); return state; }, clone, () => 'test', 10
+      );
+      update('guild', section => ({ ...section, settings: { first: true } }), { expectedConfigRevision: 7 });
+      assert.equal(state.configRevision, 8);
+      assert.throws(() => update('guild', section => ({ ...section, settings: { stale: true } }), { expectedConfigRevision: 7 }), /configuration changed/);
+      assert.deepEqual(state.settings, { first: true });
+      assert.equal(state.configHistory[0].revision, 7);
+      update('guild', section => ({ ...section, settings: { second: true } }), { expectedConfigRevision: 8 });
+      assert.equal(state.configRevision, 9);
+      assert.deepEqual(state.settings, { second: true });
+    }
+
     // Guard the security handoff and challenge recovery against regressions.
     contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
     contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
@@ -855,22 +1301,23 @@ function verificationLifecycleAudit() {
       ${lockSource}
       const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
       const roles={verified:['verified'],auto:[],pending:[],verifying:[],quarantine:['quarantine']};
-      const config={settings:{roles}};
+      const config={configRevision:1,settings:{roles}};
       const roleIds=(settings,key)=>settings.roles[key]||[];
       const unique=values=>[...new Set(values)];
       const fetchRoles=async(guild,ids)=>ids.map(id=>({id}));
       const now=()=>new Date().toISOString();
       const enabledSecurity=()=>[];
+      const requiredSecurity=()=>({steps:[]});
       const section=()=>config;
-      let state='verifying',transitions=0,mode='normal',release,entered;
-      let wait,started;
+      let state='verifying',transitions=0,mode='normal',release,entered,completedSecurity=[],activeChallenge=null;
+      let wait,started,revoked;
       function reset(){
-        state='verifying';transitions=0;mode='normal';
+        state='verifying';transitions=0;mode='normal';completedSecurity=[];activeChallenge=null;config.configRevision=1;revoked=[];
         wait=new Promise(resolve=>{release=resolve;});
         started=new Promise(resolve=>{entered=resolve;});
       }
       const verificationStore={
-        getSession:()=>({state}),
+        getSession:()=>({state,sessionId:'integration-session',securityConfigRevision:1,completedSecurity,activeChallenge}),
         upsertSession:(guild,user,value)=>{if(value.state)state=value.state;},
         addSecurityHistory:()=>{},
         clearAttempts:()=>{},
@@ -881,12 +1328,33 @@ function verificationLifecycleAudit() {
         ensureQuarantineCase:async()=>({ok:true,channel:{id:'case'}})
       };
       const guild={id:'guild',members:{fetch:async()=>({
-        id:'member',guild,roles:{cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
+        id:'member',guild,roles:{remove:async role=>{revoked.push(role.id);},cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
       })}};
       const member={id:'member',guild,roles:{cache:{has:()=>false}}};
-      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');};
-      ${completionSource}
-      ${quarantineSource}
+      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');return{added:[{id:'verified'}],removed:[]};};
+      // Resolve the extracted module's local dependency explicitly; never load live storage.
+      const sharedQuarantine={
+        QUARANTINE_MODES:{INVESTIGATION:'investigation'},
+        getQuarantineState:()=>({users:mode==='existing'?{member:{}}:{}}),
+        quarantineMember:async()=>{
+          await transitionRoles();
+          if(mode==='mismatch')return{success:false,reason:'simulated containment confirmation failure'};
+          if(mode==='dryRun')return{success:true,dryRun:true};
+          return{success:true,mode:'investigation',interviewChannelId:'case'};
+        }
+      };
+      const {complete,quarantineVerificationMember}=(function(require){
+        ${completionSource}
+        ${quarantineSource}
+        return{complete,quarantineVerificationMember};
+      })(id=>{
+        if(id==='../../../core/security/protection/quarantine')return sharedQuarantine;
+        if(id==='../../roleStudio/autoRoles/autoRoles')return{releaseDeferredJoinRoles:async()=>true};
+        if(id==='../../communityStudio/invites/invites')return{releaseDeferredInviteRoles:async()=>true};
+        if(id==='../../messageStudio/welcome/welcome')return{releaseDeferredWelcome:async()=>true};
+        assert.fail('Unexpected Verification integration dependency: '+id);
+      });
+      const watchdog=setTimeout(()=>{console.error('Verification integration did not finish');process.exit(1);},4000);
       (async()=>{
         reset();
         const finishing=complete(member,config);
@@ -898,6 +1366,20 @@ function verificationLifecycleAudit() {
         assert.equal(finished.complete,true);
         assert.equal(state,'verified');
         assert.equal(transitions,1);
+        reset();
+        config.configRevision=2;
+        const stale=await complete(member,config);
+        assert.equal(stale.ok,false);
+        assert.equal(transitions,0);
+        reset();
+        const changing=complete(member,config);
+        await started;
+        config.configRevision=2;
+        release();
+        const changed=await changing;
+        assert.equal(changed.review,true);
+        assert.equal(state,'review');
+        assert.deepEqual(revoked,['verified']);
         reset();mode='quarantine';
         const quarantining=quarantineVerificationMember(guild,'member');
         await started;
@@ -915,19 +1397,12 @@ function verificationLifecycleAudit() {
         assert.equal(unconfirmed.review,true);
         assert.equal(state,'review');
         assert.equal(transitions,1);
-        reset();mode='throw';
-        const failing=quarantineVerificationMember(guild,'member');
-        await started;release();
-        const failed=await failing;
-        assert.equal(failed.review,true);
-        assert.equal(state,'review');
-        assert.equal(transitions,1);
         reset();mode='mismatch';
         const badQuarantine=quarantineVerificationMember(guild,'member');
         await started;release();
         const quarantineMismatch=await badQuarantine;
         assert.equal(quarantineMismatch.review,true);
-        assert.equal(state,'review');
+        assert.equal(state,'verifying');
         assert.equal(transitions,1);
         reset();mode='throw';
         const badCompletion=complete(member,config);
@@ -936,6 +1411,33 @@ function verificationLifecycleAudit() {
         assert.equal(completionFailure.review,true);
         assert.equal(state,'review');
         assert.equal(transitions,1);
+        reset();mode='existing';
+        assert.equal((await quarantineVerificationMember(guild,'member')).review,true);
+        assert.equal(transitions,0);
+        assert.equal(state,'verifying');
+        reset();mode='dryRun';
+        const simulated=quarantineVerificationMember(guild,'member');
+        await started;release();
+        assert.equal((await simulated).review,true);
+        assert.equal(state,'verifying');
+        reset();mode='throw';
+        const thrown=quarantineVerificationMember(guild,'member');
+        const rejected=assert.rejects(thrown,/simulated Discord role failure/);
+        await started;release();await rejected;
+        assert.equal(state,'verifying');
+        assert.equal(verificationRoleTransitions.size,0);
+        for(const terminal of ['verified','quarantined','review','rejected','failed','timed_out']){
+          reset();mode='quarantine';
+          const late=quarantineVerificationMember(guild,'member');
+          await started;state=terminal;release();
+          assert.equal((await late).review,true);
+          assert.equal(state,terminal);
+          reset();
+          const lateComplete=complete(member,config);
+          await started;state=terminal;release();
+          assert.equal((await lateComplete).review,true);
+          assert.equal(state,terminal);
+        }
         for(const terminal of ['verified','quarantined','review','rejected','failed','timed_out']){
           reset();state=terminal;
           const terminalCompletion=await complete(member,config);
@@ -945,7 +1447,7 @@ function verificationLifecycleAudit() {
           assert.equal(state,terminal);
           assert.equal(transitions,0);
         }
-      })().catch(error=>{console.error(error);process.exitCode=1;});
+      })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>clearTimeout(watchdog));
     `;
     const integrationRun=spawnSync(process.execPath,['-e',integrationTest],{encoding:'utf8',timeout:5000});
     assert.equal(integrationRun.status,0,'Executable Verification completion/quarantine integration failed: '+String(integrationRun.stderr||integrationRun.error||'unknown error'));
@@ -961,10 +1463,11 @@ function verificationLifecycleAudit() {
     contains(completionFlow, "type:'verification_role_transition_failed'", 'audit completion role transition failure');
     contains(completionFlow, "type:'verification_role_confirmation_failed'", 'audit unconfirmed completion roles enter review');
     assert(completionFlow.indexOf("type:'verification_role_confirmation_failed'") < completionFlow.indexOf("type:'verified'"), 'Completion role confirmation must precede verified state persistence.');
-    contains(quarantineFlow, "type:'quarantine_role_transition_failed'", 'audit quarantine role transition failure');
-    contains(quarantineFlow, "type:'quarantine_role_confirmation_failed'", 'audit quarantine role confirmation failure');
-    const quarantineConfirmation = quarantineFlow.slice(quarantineFlow.indexOf('if(!confirmed||!q.every'), quarantineFlow.indexOf("type:'quarantine_role_confirmation_failed'"));
-    contains(quarantineConfirmation, terminalGuard, 'preserve terminal state when quarantine role confirmation fails');
+    contains(quarantineFlow, "type:'quarantine_shared_isolation_failed'", 'audit shared quarantine containment failure');
+    contains(quarantineFlow, 'if(!result.success)', 'fail closed when shared containment fails');
+    contains(quarantineFlow, 'if(result.dryRun)', 'do not persist simulated quarantine');
+    contains(quarantineFlow, 'getQuarantineState(g.id)', 'preserve existing shared isolation');
+    assert(quarantineFlow.indexOf('if(!result.success)') < quarantineFlow.indexOf("state:'quarantined'"), 'Shared containment must succeed before persisting quarantine.');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
     contains(failureFlow, terminalGuard, 'protect failure service against review and all terminal states');
@@ -1011,7 +1514,7 @@ function verificationLifecycleAudit() {
       contains(panel, `'${section}'`, `admin section ${section}`);
       contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
     }
-    contains(panel, "emb('🛡️ Verification'", 'Verification home title');
+    assert(panel.includes("emb(emojiLabel('SECURITY', 'Verification')") || panel.includes("emb('🛡️ Verification'"), 'Verification contract missing: Verification home title');
     assert(!panel.includes('Front Door'), 'Legacy Front Door wording must not appear in Verification panel');
     contains(panel, 'Verification · Security', 'Security control page');
     contains(panel, 'NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER', 'canonical member journey');
@@ -1023,13 +1526,17 @@ function verificationLifecycleAudit() {
     assert(!panel.includes('Verification · Overview'), 'Legacy Verification Overview must not be reachable from the canonical panel.');
     assert(!panel.includes('admin:verification:page:workflow'), 'Legacy Workflow page must not remain in the canonical panel.');
     assert(!panel.includes('admin:verification:page:requirements'), 'Legacy Requirements page must not remain in the canonical panel.');
-    assert(!panel.includes('admin:verification:page:panel'), 'Legacy Panels page must not remain in the canonical panel.');
+    contains(panel, 'admin:verification:page:panel', 'member-facing Verification panel deployment navigation');
+    contains(panel, 'verificationManager.deployVerificationPanel(channel', 'Verification panel deployment action');
+    contains(panel, 'verificationManager.refreshVerificationPanel(', 'Verification panel refresh action');
+    contains(manager, 'No active Verification panel is deployed.', 'health check warns about missing Verification panel');
     assert(!memberIntelligence.includes('verificationIntelligenceExtension'), 'Member Intelligence must not monkey-patch the Verification admin UI.');
     assert(!fs.existsSync(absolute('src/modules/securityStudio/verificationIntelligenceExtension.js')), 'Legacy Verification UI compatibility extension must be removed.');
     
     const forbiddenGenerationPattern = new RegExp('\\b' + 'v' + '[23]' + '\\b', 'i');
     assert(!forbiddenGenerationPattern.test([flow, quarantine, lifecycle, risk, store, manager, panel].join('\n')), 'Verification source contains forbidden numbered-generation naming.');
     
+    await verificationAnswerAudit();
     console.log('Verification lifecycle and admin-surface contract audit passed.');
     
     return true;
@@ -1419,7 +1926,7 @@ function adminModuleRoutingAudit() {
     
     const modules = fs.readFileSync(root + '/src/core/administration/admin/modules.js', 'utf8');
     const router = fs.readFileSync(root + '/src/events/interactions/interactionCreate.js', 'utf8');
-    const verification = fs.readFileSync(root + '/src/modules/securityStudio/verificationPanel.js', 'utf8');
+    const verification = fs.readFileSync(root + '/src/modules/securityStudio/verification/verificationPanel.js', 'utf8');
     
     const catalogBlock = modules.match(/const MODULE_CATALOG = \[([\s\S]*?)\n\];/);
     assert(catalogBlock, 'MODULE_CATALOG could not be parsed');
@@ -1785,30 +2292,30 @@ function socialLivePresentationAudit() {
     );
     
     /*
-     * TikTok uses status transitions rather than the normal timed LIVE
-     * refresh while the same broadcast remains active.
+     * TikTok LIVE refreshes immediately on LIVE/PAUSED transitions and
+     * periodically on the configured interval, like other LIVE providers.
+     * This prevents stale portrait-era Discord messages persisting forever.
      */
-    
     assert(
       compactCore.includes("platform==='tiktok'") ||
         compactCore.includes('platform==="tiktok"'),
-      'TikTok LIVE refresh exception missing'
+      'TikTok LIVE refresh handling missing'
     );
-    
     assert(
       compactCore.includes('previous.lastLiveEvent?.liveStatus') &&
-        (
-          compactCore.includes('checked.event?.liveStatus') ||
-          compactCore.includes('checked.event.liveStatus')
-        ),
-      'TikTok refresh exception must compare LIVE/PAUSED status'
+        (compactCore.includes('checked.event?.liveStatus') ||
+          compactCore.includes('checked.event.liveStatus')),
+      'TikTok refresh must compare LIVE/PAUSED status'
     );
-    
     assert(
-      compactCore.includes('returnbefore!==current'),
-      'TikTok refresh exception must update only on status transition'
+      compactCore.includes('if(before!==current)returntrue'),
+      'TikTok status transition must trigger immediate refresh'
     );
-    
+    assert(
+      compactCore.includes('Date.now()-last>=refresh'),
+      'TikTok and other LIVE messages must refresh on configured interval'
+    );
+
     assert(
       compactCore.includes('sameActiveBroadcast'),
       'LIVE presentation must preserve same-broadcast lifecycle handling'
@@ -1926,7 +2433,8 @@ function socialStudioLifecycleAudit() {
         && compactTikTok.includes("returnunavailable('tiktok',"),
       'TikTok ambiguous LIVE page must remain unavailable',
     );
-    assert(compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok proven OFFLINE paths missing');
+    assert(compactTikTok.includes('constconfirmedEnded=ended&&onOwnLiveUrl&&creatorMarker') && compactTikTok.includes("providerSource:'public_page_ended'"), 'TikTok verified creator-page ENDED path missing');
+    assert(!compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok redirects must not trigger false ENDED notifications');
     assert(compactTikTok.includes("liveStatus:isPaused?'PAUSED':'LIVE'"), 'TikTok PAUSED state contract missing');
     
     // Locked Social Studio lifecycle model:
@@ -2017,6 +2525,24 @@ function universalMemberNoticesAudit() {
     
     const guild = fakeGuild();
     const user = fakeUser();
+
+    {
+      const { quarantineReleaseNotice } = require(root + '/src/core/ui/memberNotice');
+      const notice = embedJson(quarantineReleaseNotice(guild, { caseId: 12 }, { restoredRoles: 1, cleanupPending: true }, { reviewedBy: '<@123456789012345678>' }));
+      assert.equal(notice.title, '🔓 Quarantine Lifted');
+      assert(notice.fields.some(item => item.name === '🆔 Case Reference' && item.value === '#12'));
+      assert(notice.fields.some(item => item.name === '👤 Reviewed By'));
+      assert(!/manageable|background|recorded moderation case|Security Review/.test(JSON.stringify(notice)));
+      assert.equal(notice.footer.text, 'Goliath • Moderation');
+      const pending = embedJson(quarantineReleaseNotice(guild, {}, { verification: { reconciled: true } }));
+      assert(pending.fields.some(item => item.value.includes('complete the server’s verification process')));
+      assert(!pending.fields.some(item => /Reference|Status|Action/.test(item.name)));
+      const failed = embedJson(quarantineReleaseNotice(guild, {}, { verification: { ok: false } }));
+      assert(failed.fields.some(item => item.value.includes('contact server management')));
+      const skipped = embedJson(quarantineReleaseNotice(guild, {}, { skippedRoles: [{ id: 'missing', reason: 'missing_role' }] }));
+      assert(skipped.fields.some(item => item.value.includes('previous roles are no longer available')));
+      assert.deepEqual(quarantineReleaseNotice(guild).allowedMentions, { parse: [] });
+    }
     
     {
       const embed = embedJson(buildScheduleReminderNotice({
@@ -2133,8 +2659,57 @@ function welcomeEmbedDeliveryAudit() {
     const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
     const route = read('src/server/routes/modules/messageStudio/welcome.js');
     
-    // Delivery-failure regression contracts: public and DM attempts must remain independent.
+    // Verification-aware onboarding regression contracts. These checks cover
+    // the existing production paths without introducing test infrastructure.
+    const verificationContinuation = read('src/modules/securityStudio/verification/verificationFlowContinuation.js');
+    const verificationManager = read('src/modules/securityStudio/verification/verificationManager.js');
+    const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
     const memberEvents = read('src/events/members/memberJoinLeave.js');
+    const autoRoles = read('src/modules/roleStudio/autoRoles/autoRoles.js');
+    const inviteStudio = read('src/modules/communityStudio/invites/invites.js');
+    assert(welcome.includes('waitForVerification: false') && welcome.includes('waitForVerification: source.waitForVerification === true'),
+      'Instant Welcome verification gating must be opt-in and persist through normalization.');
+    assert(dashboard.includes('waitForVerification: e.target.checked') && route.includes("router.put('/:guildId/config'"),
+      'Dashboard must save the verification gate through the existing Welcome API.');
+    assert(welcome.includes('deferredWelcomeInFlight.has(key)') && welcome.includes('deferredWelcomeInFlight.delete(key)'),
+      'Deferred Instant Welcome must prevent concurrent duplicate releases and clear the lock.');
+    assert(welcome.includes('skipPublic: pending.publicSent === true') && welcome.includes('skipDm: pending.dmSent === true'),
+      'Deferred Instant Welcome retries must skip successfully delivered destinations.');
+    assert(welcome.includes('welcome_deferred_partial_delivery') && welcome.includes('welcome_deferred_for_verification'),
+      'Deferred welcome progress must persist in the canonical Welcome section.');
+    assert(verificationContinuation.includes('releaseDeferredWelcome(confirmed)') && verificationManager.includes('releaseDeferredWelcome(confirmed)'),
+      'Both authorised verification completion paths must release deferred welcomes.');
+    assert(memberEvents.includes('releaseDeferredWelcome(newMember)') && memberEvents.includes('clearDeferredWelcome(member.guild.id,member.id,member.joinedAt?.toISOString?.()||null)'),
+      'Member update must recover deferred welcomes and departure cleanup must match the original membership.');
+    assert(welcome.includes('return { skipped: true, reason: \'stale_join\' }') && !welcome.includes('clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt);\n      return { skipped: true, reason: \'stale_join\' }') && welcome.includes('latest.joinedAt === pending.joinedAt'),
+      'Stale member updates must preserve newer deferred welcomes and retries must not recreate old entries.');
+    assert(welcome.includes('clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt)'),
+      'Successful deferred delivery must clear only the matching membership checkpoint.');
+    assert(welcome.includes('current.publicSent === true || publicDone') && welcome.includes('current.dmSent === true || dmDone'),
+      'Partial delivery checkpoints must remain monotonic across retries.');
+    assert(autoRoles.includes('current.joinedAt !== pending.joinedAt') && autoRoles.includes('clearDeferredJoinRoles(guildId, memberId, expectedJoinedAt = undefined)'),
+      'Auto Roles must protect deferred role checkpoints from stale membership releases and cleanup.');
+    assert(inviteStudio.includes('current.joinedAt !== pending.joinedAt') && inviteStudio.includes('clearDeferredInviteRoles(guildId, memberId, meta = {}, expectedJoinedAt = undefined)'),
+      'Invite Studio must protect deferred role checkpoints from stale membership releases and cleanup.');
+    assert(memberEvents.includes('clearDeferredJoinRoles(member.guild.id,member.id,member.joinedAt?.toISOString?.()||null)') && memberEvents.includes('clearDeferredInviteRoles(member.guild.id,member.id,{},member.joinedAt?.toISOString?.()||null)'),
+      'Member departure must only clear deferred roles belonging to the departed membership.');
+    assert(scheduled.includes('completedMemberJoins') && scheduled.includes('deliveredJoin === joinedAt'),
+      'Scheduled Welcome must retain join-specific checkpoints for duplicate and rejoin protection.');
+    assert(scheduled.includes('deliveredJoin !== joinedAt') && scheduled.includes('else completed.delete(member.id)') && scheduled.includes('const checkpoint = getScheduledConfig(guild.id)'),
+      'Scheduled Welcome must preserve newer join eligibility when an older batch completes.');
+    assert(scheduled.includes("updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_run' })"),
+      'Scheduled Welcome final analytics must not overwrite newer delivery checkpoints.');
+    assert(scheduled.includes('const deliveredJoin = config.completedMemberJoins?.[memberId]') && scheduled.includes('!joinedAt || !deliveredJoin || deliveredJoin !== joinedAt) continue') && scheduled.includes('const currentMember = await guild.members.fetch({ user: member.id, force: true })'),
+      'Scheduled Welcome queue-role cleanup must not remove roles from newer memberships.');
+    assert(scheduled.includes('!member.joinedAt?.toISOString?.() || currentMember.joinedAt?.toISOString?.() !== member.joinedAt.toISOString()'),
+      'Scheduled Welcome must never remove a queue role when original membership identity is unknown.');
+    assert(scheduledQueue.includes('pendingMembers'),
+      'Scheduled Welcome must support the persistent member queue without a queue role.');
+    assert(dashboard.includes('WELCOME QUEUE ROLE (OPTIONAL)') && dashboard.includes('disabled={busy || !scheduled?.channelId}'),
+      'Scheduled Welcome dashboard must allow role-free delivery.');
+    
+    // Delivery-failure regression contracts: public and DM attempts must remain independent.
+
     assert(memberEvents.includes("name:'guildMemberAdd'") && memberEvents.includes('welcomeManager.sendWelcome(member)'), 'Member join must invoke the canonical Welcome sender.');
     assert(welcome.includes("reason: 'disabled'") && welcome.includes("reason: 'ignored_bot'"), 'Disabled Welcome and ignored bots must be skipped explicitly.');
     assert(welcome.includes('if (config.channelId && options.skipPublic !== true)'), 'Public delivery must honour the configured channel and skip flag.');
@@ -2143,14 +2718,58 @@ function welcomeEmbedDeliveryAudit() {
     assert(welcome.includes('if (config.dmEnabled && options.skipDm !== true && !member.user.bot)'), 'DM delivery must be independently gated and must exclude bots.');
     assert(welcome.includes('await member.send(payload)') && welcome.includes('await channel.send(payload)'), 'Welcome must preserve separate public and DM send operations.');
     assert(welcome.includes('incrementAnalytics(member.guild.id'), 'Welcome delivery must record analytics for sends, failures and skips.');
-    assert(welcome.includes('options.suppressPing === true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain mention-suppression safeguards.');
+    assert(welcome.includes('userPingEnabled = !isDm && config.allowUserPing !== false && options.suppressPing !== true') && welcome.includes('rolePingEnabled = !isDm && config.allowRolePings === true && options.suppressPing !== true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain user and role mention-suppression safeguards.');
     assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must guard against overlapping runs.');
+    assert(panel.includes('queueRoleId===previous.queueRoleId?{queueRoleId}:{queueRoleId,completedMemberIds:[]}'), 'Selecting the unchanged queue role must preserve successful-delivery checkpoints.');
 
     assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
     assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
-    assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.indexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
+    assert(scheduled.indexOf("action: 'scheduled_welcome_delivery_checkpoint'") >= 0 && scheduled.indexOf("action: 'scheduled_welcome_delivery_checkpoint'") < scheduled.indexOf('const removal = await queue.removeQueueRole(currentMember, config.queueRoleId)'), 'Delivery checkpoint must precede post-delivery queue role cleanup.');
     assert(panel.includes("customId==='admin:welcome:resetConfirm'"), 'Destructive Welcome reset must require a confirmation action.');
-    assert(panel.includes('result.publicFailed') && panel.includes('result.dmFailed'), 'Discord test feedback must expose public and DM failures.');
+    assert(panel.includes('result.publicFailed') && panel.includes('skipDm:true'), 'Public test delivery must report failures without triggering a DM.');
+    assert(panel.includes("customId==='admin:welcome:dmSend'") && panel.includes('await interaction.user.send(payload)'), 'DM test must use its separate explicit delivery control.');
+    assert(welcome.includes('options.templateOverride || getAssignedTemplate'), 'Preview must support a staged template without changing live bindings.');
+    assert(panel.includes("source==='embedStudio'&&state.source==='embedStudio'&&!state.templateId"), 'Unsaved Embed Studio previews must require a selected template.');
+    assert(panel.includes("customId==='admin:welcome:scheduled:confirmRun'"), 'Scheduled bulk delivery must require confirmation.');
+    assert(panel.includes('scheduledWelcome.runScheduledWelcome(interaction.guild,{actorId:interaction.user.id})'), 'Manual Scheduled Welcome must respect module and schedule enablement, without force bypass.');
+    assert(panel.includes("result.skipped?emojiLabel('WARNING', 'Scheduled Welcome was not sent") || panel.includes("result.skipped?'⚠️ Scheduled Welcome was not sent"), 'Manual Scheduled Welcome must explain disabled/skipped deliveries.');
+    assert(panel.includes("customId==='admin:welcome:scheduled:runNow')return updatePanel"), 'Scheduled Run Now must open confirmation rather than send immediately.');
+    assert(panel.includes("customId==='admin:welcome:settings'") && panel.includes("['admin:welcome:instantSettings','admin:welcome:dmSettings','admin:welcome:scheduledSettings'].includes(customId)") && panel.includes("buildWelcomeDeliverySettingsPanel(interaction.guild,scope"), 'Welcome settings navigation must remain reachable.');
+    for(const section of ['buildWelcomePanel','buildWelcomeSettingsPanel','buildInstantPanel','buildDmPanel','buildMentionSettingsPanel','buildScheduledPanel','buildWelcomeDeliverySettingsPanel']){
+      assert(panel.includes(`function ${section}(`), `Missing Welcome panel: ${section}`);
+    }
+    assert(!panel.includes(".join('\\\\n')"), 'Welcome panels must use real line breaks, not literal backslash-n text.');
+    // Guard against missing Welcome emoji keys and hardcoded section icons.
+    const emojiRegistry = read('src/core/guild/goliathNavigation.js');
+    const registeredEmojiKeys = new Set([...emojiRegistry.matchAll(/^\s+([A-Z][A-Z_]+):\s*['"]/gm)].map(match => match[1]));
+    const welcomeEmojiKeys = [
+      ...panel.matchAll(/emojiLabel\(\s*['"]([A-Z][A-Z_]+)['"]/g),
+      ...panel.matchAll(/EMOJIS\.([A-Z][A-Z_]+)/g),
+    ].map(match => match[1]);
+    assert(panel.includes("../../../core/ui/emojis") && panel.includes('emojiLabel'), 'Welcome panel must import the shared emoji registry.');
+    for (const key of welcomeEmojiKeys) {
+      assert(registeredEmojiKeys.has(key), 'Unknown Welcome emoji key: ' + key);
+    }
+    for (const heading of ['### 🗂️ Workspace', '### 🧩 Delivery', '### 🚦 Status', '### ➜ Next Step']) {
+      assert(!panel.includes(heading), 'Hardcoded Welcome section icon: ' + heading);
+    }
+
+    // Each Discord message supports at most five component rows. Count the
+    // row constructors in the seven Welcome builders, including conditional rows.
+    const panelBoundaries=['async function buildWelcomePanel(', 'async function buildWelcomeSettingsPanel(', 'async function buildInstantPanel(', 'async function buildDmPanel(', 'function buildMentionSettingsPanel(', 'async function buildScheduledPanel(', 'async function buildWelcomeDeliverySettingsPanel(', 'function buildScheduledModal('];
+    const maxRows=[4,3,5,4,3,4];
+    for(let i=0;i<maxRows.length;i++){
+      const start=panel.indexOf(panelBoundaries[i]),end=panel.indexOf(panelBoundaries[i+1],start+1);
+      assert(start>=0&&end>start, `Missing or reordered Welcome builder: ${panelBoundaries[i]}`);
+      const body=panel.slice(start,end);
+      const count=(body.match(/\brow\s*\(/g)||[]).length;
+      assert(count<=maxRows[i]&&count<=5,`Welcome builder ${panelBoundaries[i]} may exceed Discord's five-row limit (${count} rows)`);
+    }
+    const deliverySettings=panel.slice(panel.indexOf('async function buildWelcomeDeliverySettingsPanel('),panel.indexOf('function buildScheduledModal('));
+    assert(deliverySettings.includes('const controls=instant?[') && deliverySettings.includes(']:dm?['), 'Welcome delivery settings must keep distinct Instant, DM and Scheduled control groups.');
+    assert((deliverySettings.match(/\brow\s*\(/g)||[]).length===7, 'Welcome delivery settings row groups changed; recheck the per-branch five-row limit.');
+    assert(/if\s*\(\s*source\s*===\s*['"]custom['"]\s*&&\s*state\.source\s*\)\s*throw\s+new\s+Error\s*\(/.test(panel), 'Custom message previews must require saving before rendering.');
+
     assert(panel.includes('result.sendFailed') && panel.includes('result.roleRemovalFailed'), 'Discord scheduled feedback must expose partial failures.');
     assert(dashboard.includes('queueLoaded'), 'Dashboard must distinguish an unloaded queue from an empty queue.');
     assert(dashboard.includes('scheduledHealth?.stuckMemberIds?.length'), 'Dashboard must expose pending role cleanup.');
@@ -2217,11 +2836,87 @@ function auditCommand() {
   return [projectShape, commandAudit, dashboardAudit, dashboardImportAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
     .map((suite) => suite()).every(Boolean);
 }
-function doctor(target = '') {
+async function memberIntelligenceRoutingAudit() {
+  const assert = require('node:assert/strict');
+  const Discord = require('discord.js');
+  const guildId = '1515201360386068642', userId = '815257293347880961';
+  const target = { id: userId, user: { tag: 'Test Member', username: 'Test', toString: () => `<@${userId}>` } };
+  let allowed = true, missing = false, fail = false, builds = 0, writes = 0, errors = 0, modCalls = 0;
+  const quiet = { ...console, error: () => { errors++; }, warn: () => {}, log: () => {} };
+  function fixtureModule(file, resolve) {
+    const module = { exports: {} };
+    new Function('require', 'module', 'exports', 'console', read(file))(resolve, module, module.exports, quiet);
+    return module.exports;
+  }
+  const handlers = fixtureModule('src/events/interactions/joinIntelligenceActions.js', id => {
+    if (id === 'discord.js') return Discord;
+    if (id === '../../core/guild/goliathNavigation') return { EMOJIS: require('../src/core/guild/goliathNavigation').EMOJIS };
+    if (id.endsWith('/permissions')) return { canUseModAction: () => allowed, recordModerationSystemEvent: () => { writes++; } };
+    if (id.endsWith('/storage')) return { db: { prepare: () => ({ all: () => [] }) } };
+    if (id.endsWith('/joinIntelligence')) return { localSummary: () => ({ caseCount: 0 }), suspectedAccounts: () => [] };
+    if (id.endsWith('/intelligence')) return { buildContext: async () => { builds++; if (fail) throw Error('Report source unavailable'); return { risk: { score: 0, reasons: [] } }; } };
+    if (id.endsWith('/memberDecisioning')) return { classify: () => ({ decision: 'clear', riskScore: 0 }), DECISIONS: { clear: { color: 0x57f287, label: 'Clear', emoji: '🟢' } }, markClear: () => { writes++; return {}; } };
+    throw Error(`Unexpected intelligence audit dependency: ${id}`);
+  });
+  const router = fixtureModule('src/events/interactions/interactionCreate.js', id => {
+    if (id === 'discord.js') return Discord;
+    if (id === './joinIntelligenceActions') return handlers;
+    if (id.endsWith('/mod/interactions')) return { handleModInteraction: async () => { modCalls++; return true; } };
+    // Other optional application handlers are outside this narrow router fixture.
+    return {};
+  });
+  function interaction(action = 'view') {
+    const events = [];
+    const i = { customId: `joinintel:${action}:${guildId}:${userId}`, member: {}, user: { id: 'moderator', username: 'Moderator' },
+      client: {}, guild: { id: guildId, members: { cache: new Discord.Collection(), fetch: async () => missing ? null : target } },
+      inGuild: () => true, isButton: () => true, isMessageComponent: () => true,
+      deferReply: async payload => { assert.equal(payload.flags, 64); assert(!i.replied && !i.deferred); i.deferred = true; events.push(['defer']); },
+      reply: async payload => { assert(!i.replied && !i.deferred, 'Interaction must be acknowledged exactly once'); i.replied = true; events.push(['reply', payload]); },
+      editReply: async payload => { assert(i.deferred || i.replied); events.push(['edit', payload]); },
+      followUp: async payload => events.push(['followUp', payload]),
+    };
+    return { i, events };
+  }
+  for (const order of ['central', 'legacy', 'concurrent']) {
+    const { i, events } = interaction(); const before = builds;
+    if (order === 'central') { await router.execute(i, {}); await handlers.execute(i); }
+    else if (order === 'legacy') { await handlers.execute(i); await router.execute(i, {}); }
+    else await Promise.all([router.execute(i, {}), handlers.execute(i)]);
+    assert.equal(builds - before, 1); assert.equal(events.filter(([name]) => name === 'defer').length, 1);
+    assert.deepEqual(events.map(([name]) => name), ['defer', 'edit']);
+    const payload = events.at(-1)[1]; assert.equal(payload.embeds.length, 1);
+    assert(!JSON.stringify(events).includes('handler is missing'));
+    for (const row of payload.components) for (const component of row.components) {
+      const button = interaction().i; button.customId = component.custom_id || component.data?.custom_id;
+      await router.execute(button, {});
+    }
+  }
+  assert.equal(modCalls, 12, 'Every report control must reach the existing moderation handler');
+  for (const action of ['watch', 'clear']) {
+    const { i, events } = interaction(action); const before = writes;
+    await Promise.all([router.execute(i, {}), handlers.execute(i)]);
+    assert.equal(writes - before, 1); assert.deepEqual(events.map(([name]) => name), ['defer', 'edit']);
+  }
+  allowed = false;
+  const denied = interaction(); const before = builds; await router.execute(denied.i, {}); await handlers.execute(denied.i);
+  assert.deepEqual(denied.events.map(([name]) => name), ['defer', 'edit']); assert.match(denied.events.at(-1)[1].content, /permission/); assert.equal(builds, before);
+  allowed = true; missing = true;
+  const gone = interaction(); await router.execute(gone.i, {}); assert.match(gone.events.at(-1)[1].content, /no longer available/);
+  missing = false; fail = true;
+  const failed = interaction(); await Promise.all([router.execute(failed.i, {}), handlers.execute(failed.i)]);
+  assert.deepEqual(failed.events.map(([name]) => name), ['defer', 'edit']); assert.match(failed.events.at(-1)[1].content, /could not complete/);
+  assert.equal(errors, 1, 'Only the expected report-source failure is logged; the central router must not report a second failure');
+  console.log('✅ Member Intelligence routing: both listener orders and concurrent delivery, one acknowledgement/report/mutation, private defer, report controls, denied access, missing members and report failures.');
+  return true;
+}
+
+async function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  return [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit]
-    .map((suite) => suite()).every(Boolean);
+  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sharedEmojiPaletteAudit, emojiInventoryAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, dashboardRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
+  const results = [];
+  for (const suite of suitesToRun) results.push(await suite());
+  return results.every(Boolean);
 }
 function promote(target) {
   const environment = String(target || '').toLowerCase();
@@ -2568,7 +3263,3149 @@ async function main() {
   return true;
 }
 
+
+async function quarantineContainmentAudit() {
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+const isolation = read('src/core/security/protection/quarantine/isolation.js');
+const recovery = read('src/core/security/protection/quarantine/recoveryEvents.js');
+const release = read('src/core/security/protection/quarantine/releaseLifecycle.js');
+const verification = read('src/modules/securityStudio/verification/verificationQuarantine.js');
+
+function required(source, fragment, label) {
+  assert(source.includes(fragment), label);
+}
+
+required(isolation, 'fetchActiveThreads()', 'Active threads must be inspected during containment verification');
+required(isolation, 'allowedChannelIds', 'Authorised investigation room must be explicitly exempted');
+required(isolation, 'memberViewAllowRestores', 'Member-specific permissions must be recorded for restoration');
+required(recovery, 'Events.ThreadCreate', 'New threads must trigger containment checks');
+required(recovery, 'Events.ThreadUpdate', 'Updated threads must trigger containment checks');
+required(recovery, 'Events.ThreadMembersUpdate', 'Thread membership changes must trigger containment checks');
+required(recovery, 'Events.ChannelCreate', 'New channels must trigger containment checks');
+required(recovery, 'Events.ChannelUpdate', 'Channel permission changes must trigger containment checks');
+required(recovery, 'Events.GuildMemberAdd', 'Rejoining members must be recontained');
+required(recovery, 'Events.GuildMemberUpdate', 'Role changes must be recontained');
+required(release, 'Array.isArray(snapshot.roles)', 'Release must reject missing original-role snapshots');
+required(release, 'releasesInProgress', 'Release transactions must be guarded against concurrent recovery');
+required(verification, 'auditLegacyQuarantineSessions', 'Legacy verification cases must be reported');
+required(read('src/core/security/protection/quarantine/state.js'), 'legacy_without_shared_snapshot', 'Missing legacy shared snapshots must be flagged');
+required(read('src/core/security/protection/quarantine/state.js'), 'missing_original_roles', 'Missing original roles must be flagged');
+// Load the real modules with explicit boundaries; fixtures never touch guild files or Discord.
+const { createRequire } = require('node:module');
+function load(file, mocks, testExport = '') {
+  const filename = path.join(root, file);
+  const localRequire = createRequire(filename);
+  const loaded = { exports: {} };
+  const fixtureRequire = id => {
+    if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (file === 'src/core/administration/mod/investigationAccess.js' && id === '../../guild/goliathNavigation') return localRequire(id);
+    if ((file === base + 'investigationRooms.js' && id === '../../../guild/goliathNavigation')
+      || (file === 'src/events/client/sentinelControlCenter.js' && id === '../../core/guild/goliathNavigation')
+      || (file === 'src/core/administration/mod/quarantineInteractions.js' && id === '../../../core/guild/goliathNavigation')) return localRequire(id);
+    // Shared emoji constants are stateless; permit the real palette in quarantine fixtures.
+    if (id === '../../../ui/emojis' && file.startsWith(base)) return localRequire(id);
+    if (id === 'discord.js' || id.startsWith('node:')) return localRequire(id);
+    throw new Error(`Unmocked quarantine audit dependency: ${file} -> ${id}`);
+  };
+  new Function('require', 'module', 'exports', '__filename', '__dirname', read(file) + testExport)(fixtureRequire, loaded, loaded.exports, filename, path.dirname(filename));
+  return loaded.exports;
+}
+const base = 'src/core/security/protection/quarantine/';
+const { Collection, PermissionsBitField, PermissionFlagsBits: P, ChannelType, Events } = require('discord.js');
+const stateApi = load(base + 'state.js', { '../../../guild/guildManager': {}, '../../../../server/sockets/socketHub': {} });
+const { QUARANTINE_MODES, getQuarantineMode, auditQuarantineSnapshots, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles, isSharedInvestigationRoom } = stateApi;
+const uid = '111111111111111111', other = '222222222222222222', originalRole = '333333333333333333';
+const sessions = { [uid]: { state: 'quarantined', quarantineChannelId: 'legacy' }, approval: { state: 'review' } };
+const snapshots = { [uid]: { mode: 'investigation', source: 'verification', interviewChannelId: 'shared' }, [other]: { mode: 'investigation', roles: [originalRole], interviewChannelId: 'shared' } };
+const before = JSON.stringify({ sessions, snapshots });
+const report = auditQuarantineSnapshots(sessions, snapshots);
+assert.equal(report.needsReview, 2);
+assert(report.cases.find(c => c.userId === uid).reasons.includes('missing_original_roles'));
+assert(report.cases.find(c => c.userId === uid).reasons.includes('room_mismatch'));
+assert(report.cases.every(c => c.reasons.includes('duplicate_room_assignment')));
+assert.equal(JSON.stringify({ sessions, snapshots }), before, 'Reconciliation must be read-only');
+assert.equal(auditQuarantineSnapshots({ approval: { state: 'review' } }, {}).needsReview, 0);
+assert.equal(auditQuarantineSnapshots(sessions, {}).cases[0].reason, 'legacy_without_shared_snapshot');
+assert(auditQuarantineSnapshots({ [uid]: { state: 'verified' } }, { [uid]: { source: 'verification', mode: 'investigation', roles: [], interviewChannelId: 'room' } }).cases[0].reasons.includes('verification_state_conflict'));
+assert.equal(auditQuarantineSnapshots({ [uid]: { state: 'quarantined' } }, { [uid]: { mode: 'investigation', roles: [] } }).cases[0].reason, 'missing_shared_room');
+assert.equal(auditQuarantineSnapshots({}, { [uid]: { mode: 'security', roles: [null] } }).cases[0].reason, 'invalid_original_roles');
+assert.equal(isAutomaticQuarantineReleaseDue({ expiresAt: 1 }), false);
+assert.equal(isAutomaticQuarantineReleaseDue({ expiresAt: 'invalid', autoRelease: true }), false);
+assert.equal(isAutomaticQuarantineReleaseDue({ expiresAt: 1, autoRelease: true }), true);
+
+function fixture(snapshot = {}) {
+  let state = { roleId: 'quarantine', users: { [uid]: { memberId: uid, mode: 'investigation', roles: [originalRole], interviewChannelId: 'room', ...snapshot } } };
+  const mutations = [];
+  const role = { id: 'quarantine', editable: true, position: 1 };
+  const guild = { id: 'guild', ownerId: 'owner', name: 'Fixture', roles: { cache: new Collection([[role.id, role], [originalRole, { id: originalRole, position: 2 }]]), fetch: async () => guild.roles.cache }, channels: { cache: new Collection() } };
+  const member = { id: uid, guild, user: { tag: 'Fixture' }, roles: { cache: new Collection([[role.id, role]]), set: async ids => { mutations.push(['roles', ...ids]); member.roles.cache = new Collection(ids.map(id => [id, guild.roles.cache.get(id) || { id }])); return member; } } };
+  guild.members = { me: { id: 'bot', roles: { highest: { position: 10 } }, permissions: new PermissionsBitField([P.ManageRoles, P.ManageChannels]) }, fetch: async () => member };
+  const api = { QUARANTINE_MODES, getQuarantineMode, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles, isSharedInvestigationRoom, auditQuarantineSnapshots, getQuarantineState: () => structuredClone(state), saveQuarantineState: (g, value) => { state = structuredClone(value); }, emitCurrentQuarantineState: () => {}, normalizeArchivedRooms: v => v, normalizePendingRoomCleanups: v => v };
+  return { guild, member, role, api, mutations, get state() { return state; } };
+}
+// Explicit new multi-member investigations use independent role snapshots and
+// cases in one room; guests are never inferred to be investigated subjects.
+{
+  async function groupFixture(failAt = null) {
+    const f = fixture(); delete f.state.users[uid];
+    const secondRole = '444444444444444444', actorId = '555555555555555555', guestId = '666666666666666666';
+    f.guild.roles.cache.set(secondRole, { id: secondRole, position: 3 });
+    f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+    const second = { id: other, guild: f.guild, user: { tag: 'Second' }, roles: { cache: new Collection([[secondRole, f.guild.roles.cache.get(secondRole)]]), set: async ids => {
+      if (failAt === 'roles') throw Error('Second member role write failed');
+      f.mutations.push(['secondRoles', ...ids]); second.roles.cache = new Collection(ids.map(id => [id, f.guild.roles.cache.get(id)]));
+    } } };
+    const actor = { id: actorId };
+    const guest = { id: guestId, roles: { cache: new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]), set: async () => { throw Error('Guest roles must not change'); } } };
+    const members = new Map([[uid, f.member], [other, second], [actorId, actor], [guestId, guest]]);
+    f.guild.client = { user: { id: 'bot' } };
+    f.guild.members.fetch = async request => members.get(typeof request === 'string' ? request : request.user);
+    const notices = [], renamed = [], permissionWrites = [], cases = [];
+    const room = { id: 'group-room', name: 'subjects', send: async payload => { notices.push(payload); return { id: `notice-${notices.length}` }; },
+      permissionOverwrites: { edit: async (id, values) => permissionWrites.push([id, values]) },
+      setName: async name => renamed.push(name), setTopic: async () => {}, delete: async () => { throw Error('Saved group room must not be deleted on partial failure'); } };
+    f.guild.channels.cache.set(room.id, room);
+    f.guild.channels.fetch = async id => id ? room : f.guild.channels.cache;
+    const storage = { createCase: input => { const record = { ...input, caseId: cases.length + 1 }; cases.push(record); return record; },
+      getCaseById: (g, id) => cases.find(record => record.caseId === id), getCasesForUser: (g, id) => cases.filter(record => record.userId === id), updateCaseStatus: (g, id, status) => { cases.find(record => record.caseId === id).status = status; } };
+    let lifecycle;
+    const release = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role },
+      './memberLifecycle': { getRestorableRoleIds: (...args) => lifecycle.getRestorableRoleIds(...args) },
+      './isolation': { restoreMemberViewAllows: async () => ({ restored: [], failed: [] }) },
+      './investigationRooms': { cleanChannelName: value => value },
+      '../../../ui/memberNotice': require(root + '/src/core/ui/memberNotice'),
+      '../../../administration/mod/storage': storage,
+      '../../../../modules/securityStudio/verification/verificationQuarantine': { reconcileModerationRelease: async () => ({ reconciled: true }) },
+    });
+    lifecycle = load(base + 'memberLifecycle.js', { './state': f.api, './releaseLifecycle': release,
+      '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false },
+      '../core': { canManageTargetMember: () => ({ allowed: true }) },
+      '../../../administration/mod/permissions': { canUseModAction: () => true, checkHierarchyForBulk: () => failAt === 'hierarchy' ? 'Cannot act on selected member' : null },
+      '../../../administration/mod/storage': storage,
+      'node:crypto': require('node:crypto'), './roleManager': { ensureQuarantineRole: async () => f.role },
+      './isolation': { syncQuarantineIsolation: async (guild, options) => {
+        if (options.targetMemberId) {
+          assert.equal(Object.keys(f.state.users).length, 2, 'All originals must be saved before any member isolation write');
+          assert.deepEqual(f.state.users[uid].roles, [originalRole]); assert.deepEqual(f.state.users[other].roles, [secondRole]);
+          assert.equal(cases.length, 2, 'Each subject must have a case before isolation starts');
+          if (failAt === 'isolation') return { success: false, reason: 'Isolation write failed' };
+        }
+        return { success: true };
+      }, verifyMemberContainment: async (guild, member, allowed) => { assert.deepEqual(allowed, [room.id]); return { success: true }; } },
+      './investigationRooms': { getOtherIsolatedMemberIds: () => Object.keys(f.state.users),
+        createInvestigationRoom: async (guild, member, role, options) => { assert.deepEqual(options.investigatedMemberIds, [uid, other]); return room; },
+        buildInvestigationRoomPanel: member => ({ memberId: member.id }) },
+    });
+    const result = await lifecycle.quarantineInvestigationMembers(f.guild, [uid, other], { reason: 'Two test members', quarantinedBy: actorId, invitedUserIds: [guestId], invitedRoleIds: [] });
+    return { f, second, secondRole, guest, result, release, room, renamed, notices, permissionWrites, cases };
+  }
+  const g = await groupFixture();
+  assert.equal(g.result.success, true); assert.equal(g.cases.length, 2);
+  assert.equal(g.f.state.users[g.guest.id], undefined); assert.deepEqual([...g.guest.roles.cache.keys()], [originalRole], 'Guest invitation must not quarantine or alter guest roles');
+  assert.equal(g.f.state.users[uid].creationPending, false); assert.equal(g.f.state.users[other].creationPending, false);
+  assert.equal(isSharedInvestigationRoom(g.f.state.users, g.room.id), true);
+  assert.equal(auditQuarantineSnapshots({}, g.f.state.users).needsReview, 0, 'Reciprocal new group links are not legacy duplicates');
+  const broken = structuredClone(g.f.state.users); broken[other].investigationMemberIds = [other];
+  assert.equal(isSharedInvestigationRoom(broken, g.room.id), false);
+  assert(auditQuarantineSnapshots({}, broken).cases.every(record => record.reasons.includes('duplicate_room_assignment')));
+  g.f.state.users[uid].autoRelease = true; g.f.state.users[uid].expiresAt = 1;
+  assert.equal(isAutomaticQuarantineReleaseDue(g.f.state.users[uid]), false, 'Shared cases never auto-release');
+  assert.equal((await g.release.restoreQuarantinedMember(g.f.guild, g.f.member, { system: true })).success, false);
+  const groupLockKey = `investigation-group:${g.result.investigationGroupId}`;
+  assert.equal(g.release.tryBeginQuarantineOperation(g.f.guild.id, groupLockKey), true);
+  assert.equal((await g.release.restoreQuarantinedMember(g.f.guild, g.f.member, { restoredBy: 'staff' })).busy, true);
+  assert.equal(g.release.isQuarantineReleaseInProgress(g.f.guild.id, uid), false, 'Failed group locking must release the subject lock');
+  g.release.endQuarantineOperation(g.f.guild.id, groupLockKey);
+  const first = await g.release.restoreQuarantinedMember(g.f.guild, g.f.member, { restoredBy: 'staff' });
+  assert.equal(first.success, true); assert.equal(first.archive.shared, true); assert.deepEqual(g.renamed, []);
+  assert.equal(g.f.state.users[uid], undefined); assert.deepEqual(g.f.state.users[other].roles, [g.secondRole]);
+  assert.deepEqual([...g.f.member.roles.cache.keys()], [originalRole]); assert.deepEqual([...g.second.roles.cache.keys()], ['quarantine']);
+  assert(g.permissionWrites.some(([id, values]) => id === uid && values.ViewChannel === false));
+  assert.equal(g.f.state.archivedRooms[0].memberId, uid);
+  const last = await g.release.restoreQuarantinedMember(g.f.guild, g.second, { restoredBy: 'staff' });
+  assert.equal(last.success, true); assert.equal(last.archive.shared, false); assert.equal(g.renamed.length, 1);
+  assert.equal(Object.keys(g.f.state.users).length, 0); assert.equal(g.f.state.archivedRooms.length, 2);
+  assert.deepEqual([...g.second.roles.cache.keys()], [g.secondRole]);
+  for (const failure of ['isolation', 'roles']) {
+    const partial = await groupFixture(failure);
+    assert.equal(partial.result.success, false); assert.equal(partial.result.retained, true);
+    assert.deepEqual(partial.f.state.users[uid].roles, [originalRole]); assert.deepEqual(partial.f.state.users[other].roles, [partial.secondRole]);
+    assert.equal(partial.release.isQuarantineReleaseInProgress(partial.f.guild.id, uid), false);
+    assert.equal(partial.release.isQuarantineReleaseInProgress(partial.f.guild.id, other), false);
+  }
+  const denied = await groupFixture('hierarchy'); assert.equal(denied.result.success, false); assert.equal(denied.result.retained, false);
+  assert.equal(denied.f.mutations.length, 0); assert.equal(Object.keys(denied.f.state.users).length, 0);
+}
+
+// Legacy resolution cannot reconstruct already-removed roles or create a fresh room.
+{
+  const f = fixture();
+  delete f.state.users[uid];
+  const session = { state: 'quarantined', quarantineChannelId: 'legacy' };
+  const noMutation = () => { throw Error('Legacy audit attempted a mutation'); };
+  const verificationApi = load('src/modules/securityStudio/verification/verificationQuarantine.js', {
+    './verificationStore': { getSession: () => session, getVerificationSection: () => ({ sessions: { [uid]: session } }), normalizeSettings: () => ({ roles: {} }), upsertSession: noMutation, addSecurityHistory: noMutation },
+    '../../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
+    '../../../core/guild/guildManager': { isModuleEnabled: () => true },
+    '../../../core/security/protection/quarantine/state': stateApi,
+    '../../../core/security/protection/quarantine': { ...f.api, quarantineMember: noMutation },
+  });
+  assert.equal((await verificationApi.ensureQuarantineCase(f.guild, f.member)).needsReview, true);
+  for (const action of ['release', 'reject', 'escalate']) assert.equal((await verificationApi.resolveQuarantineCase(f.guild, uid, action, 'staff')).needsReview, true);
+  assert.equal((await verificationApi.escalateToModHub(f.guild, f.member, 'staff')).needsReview, true);
+  assert.equal(verificationApi.auditLegacyQuarantineSessions(f.guild.id).needsReview, 1);
+  assert.equal(f.mutations.length, 0);
+}
+// Evidence-backed legacy adoption: persist originals, reuse room, never grant them.
+{
+  const priorMode = process.env.BOT_MODE;
+  process.env.BOT_MODE = 'DEV';
+  try {
+    const qid = '444444444444444444', roomId = '555555555555555555';
+    const input = { userId: uid, roomId, addEventId: 'add', stripEventId: 'strip' };
+    const roleList = ids => ids.map(id => ({ id }));
+    const history = [
+      { guildId: 'guild', eventId: 'add', type: 'member.roles.update', timestamp: '2026-10-23T23:04:38.450Z', before: { roles: roleList([originalRole]) }, after: { roles: roleList([originalRole, qid]) } },
+      { guildId: 'guild', eventId: 'strip', type: 'member.roles.update', timestamp: '2026-10-23T23:04:38.784Z', before: { roles: roleList([originalRole, qid]) }, after: { roles: roleList([qid]) } },
+    ];
+    async function run(change = () => {}, containmentSuccess = true) {
+      const f = fixture();
+      delete f.state.users[uid]; f.state.roleId = qid;
+      f.role.id = qid; f.role.name = 'Goliath Quarantine'; f.role.permissions = new PermissionsBitField();
+      f.guild.roles.cache.delete('quarantine'); f.guild.roles.cache.set(qid, f.role);
+      f.member.roles.cache = new Collection([[qid, f.role]]);
+      const room = { id: roomId, guild: f.guild, type: ChannelType.GuildText, permissionOverwrites: { cache: new Collection([[f.guild.id, { deny: new PermissionsBitField([P.ViewChannel]) }]]) } };
+      f.guild.channels.fetch = async () => room;
+      const section = { settings: { roles: { quarantine: [qid] } }, sessions: { [uid]: { state: 'quarantined', quarantineChannelId: roomId, quarantinedAt: '2026-10-23T23:04:39.062Z' } } };
+      const evidence = structuredClone(history);
+      let locked = false, enforcement = 0, saves = 0;
+      change({ f, section, evidence, room });
+      const engine = { ...f.api, tryBeginQuarantineOperation: () => { if (locked) return false; locked = true; return true; }, endQuarantineOperation: () => { locked = false; },
+        saveQuarantineState: (g, state) => { saves++; f.api.saveQuarantineState(g, state); },
+        enforceQuarantineOnMember: async (member, options) => {
+          enforcement++; assert.equal(locked, false); assert.equal(member.id, uid); assert.equal(options.existingRoomOnly, true);
+          assert.deepEqual(f.state.users[uid].roles, [originalRole]);
+          assert.equal(f.state.users[uid].interviewChannelId, roomId); assert.equal(f.state.users[uid].autoRelease, false);
+          assert.equal(f.state.users[uid].expiresAt, null);
+          return { success: containmentSuccess, verification: { success: containmentSuccess } };
+        } };
+      const api = load('src/modules/securityStudio/verification/verificationQuarantine.js', {
+        './verificationStore': { getVerificationSection: () => section, getSession: () => section.sessions[uid], normalizeSettings: s => s,
+          upsertSession: (g, u, patch) => Object.assign(section.sessions[u], patch), addSecurityHistory: () => {} },
+        '../../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
+    '../../../core/guild/guildManager': {}, '../../../core/security/protection/quarantine/state': stateApi,
+        '../../../core/security/protection/quarantine': engine,
+        '../../../owner/auditIntelligence/auditStore': { getUser: () => ({ roleHistory: evidence }) },
+      });
+      const result = await api.reconcileLegacyQuarantine(f.guild, input);
+      assert.equal(locked, false); assert.equal(f.mutations.length, 0, 'Adoption must not grant or remove roles');
+      return { result, f, saves, enforcement, section, api };
+    }
+    const success = await run(); assert.equal(success.result.ok, true); assert.equal(success.saves, 1); assert.equal(success.enforcement, 1);
+    assert.equal(success.section.sessions[uid].moderationIsolationMode, 'investigation');
+    assert.equal(success.section.sessions[uid].state, 'quarantined');
+    const saved = JSON.stringify(success.f.state);
+    assert.equal((await success.api.reconcileLegacyQuarantine(success.f.guild, input)).ok, false);
+    assert.equal(JSON.stringify(success.f.state), saved, 'Retries must never overwrite originals');
+    for (const change of [
+      ({ evidence }) => { evidence.pop(); },
+      ({ evidence }) => { evidence[0].guildId = 'other'; },
+      ({ evidence }) => { evidence[0].before.roles = null; },
+      ({ evidence }) => { evidence[1].before.roles = roleList([qid]); },
+      ({ evidence }) => { evidence[1].timestamp = '2026-10-22T00:00:00Z'; },
+      ({ section }) => { section.sessions[uid].state = 'verified'; },
+      ({ section }) => { section.sessions[other] = { quarantineChannelId: roomId }; },
+      ({ section }) => { section.settings.roles.quarantine = [qid, originalRole]; },
+      ({ f }) => { f.state.users[other] = { interviewChannelId: roomId }; },
+      ({ f }) => { f.member.roles.cache.set(originalRole, { id: originalRole }); },
+      ({ f }) => { f.guild.channels.fetch = async () => { throw Error('network unavailable'); }; },
+      ({ room }) => { room.permissionOverwrites.cache.clear(); },
+    ]) {
+      const rejected = await run(change); assert.equal(rejected.result.ok, false); assert.equal(rejected.saves, 0); assert.equal(rejected.enforcement, 0);
+    }
+    const failed = await run(() => {}, false); assert.equal(failed.result.ok, false); assert.equal(failed.result.adopted, true);
+    assert.deepEqual(failed.f.state.users[uid].roles, [originalRole], 'Containment failure must retain the evidence-backed snapshot');
+    process.env.BOT_MODE = 'BETA';
+    assert.equal((await success.api.reconcileLegacyQuarantine(success.f.guild, input)).ok, false);
+  } finally { if (priorMode === undefined) delete process.env.BOT_MODE; else process.env.BOT_MODE = priorMode; }
+}
+// Maintenance is consumed only by the DEV collector from a local DEV request.
+{
+  for (const [mode, targetMode, requestedFrom, requestedBy, allowed] of [
+    ['DEV', 'DEV', 'DEV', 'local-dev-maintenance', true],
+    ['BETA', 'BETA', 'DEV', 'local-dev-maintenance', false],
+    ['DEV', 'DEV', 'PRODUCTION', 'local-dev-maintenance', false],
+    ['DEV', 'DEV', 'DEV', uid, false],
+  ]) {
+    let calls = 0, outcome;
+    const command = { id: 'test', action: 'legacy-quarantine-reconcile', guildId: 'guild', targetMode, requestedFrom, requestedBy, payload: { userId: uid } };
+    const controls = load('src/events/client/sentinelControlCenter.js', {
+      '../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
+      '../../owner/sentinel/eventPipeline': {}, '../../core/security/protection/core': {},
+      '../../modules/securityStudio/verification/verificationQuarantine': { reconcileLegacyQuarantine: async (guild, payload) => { calls++; assert.equal(payload.userId, uid); return { ok: true }; } },
+    }, '\nmodule.exports.processRemote = processRemote;');
+    await controls.processRemote({ guilds: { cache: new Collection([['guild', { id: 'guild' }]]) } });
+    assert.equal(calls, allowed ? 1 : 0); assert.equal(outcome.ok, allowed);
+  }
+}
+// Effective permission checks include threads, fresh roles and the authorised room.
+{
+  const f = fixture();
+  const access = (id, permissions) => ({ id, name: id, type: ChannelType.GuildText, permissionsFor: () => new PermissionsBitField(permissions) });
+  const room = access('room', [P.ViewChannel, P.SendMessages, P.ReadMessageHistory]);
+  const outside = access('outside', []);
+  f.guild.channels.cache = new Collection([[room.id, room], [outside.id, outside]]);
+  f.guild.channels.fetch = async () => f.guild.channels.cache;
+  let threads = new Collection();
+  f.guild.channels.fetchActiveThreads = async () => ({ threads });
+  const isolationApi = load(base + 'isolation.js', { './state': f.api, './roleManager': {} });
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, true);
+  threads.set('thread', access('thread', [P.ViewChannel]));
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).leaks[0].channelId, 'thread');
+  threads.clear();
+  room.permissionsFor = () => new PermissionsBitField([P.ViewChannel]);
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, false);
+  room.permissionsFor = () => new PermissionsBitField([P.ViewChannel, P.SendMessages, P.ReadMessageHistory]);
+  f.guild.channels.fetchActiveThreads = async () => { throw Error('Thread inventory unavailable'); };
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, false);
+  f.guild.channels.fetchActiveThreads = async () => ({ threads });
+  f.guild.channels.fetch = async () => { throw Error('Channel inventory unavailable'); };
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, false);
+  assert.equal((await isolationApi.syncQuarantineIsolation(f.guild, { role: f.role })).success, false);
+  assert.equal((await isolationApi.restoreMemberViewAllows(f.guild, uid, ['uncached'])).failed.length, 1);
+  f.guild.channels.fetch = async () => { throw Object.assign(Error('Deleted'), { code: 10003 }); };
+  assert.equal((await isolationApi.restoreMemberViewAllows(f.guild, uid, ['deleted'])).failed.length, 0);
+}
+// Execute the real release transaction, permission preflight and shared operation guard.
+{
+  const f = fixture();
+  const roleApi = load(base + 'memberLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './investigationRooms': {}, '../../../../owner/dev/DevOverrideManager': {}, '../core': {} });
+  const releaseApi = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role }, './memberLifecycle': roleApi,
+    './isolation': { restoreMemberViewAllows: async () => ({ restored: [], failed: [] }), recontainMemberViewAllows: async () => ({ contained: [], failed: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    '../../../../modules/securityStudio/verification/verificationQuarantine': { reconcileModerationRelease: async () => ({ ok: true }) },
+  });
+  f.state.users[uid].roles = undefined;
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  f.state.users[uid].roles = [null];
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  f.state.users[uid].roles = [originalRole];
+  f.state.users[uid].mode = 'security';
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  assert.equal(f.mutations.length, 0);
+  f.state.users[uid].mode = 'investigation';
+  f.state.users[other] = { memberId: other, mode: 'investigation', roles: [originalRole], interviewChannelId: 'room' };
+  const sharedRelease = await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' });
+  assert.equal(sharedRelease.success, false); assert.equal(sharedRelease.needsReview, true);
+  assert.equal(f.mutations.length, 0, 'Shared room conflict must be detected before restoring roles');
+  assert.deepEqual(f.state.users[uid].roles, [originalRole]); assert.deepEqual(f.state.users[other].roles, [originalRole]);
+  f.state.users[uid].autoRelease = true; f.state.users[uid].expiresAt = 1;
+  const sharedAbsent = await releaseApi.clearExpiredAbsentMember(f.guild, uid, f.state);
+  assert.equal(sharedAbsent.success, false); assert.equal(sharedAbsent.needsReview, true);
+  assert.equal(f.mutations.length, 0, 'Absent member cleanup must preserve both shared snapshots');
+  f.state.users[uid].previousInterviewChannelId = 'old-room';
+  f.state.users[other].interviewChannelId = 'old-room';
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).needsReview, true, 'Previous room links must also block unsafe release');
+  delete f.state.users[uid].previousInterviewChannelId;
+  delete f.state.users[uid].autoRelease; delete f.state.users[uid].expiresAt;
+  delete f.state.users[other];
+  f.guild.roles.cache.get(originalRole).position = 20;
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  assert.equal(f.mutations.length, 0);
+  f.guild.roles.cache.get(originalRole).position = 2;
+  delete f.state.users[uid].interviewChannelId;
+  let unblock, entered;
+  const gate = new Promise(resolve => { unblock = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  const set = f.member.roles.set;
+  f.member.roles.set = async ids => { entered(); await gate; return set(ids); };
+  const pending = releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' });
+  await started;
+  assert.equal(releaseApi.isQuarantineReleaseInProgress(f.guild.id, uid), true);
+  assert.equal(releaseApi.tryBeginQuarantineOperation(f.guild.id, uid), false);
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).busy, true);
+  unblock();
+  assert.equal((await pending).success, true);
+  assert.deepEqual(f.mutations, [['roles', originalRole]]);
+  assert.equal(f.state.users[uid], undefined);
+  assert.equal(releaseApi.isQuarantineReleaseInProgress(f.guild.id, uid), false);
+}
+// Partial channel restoration rolls back and preserves every original-role record.
+{
+  const f = fixture({ memberViewAllowRestores: ['outside'] });
+  const original = JSON.stringify(f.state.users[uid]);
+  const releaseApi = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role },
+    './memberLifecycle': { getRestorableRoleIds: async () => ({ restored: [originalRole], skipped: [] }) },
+    './isolation': { restoreMemberViewAllows: async () => ({ restored: ['outside'], failed: [{ channelId: 'blocked' }] }), recontainMemberViewAllows: async () => ({ contained: ['outside'], failed: [] }), verifyMemberContainment: async () => ({ success: true }) },
+  });
+  const result = await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' });
+  assert.equal(result.success, false);
+  assert.equal(result.rollback.verification.success, true);
+  assert.deepEqual(f.mutations, [['roles', originalRole], ['roles', 'quarantine']]);
+  assert.equal(JSON.stringify(f.state.users[uid]), original);
+  assert.equal((await releaseApi.clearExpiredAbsentMember(f.guild, uid, f.state)).cleared, false);
+}
+// Startup, scheduled expiry and rejoin enforcement share the same explicit release policy.
+{
+  const f = fixture({ expiresAt: 1, autoRelease: false });
+  const original = JSON.stringify(f.state.users[uid].roles);
+  let restored = 0, cleared = 0, roomCalls = 0, syncingFails = false, locked = false;
+  const recovery = load(base + 'enforcementRecovery.js', { './state': f.api, '../../../../owner/auditIntelligence/auditIntelligence': {},
+    './roleManager': { ensureQuarantineRole: async () => f.role },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: !syncingFails, memberViewAllowRestores: ['outside'] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { ensureInvestigationRoomForSnapshot: async () => { roomCalls++; return { id: 'room' }; } },
+    './releaseLifecycle': { tryBeginQuarantineOperation: () => { if (locked) return false; locked = true; return true; }, endQuarantineOperation: () => { locked = false; }, restoreQuarantinedMember: async () => { restored++; return { success: true }; }, clearExpiredAbsentMember: async () => { cleared++; return { success: true }; }, retryPendingInvestigationRoomCleanups: async () => ({ checked: 0, archived: 0, failed: 0 }) },
+  });
+  assert.equal((await recovery.recoverGuildQuarantine(f.guild)).reapplied, 1);
+  assert.equal(restored, 0);
+  assert.equal(JSON.stringify(f.state.users[uid].roles), original);
+  assert.equal((await recovery.enforceQuarantineOnMember(f.member)).success, true); // Rejoin / role recovery.
+  assert.equal(roomCalls, 2);
+  locked = true;
+  assert.equal((await recovery.enforceQuarantineOnMember(f.member)).busy, true);
+  locked = false; syncingFails = true;
+  assert.equal((await recovery.enforceQuarantineOnMember(f.member)).success, false);
+  assert.deepEqual(f.state.users[uid].memberViewAllowRestores, ['outside']);
+  assert.equal(locked, false);
+  const client = { guilds: { cache: new Collection([[f.guild.id, f.guild]]) } };
+  assert.equal((await recovery.restoreExpiredQuarantines(client)).checked, 0);
+  f.guild.members.fetch = async () => { throw Object.assign(Error('Unknown Member'), { code: 10007 }); };
+  await recovery.recoverGuildQuarantine(f.guild);
+  assert.equal(cleared, 0);
+  f.state.users[uid].autoRelease = true;
+  assert.equal((await recovery.recoverGuildQuarantine(f.guild)).restored, 1);
+  assert.equal(cleared, 1);
+  f.guild.members.fetch = async () => { throw Error('Discord unavailable'); };
+  await assert.rejects(recovery.recoverGuildQuarantine(f.guild), /Discord unavailable/);
+  assert.equal(cleared, 1);
+  f.guild.members.fetch = async () => f.member;
+  assert.equal((await recovery.recoverGuildQuarantine(f.guild)).restored, 1);
+  assert.equal(restored, 1);
+}
+// Simultaneous initial quarantine requests cannot snapshot stripped roles or create two rooms.
+{
+  const f = fixture();
+  f.guild.client = { user: { id: 'bot' } };
+  const cases = [];
+  delete f.state.users[uid];
+  f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+  let unblock, entered, created = 0;
+  const gate = new Promise(resolve => { unblock = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
+    '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
+    './roleManager': { ensureQuarantineRole: async () => { entered(); await gate; return f.role; } },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { createInvestigationRoom: async () => { created++; return { id: 'room' }; } }, './releaseLifecycle': locks,
+    '../../../administration/mod/storage': { getCaseById: () => null, getCasesForUser: () => cases, createCase: input => { const record = { ...input, caseId: 42 }; cases.push(record); return record; } },
+  });
+  const pending = lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff' });
+  await started;
+  assert.equal((await lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff' })).busy, true);
+  unblock();
+  assert.equal((await pending).success, true);
+  assert.equal(created, 1);
+  assert.deepEqual(f.state.users[uid].roles, [originalRole]);
+  assert.equal(cases.length, 1); assert.equal(cases[0].metadata.interviewChannelId, 'room');
+  assert.equal(f.state.users[uid].caseId, 42, 'A new quarantine must be linked to its moderation case');
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, uid), false);
+}
+// Failed room creation occurs before roles change; original roles must not be rewritten.
+{
+  const f = fixture(); delete f.state.users[uid];
+  f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
+    '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
+    './roleManager': { ensureQuarantineRole: async () => f.role },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { createInvestigationRoom: async () => { throw Error('Selected member is already quarantined'); } }, './releaseLifecycle': locks,
+  });
+  const result = await lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff', invitationSelection: true });
+  assert.equal(result.success, false); assert.match(result.error, /already quarantined/);
+  assert.equal(f.mutations.length, 0, 'A failed invitation must never rewrite original roles');
+  assert.equal(f.state.users[uid], undefined);
+}
+// The moderator chooses individual members and roles before quarantine begins.
+{
+  const f = fixture(); delete f.state.users[uid];
+  const invitee = '444444444444444444', roleId = '555555555555555555';
+  const actor = { id: other }; f.guild.members.fetch = async () => actor;
+  const replies = [], locks = [], calls = [], groupCalls = [];
+  const controls = load('src/core/administration/mod/quarantineInteractions.js', {
+    '../../../core/ui/interactionResponse': { safeReply: async (i, p) => { replies.push(p); return true; }, safeEditReply: async (i, p) => { replies.push(p); return true; } },
+    './permissions': { canUseModAction: () => true, requireModeratableTarget: async () => f.member, recordModerationSystemEvent: () => {} },
+    './storage': {}, './panel': {}, './investigationAccess': {},
+    '../../security/protection/quarantine': { ...f.api, quarantineInvestigationMembers: async (guild, ids, options) => { groupCalls.push({ ids, options }); return { success: false, reason: 'fixture stop' }; }, tryBeginQuarantineOperation: (g, id) => { locks.push(['begin', id]); return true; }, endQuarantineOperation: (g, id) => locks.push(['end', id]), quarantineMember: async (g, member, options) => { calls.push(options); return { success: false, reason: 'fixture stop' }; } },
+  });
+  const baseInteraction = { guild: f.guild, user: { id: other }, isModalSubmit: () => true, deferReply: async function (options) { assert.equal(options.flags, 64); this.deferred = true; }, fields: { getTextInputValue: () => 'Review request' }, customId: `mod_submit_quarantine_investigation:${uid}` };
+  await controls.handleQuarantineInteraction(baseInteraction);
+  assert.equal(calls.length, 0, 'A reason submission must not create an investigation yet');
+  assert.equal(baseInteraction.deferred, true, 'The setup must use a private reply rather than update the shared panel');
+  const prompt = replies.at(-1); assert.equal(prompt.flags, 64); assert.equal(prompt.components.length, 4);
+  const token = prompt.components[3].components[0].data.custom_id.split(':')[1];
+  const createInteraction = (action, extras = {}) => ({ customId: `mod_invroom_invite_${action}:${token}`, guild: f.guild, user: { id: other },
+    isButton: () => ['start', 'cancel'].includes(action), isUserSelectMenu: () => action === 'users', isRoleSelectMenu: () => action === 'roles',
+    deferUpdate: async function () { this.deferred = true; }, editReply: async p => { replies.push(p); }, ...extras });
+  await controls.handleQuarantineInteraction(createInteraction('start', { user: { id: invitee } }));
+  assert.equal(calls.length, 0, 'Other users cannot use this moderator’s setup');
+  await controls.handleQuarantineInteraction(createInteraction('users', { values: [invitee] }));
+  await controls.handleQuarantineInteraction(createInteraction('roles', { values: [roleId],
+    customId: `mod_invroom_invite_roles:${token}|grole|select|0`, __goliathLegacyRoleBase: `mod_invroom_invite_roles:${token}` }));
+  const selection = replies.at(-1); selection.components.forEach(row => row.toJSON());
+  assert(selection.content.includes('1 selected'));
+  await controls.handleQuarantineInteraction(createInteraction('start'));
+  assert.equal(calls.length, 1); assert.equal(calls[0].reason, 'Review request');
+  assert.deepEqual(calls[0].invitedUserIds, [invitee]); assert.deepEqual(calls[0].invitedRoleIds, [roleId]); assert.equal(calls[0].invitationSelection, true);
+  assert.deepEqual(locks, [], 'Invitation setup delegates locking to the shared quarantine engine');
+  await controls.handleQuarantineInteraction(createInteraction('start')); assert.equal(calls.length, 1, 'Setup cannot be reused to create another room');
+  await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
+  const secondToken = replies.at(-1).components[3].components[0].data.custom_id.split(':')[1];
+  const emptyStart = createInteraction('start', { customId: `mod_invroom_invite_start:${secondToken}` });
+  await controls.handleQuarantineInteraction(emptyStart);
+  assert.equal(calls.length, 2); assert.deepEqual(calls[1].invitedUserIds, []); assert.deepEqual(calls[1].invitedRoleIds, []);
+  await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
+  const cancelToken = replies.at(-1).components[3].components[0].data.custom_id.split(':')[1];
+  await controls.handleQuarantineInteraction(createInteraction('cancel', { customId: `mod_invroom_invite_cancel:${cancelToken}` }));
+  assert.equal(calls.length, 2, 'Cancelling must not open an investigation');
+  await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
+  const groupToken = replies.at(-1).components[3].components[0].data.custom_id.split(':')[1];
+  await controls.handleQuarantineInteraction(createInteraction('subjects', { isUserSelectMenu: () => true, values: [roleId], customId: `mod_invroom_invite_subjects:${groupToken}` }));
+  await controls.handleQuarantineInteraction(createInteraction('users', { values: [invitee], customId: `mod_invroom_invite_users:${groupToken}` }));
+  await controls.handleQuarantineInteraction(createInteraction('start', { customId: `mod_invroom_invite_start:${groupToken}` }));
+  assert.equal(groupCalls.length, 1); assert.deepEqual(groupCalls[0].ids, [uid, roleId]);
+  assert.deepEqual(groupCalls[0].options.invitedUserIds, [invitee]); assert.equal(calls.length, 2, 'Group setup must use the multi-member engine');
+
+
+}
+// Selected roles never give another quarantined member access to this room.
+{
+  const f = fixture(), invitee = '444444444444444444', roleId = '555555555555555555';
+  f.state.users[other] = { memberId: other, roles: [originalRole], interviewChannelId: 'other-room' };
+  f.guild.roles.cache.set(roleId, { id: roleId, permissions: new PermissionsBitField(), mentionable: true });
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
+  const verificationSessions = {};
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' },
+    '../../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: verificationSessions }) },
+    './isolation': { investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }) } });
+  const options = { invitationSelection: true, invitedUserIds: [invitee], invitedRoleIds: [roleId], protectedCaseIds: [other] };
+  const overwrites = await rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options);
+  assert(overwrites.find(entry => entry.id === invitee).allow.includes(P.ViewChannel));
+  assert(overwrites.find(entry => entry.id === roleId).allow.includes(P.ViewChannel));
+  assert(overwrites.find(entry => entry.id === other).deny.includes(P.ViewChannel));
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedUserIds: [other] }), /already quarantined/);
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedRoleIds: [f.guild.id] }), /everyone/);
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedRoleIds: [f.role.id] }), /quarantine/);
+  f.guild.members.fetch = async ({ user }) => { if (!user) return new Collection(); if (user === other) throw Error('Member lookup unavailable'); return { id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }; };
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /lookup unavailable/);
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField(user === other ? [P.Administrator] : []) }) : new Collection();
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /administrator access/);
+  f.guild.members.fetch = async ({ user }) => { if (!user) return new Collection(); if (user === other) throw Object.assign(Error('Unknown Member'), { code: 10007 }); return { id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }; };
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /could not be checked/);
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, ...(user === other ? {} : { permissions: new PermissionsBitField() }) }) : new Collection();
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /could not be checked/);
+
+  assert.deepEqual(f.state.users[other].roles, [originalRole]);
+  verificationSessions[invitee] = { state: 'quarantined', quarantineChannelId: 'legacy-room' };
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /already quarantined/, 'Legacy verification isolation must also block invitations');
+  delete verificationSessions[invitee];
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection(user === invitee ? [[f.role.id, f.role]] : []) }, permissions: new PermissionsBitField() }) : new Collection();
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /already quarantined/, 'A quarantine role must never be bypassed when the shared snapshot is missing');
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
+  verificationSessions['666666666666666666'] = { state: 'quarantined', quarantineChannelId: 'legacy-room' };
+  const legacyProtected = await rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedUserIds: [], protectedCaseIds: [other, '666666666666666666'] });
+  assert(legacyProtected.find(entry => entry.id === '666666666666666666').deny.includes(P.ViewChannel), 'Legacy verification cases must also be contained against invited roles');
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection([['orphan', { id: '777777777777777777', roles: { cache: new Collection([[f.role.id, f.role]]) } }]]);
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedUserIds: [], protectedCaseIds: [other, '666666666666666666'] }), /no linked case/);
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
+  const pings = [], writes = [];
+  f.guild.members.me.permissions = new PermissionsBitField();
+  const channel = { guild: f.guild, permissionsFor: () => new PermissionsBitField(), send: async p => pings.push(p), permissionOverwrites: { edit: async id => writes.push(id) } };
+  await rooms.notifyInvestigationManagement(channel, uid, null, options);
+  assert.deepEqual(writes, [], 'Selected role invitations must not grant additional unselected roles');
+  assert.deepEqual(pings[0].allowedMentions.roles, [roleId]); assert.deepEqual(pings[0].allowedMentions.users, [invitee]);
+  assert(pings[0].content.includes('Investigation room invitation'));
+}
+// Temporary denies are tracked while cases are locked and removed only after release.
+{
+  const f = fixture(); delete f.state.users[uid];
+  f.state.users[other] = { memberId: other, mode: 'investigation', roles: [originalRole], interviewChannelId: 'other-room' };
+  f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  let protectedDuringCreation = false;
+  f.guild.client = { user: { id: 'bot' } };
+  const selectedInvitee = '777777777777777777';
+  const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
+    '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
+    './roleManager': { ensureQuarantineRole: async () => f.role },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { getOtherIsolatedMemberIds: () => [other], createInvestigationRoom: async (g, m, role, opts) => {
+      protectedDuringCreation = locks.isQuarantineReleaseInProgress(g.id, other) && locks.isQuarantineReleaseInProgress(g.id, selectedInvitee);
+      assert.deepEqual(opts.protectedCaseIds, [selectedInvitee, other]); return { id: 'room', __protectedInvestigationMembers: [other] };
+    } }, './releaseLifecycle': locks,
+    '../../../administration/mod/storage': { getCaseById: () => null, getCasesForUser: () => [], createCase: () => ({ caseId: 43 }) },
+  });
+  assert.equal(locks.tryBeginQuarantineOperation(f.guild.id, other), true);
+  const busy = await lifecycle.quarantineMember(f.guild, f.member, { invitationSelection: true, invitedRoleIds: [originalRole], invitedUserIds: [selectedInvitee] });
+  assert.equal(busy.success, false); assert.match(busy.error, /being updated/); assert.equal(f.mutations.length, 0);
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, selectedInvitee), false, 'Partial locks must be released after a failure');
+  locks.endQuarantineOperation(f.guild.id, other);
+  assert.equal((await lifecycle.quarantineMember(f.guild, f.member, { invitationSelection: true, invitedRoleIds: [originalRole], invitedUserIds: [selectedInvitee] })).success, true);
+  assert(protectedDuringCreation); assert.deepEqual(f.state.users[uid].protectedInvitationMembers, [other]);
+  assert.equal(f.state.users[uid].caseId, 43, 'Invited investigations must be linked to their moderation case');
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, other), false);
+  const deleted = [];
+  const channel = { id: 'room', permissionOverwrites: { cache: new Collection([[other, { allow: { bitfield: 0n }, deny: { bitfield: P.ViewChannel } }]]), delete: async id => deleted.push(id) } };
+  f.guild.channels.cache.set('room', channel);
+  f.guild.channels.fetch = async () => channel;
+  const cleanup = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {},
+    '../../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
+  assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).cleaned, 0, 'An active case retains the isolation deny');
+  delete f.state.users[other];
+  assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).cleaned, 1);
+  assert.deepEqual(deleted, [other]); assert.deepEqual(f.state.users[uid].protectedInvitationMembers, []);
+  f.state.users[uid].protectedInvitationMembers = [other];
+  channel.permissionOverwrites.cache.set(other, { allow: { bitfield: P.SendMessages }, deny: { bitfield: P.ViewChannel } });
+  await cleanup.cleanupReleasedInvitationDenies(f.guild, other);
+  assert.deepEqual(deleted, [other], 'Manually changed overwrites must never be deleted');
+  f.state.users[uid].protectedInvitationMembers = [other];
+  channel.permissionOverwrites.cache.set(other, { allow: { bitfield: 0n }, deny: { bitfield: P.ViewChannel } });
+  channel.permissionOverwrites.delete = async () => { throw Error('temporary failure'); };
+  assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).failed, 1);
+  assert.deepEqual(f.state.users[uid].protectedInvitationMembers, [other], 'Failed cleanups must remain available for restart recovery');
+}
+// Concurrent recovery and stale event snapshots must reuse the canonical room.
+{
+  const f = fixture();
+  f.guild.roles.cache = new Collection();
+  f.guild.channels.cache = new Collection();
+  f.guild.channels.cache.find = () => null;
+  let creates = 0;
+  const channel = { id: 'replacement', guild: f.guild, type: ChannelType.GuildText, permissionOverwrites: { edit: async () => {} }, send: async () => {} };
+  f.guild.channels.create = async options => { if (options.type === ChannelType.GuildText) { creates++; await Promise.resolve(); } return { ...channel, id: options.type === ChannelType.GuildCategory ? 'category' : channel.id, name: options.name }; };
+  f.guild.channels.fetch = async id => { if (!id) return f.guild.channels.cache; throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  const rooms = load(base + 'investigationRooms.js', { '../../../administration/mod/permissions': { canUseModAction: () => false }, './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) } });
+  const stale = structuredClone(f.state.users[uid]);
+  const repaired = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale)]);
+  assert.equal(creates, 1);
+  assert.equal(repaired[0].id, repaired[1].id);
+  f.guild.channels.cache.set(channel.id, channel);
+  await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale);
+  assert.equal(creates, 1);
+  f.guild.channels.cache.clear();
+  f.guild.channels.fetch = async id => { if (!id) return f.guild.channels.cache; throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  await assert.rejects(rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale, { existingRoomOnly: true }), /cannot create a replacement/);
+  assert.equal(creates, 1, 'Legacy adoption must never create a replacement room');
+  f.guild.channels.fetch = async () => { throw Error('Discord unavailable'); };
+  await assert.rejects(rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), /Discord unavailable/);
+  assert.equal(creates, 1);
+  delete f.state.users[uid];
+  assert.equal(await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), null);
+}
+// A missing shared room is recreated once, updates every active subject, and
+// does not grant an absent subject access until their member rejoin is handled.
+{
+  const f = fixture(), groupId = 'new-case-group';
+  f.state.users[uid].investigationGroupId = groupId; f.state.users[uid].investigationMemberIds = [uid, other];
+  f.state.users[uid].invitationSelection = true;
+  f.state.users[other] = { ...structuredClone(f.state.users[uid]), memberId: other };
+  const second = { id: other, roles: { cache: new Collection([[f.role.id, f.role]]) }, permissions: new PermissionsBitField() };
+  let absent = false, creates = 0;
+  f.guild.members.fetch = async ({ user }) => { if (user === other && absent) throw Object.assign(Error('Unknown Member'), { code: 10007 }); return user === other ? second : f.member; };
+  const category = { id: 'category', type: ChannelType.GuildCategory, name: 'Investigations', permissionOverwrites: { edit: async () => {} } };
+  f.guild.channels.cache.set(category.id, category); f.state.investigationCategoryId = category.id;
+  f.guild.channels.fetch = async id => { if (!id) return f.guild.channels.cache; const channel = f.guild.channels.cache.get(id); if (channel) return channel; throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  const payloads = [], edits = [];
+  f.guild.channels.create = async options => {
+    creates++;
+    const room = { id: `replacement-${creates}`, name: 'members', guild: f.guild, permissionOverwrites: { edit: async (id, values) => edits.push([id, values]) },
+      send: async payload => { payloads.push(payload); return { id: `message-${payloads.length}` }; }, initialOverwrites: options.permissionOverwrites };
+    f.guild.channels.cache.set(room.id, room); return room;
+  };
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './releaseLifecycle': locks,
+    './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) },
+    '../../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
+  const pair = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, f.state.users[uid]), rooms.ensureInvestigationRoomForSnapshot(f.guild, second, f.role, f.state.users[other])]);
+  assert.equal(creates, 1); assert.equal(pair[0].id, pair[1].id);
+  assert.equal(f.state.users[uid].interviewChannelId, pair[0].id); assert.equal(f.state.users[other].interviewChannelId, pair[0].id);
+  assert(pair[0].initialOverwrites.find(entry => entry.id === other).allow.includes(P.ViewChannel));
+  assert(payloads.some(payload => payload.components?.some(row => row.components.some(component => component.data.custom_id === `mod_invroom_close:${other}:${pair[0].id}`))), 'Recovered room must contain independent controls for the other subject');
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, `investigation-group:${groupId}`), false);
+  f.guild.channels.cache.delete(pair[0].id); absent = true;
+  const next = await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, f.state.users[uid]);
+  assert.equal(creates, 2); assert.equal(f.state.users[other].interviewChannelId, next.id);
+  assert(!next.initialOverwrites.some(entry => entry.id === other), 'Absent subjects do not receive a new access overwrite');
+  absent = false; await rooms.ensureInvestigationRoomForSnapshot(f.guild, second, f.role, f.state.users[other]);
+  assert(edits.some(([id, values]) => id === other && values.ViewChannel === true), 'Rejoining subject regains their one current room');
+  assert.equal(creates, 2);
+}
+
+// Room controls use fresh authority, keep transcripts private, and never delete an active room.
+{
+  const os = require('node:os');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-room-controls-'));
+  try {
+    const f = fixture();
+    const room = { id: 'room', guild: f.guild, messages: { fetch: async () => new Collection() }, permissionsFor: () => new PermissionsBitField([P.ViewChannel, P.ReadMessageHistory]), delete: async () => { events.push('delete'); } };
+    f.guild.channels.fetch = async () => room;
+    const actor = { id: other, permissions: new PermissionsBitField([P.ManageChannels]) };
+    f.guild.members.fetch = async () => actor;
+    let dmFailure = false, dmSends = [], separateCopies = false, copyNumber = 0;
+    let authorised = true, exportFailure = false, deliveryFailure = false, reuseSaved = false, changedAfterExport = false, checks = 0, events = [], replies = [], restores = 0;
+    const htmlPath = path.join(temp, 'room.html'), jsonPath = path.join(temp, 'room.json');
+    fs.writeFileSync(htmlPath, '<html>record</html>'); fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: f.guild.id, discordChannelId: 'room', creatorId: uid } }));
+    const controls = load('src/core/administration/mod/quarantineInteractions.js', {
+      '../../../core/ui/interactionResponse': { safeReply: async (i, p) => { replies.push(p); return true; }, safeEditReply: async (i, p) => { replies.push(p); return true; } },
+      './permissions': { canUseModAction: () => authorised, recordModerationSystemEvent: () => {}, requireModeratableTarget: async () => f.member },
+      '../../../core/ui/memberNotice': require(root + '/src/core/ui/memberNotice'),
+      './storage': {}, './panel': { refreshDashboard: async () => {} }, './investigationAccess': {},
+      '../../security/protection/quarantine': { ...f.api, restoreQuarantinedMember: async () => { restores++;
+        f.state.archivedRooms = [{ channelId: 'room', memberId: uid, investigationGroupId: f.state.users[uid].investigationGroupId, roomTranscript: f.state.users[uid].roomTranscript }];
+        delete f.state.users[uid];
+        return { success: true, archive: { archived: true, shared: Object.keys(f.state.users).length > 0, channelId: 'room' } }; } },
+      '../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
+      '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { buildTranscriptArchive: (transcript, expected) => {
+        const saved = JSON.parse(fs.readFileSync(transcript.jsonPath));
+        assert.equal(saved.ticket.guildId, expected.guildId); assert.equal(saved.ticket.discordChannelId, expected.channelId); assert.equal(saved.ticket.creatorId, expected.memberId);
+        return Buffer.from('archive');
+      }, checkTranscriptCurrent: async (channel, transcript) => ({ current: ++checks === 1 ? reuseSaved && Boolean(transcript) : !changedAfterExport }), createTranscript: async (client, ticket, options) => {
+        events.push('export'); if (exportFailure) throw Error('export unavailable');
+        assert.equal(ticket.type, 'investigation'); assert.equal(options.requireComplete, true);
+        if (separateCopies) {
+          const html = path.join(temp, `copy-${++copyNumber}.html`), json = path.join(temp, `copy-${copyNumber}.json`);
+          fs.copyFileSync(htmlPath, html); fs.copyFileSync(jsonPath, json);
+          return { htmlPath: html, jsonPath: json, htmlFileName: path.basename(html), jsonFileName: path.basename(json), messageCount: 2, lastMessageId: null };
+        }
+        return { htmlPath, jsonPath, htmlFileName: 'room.html', jsonFileName: 'room.json', messageCount: 2, lastMessageId: null };
+      } },
+    });
+    const click = async (action, channelId = 'room') => {
+      checks = 0;
+      const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: { users: { fetch: async id => { assert.equal(id, uid, 'Transcript DM must target the investigated member'); return { send: async payload => { if (dmFailure) throw Object.assign(Error('DM blocked'), { code: 50007 }); dmSends.push(payload); return { id: `dm-${dmSends.length}`, channelId: 'dm-channel' }; } }; } } }, user: { id: other },
+        isButton: () => true, deferReply: async () => { i.deferred = true; },
+        editReply: async p => { events.push('deliver'); if (deliveryFailure) throw Error('attachment delivery failed'); replies.push(p); return p; } };
+      await controls.handleQuarantineInteraction(i);
+    };
+    await click('delete_confirm'); assert.deepEqual(events, []); assert(replies.at(-1).content.includes('active investigation'));
+    await click('transcript', 'wrong-room'); assert.deepEqual(events, []);
+    authorised = false; await click('transcript'); assert.deepEqual(events, []);
+    authorised = true; await click('transcript'); assert.deepEqual(events, ['export', 'deliver']); assert.equal(replies.at(-1).flags, 64); assert.equal(replies.at(-1).files.length, 2);
+    events = []; await click('close_confirm'); assert.equal(restores, 1); assert.deepEqual(events, ['export', 'deliver']);
+    assert.equal(dmSends.length, 1, 'Closing must DM the saved transcript to the member');
+    assert.equal(dmSends[0].files, undefined, 'The initial DM must not expose an HTML source preview');
+    assert.equal(dmSends[0].components[0].components[0].data.label, 'Download Transcript');
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.messageId, 'dm-1');
+    assert.equal(dmSends[0].embeds[0].data.title, '📁 Your Investigation Transcript');
+    assert(!JSON.stringify(dmSends[0].embeds[0].data).includes('Goliath'));
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, true);
+    // Only an archived room may be deleted, and the transcript must be delivered first.
+    delete f.state.users[uid]; f.state.archivedRooms = [{ channelId: 'room', memberId: uid }];
+    events = []; exportFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export']);
+    events = []; exportFailure = false; deliveryFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver']);
+    events = []; deliveryFailure = false; changedAfterExport = true;
+    await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'deliver'], 'New messages after export must block deletion');
+    changedAfterExport = false;
+    events = []; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'deliver', 'delete']); assert(f.state.archivedRooms[0].deletedAt);
+    assert(f.state.archivedRooms[0].roomTranscript, 'Deletion must retain its transcript record');
+    delete f.state.archivedRooms[0].deletedAt;
+    reuseSaved = true; events = [];
+    await click('delete_confirm');
+    assert.deepEqual(events, ['deliver', 'delete'], 'Unchanged closed rooms must reuse the saved transcript without exporting again');
+    assert(!replies.at(-1).files, 'Reused transcripts must not be sent a second time');
+    const dmCount = dmSends.length;
+    changedAfterExport = true; events = []; await click('delete_confirm');
+    assert.deepEqual(events, ['deliver'], 'A change during reused-transcript deletion must keep the room');
+    await click('delete'); assert.equal(replies.at(-1).components[0].components[0].data.label, 'Confirm Delete');
+    assert.equal(dmSends.length, dmCount, 'An unchanged transcript must not be DMed twice');
+    const confirmation = replies.at(-1);
+    assert.equal(confirmation.embeds[0].data.title, '🗑️ Delete This Room?');
+    assert.equal(confirmation.content, null); assert.deepEqual(confirmation.allowedMentions, { parse: [] });
+    assert(!JSON.stringify(confirmation.embeds[0].data).includes('Goliath'));
+    delete f.state.archivedRooms[0].transcriptDelivery;
+    dmFailure = true; changedAfterExport = false; events = []; await click('delete_confirm');
+    assert(events.includes('delete'), 'Blocked DMs must not remove the saved transcript or prevent an authorised deletion');
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, false);
+    assert(replies.at(-1).embeds[0].data.fields[0].value.includes('could not be delivered'));
+    assert(f.state.archivedRooms[0].roomTranscript);
+    dmFailure = false; delete f.state.archivedRooms[0].transcriptDelivery;
+    fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: 'different-guild', discordChannelId: 'room', creatorId: other } }));
+    await click('delete_confirm'); assert.equal(dmSends.length, dmCount, 'Mismatched transcript ownership must block DM delivery');
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, false);
+
+    // An early-released group member receives only their closure-time copy.
+    const peer = '666666666666666666';
+    f.state.users[uid] = { memberId: uid, mode: 'investigation', roles: [originalRole], interviewChannelId: 'room', investigationGroupId: 'group', investigationMemberIds: [uid, peer] };
+    f.state.users[peer] = { ...structuredClone(f.state.users[uid]), memberId: peer };
+    fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: f.guild.id, discordChannelId: 'room', creatorId: uid } }));
+    separateCopies = true; reuseSaved = false; dmFailure = false; events = [];
+    await click('close_confirm');
+    assert(f.state.users[peer], 'Releasing one subject must leave the other investigation active');
+    const earlyCopy = structuredClone(f.state.archivedRooms[0].roomTranscript);
+    const earlyDmCount = dmSends.length;
+    events = []; await click('delete_confirm'); assert.deepEqual(events, [], 'A released subject’s panel must not delete the other subject’s active room');
+    delete f.state.users[peer]; // Last-subject release itself is exercised by the real engine fixture.
+    events = []; await click('delete_confirm');
+    assert(events.includes('delete')); assert.deepEqual(f.state.archivedRooms[0].roomTranscript, earlyCopy);
+    assert.notEqual(f.state.archivedRooms[0].finalRoomTranscript.jsonPath, earlyCopy.jsonPath);
+    assert.equal(dmSends.length, earlyDmCount, 'Later room messages must not be DMed to a member released earlier');
+
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+}
+// Recipient-only DM downloads remain available after room deletion, without any dashboard authority.
+{
+  const pathId = '/saved/transcript.json';
+  const record = { channelId: originalRole, memberId: uid, deletedAt: Date.now(), roomTranscript: { jsonPath: pathId },
+    transcriptDelivery: { sent: true, recipientId: uid, messageId: 'dm-message', jsonPath: pathId } };
+  let reads = 0, archives = 0;
+  const downloads = load('src/core/administration/mod/quarantineInteractions.js', {
+    '../../../core/ui/interactionResponse': {}, './permissions': {}, './storage': {}, './panel': {}, './investigationAccess': {},
+    '../../security/protection/quarantine': { getQuarantineState: guildId => { reads++; assert.equal(guildId, other); return { archivedRooms: [record] }; } },
+    '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { buildTranscriptArchive: (saved, expected) => { archives++; assert.deepEqual(expected, { guildId: other, channelId: originalRole, memberId: uid }); return Buffer.from('PK ZIP'); } },
+  });
+  const click = async changes => {
+    const replies = [];
+    const interaction = { customId: `inv_transcript_download:${other}:${originalRole}:${uid}`, client: { user: { id: 'bot' } }, user: { id: uid },
+      message: { id: 'dm-message', author: { id: 'bot' } }, isButton: () => true,
+      deferReply: async () => {}, reply: async payload => replies.push(payload), editReply: async payload => replies.push(payload), ...changes };
+    await downloads.handleInvestigationTranscriptDownload(interaction); return replies.at(-1);
+  };
+  assert.equal((await click({ user: { id: other } })).files, undefined); assert.equal(reads, 0);
+  await click({ guildId: other }); assert.equal(reads, 0, 'Guild copies of the control must be denied before reading state');
+  await click({ message: { id: 'dm-message', author: { id: 'impostor' } } }); assert.equal(reads, 0);
+  const payload = await click({}); assert.equal(archives, 1);
+  assert.equal(payload.files[0].name, 'Investigation-Transcript.zip'); assert.deepEqual(payload.allowedMentions, { parse: [] });
+  await click({ message: { id: 'stale-message', author: { id: 'bot' } } }); assert.equal(archives, 1, 'An old/foreign message must not retrieve a transcript');
+  record.transcriptDelivery.jsonPath = '/different/transcript.json'; await click({}); assert.equal(archives, 1);
+  const route = read('src/events/interactions/interactionCreate.js');
+  assert(route.indexOf("customId.startsWith('inv_transcript_download:')") < route.indexOf("customId.startsWith('mod_')"), 'Recipient downloads need their own narrow DM route, not a management dashboard');
+}
+// Shared transcript exporter refuses a truncated history and retains normal ticket output.
+{
+  const os = require('node:os');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-room-transcript-'));
+  try {
+    const message = id => ({ id, author: { id: uid, username: 'Test' }, createdTimestamp: Number(id), createdAt: new Date(Number(id)), content: '<script>alert(1)</script>', attachments: new Collection(), embeds: [] });
+    let older = true;
+    const channel = { id: uid, type: ChannelType.GuildText, name: 'investigation', messages: { fetch: async options => {
+      if (!options.before) return new Collection([['2', message('2')], ['1', message('1')]]);
+      return older ? new Collection([['0', message('0')]]) : new Collection();
+    } } };
+    const guild = { id: other, name: 'Fixture', channels: { fetch: async () => channel } };
+    const transcripts = load('src/modules/feedbackStudio/tickets/ticketsTranscripts.js', {
+      fs, path, '../../../config/runtimePaths': { getRuntimeRoot: () => temp }, './tickets': {},
+    });
+    const ticket = { ticketId: 'investigation-fixture', type: 'investigation', guildId: other, channelId: uid, creatorId: uid };
+    await assert.rejects(transcripts.createTranscript({ guilds: { fetch: async () => guild } }, ticket, { limit: 2, requireComplete: true }), /exceeds the transcript limit/);
+    older = false;
+    const result = await transcripts.createTranscript({ guilds: { fetch: async () => guild } }, ticket, { limit: 2, requireComplete: true });
+    const html = fs.readFileSync(result.htmlPath, 'utf8');
+    assert(html.includes('Investigation Transcript')); assert(!html.includes('<script>alert(1)</script>')); assert.equal(result.messageCount, 2);
+    assert(transcripts.buildHtmlTranscript({ ...ticket, type: 'support' }, transcripts.buildJsonTranscript(ticket, [])).includes('Ticket Transcript'));
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, true);
+    const zip = transcripts.buildTranscriptArchive(result, { guildId: other, channelId: uid, memberId: uid });
+    assert.equal(zip.readUInt32LE(0), 0x04034b50);
+    const fileNameLength = zip.readUInt16LE(26), compressedSize = zip.readUInt32LE(18);
+    assert.equal(zip.subarray(30, 30 + fileNameLength).toString(), 'Investigation-Transcript.html');
+    const original = require('node:zlib').inflateRawSync(zip.subarray(30 + fileNameLength, 30 + fileNameLength + compressedSize));
+    assert.equal(original.toString(), html, 'Downloaded HTML must preserve the original transcript exactly');
+    assert.equal(require('node:zlib').crc32(original), zip.readUInt32LE(14));
+    assert.equal(zip.readUInt32LE(zip.length - 22), 0x06054b50);
+    assert.throws(() => transcripts.buildTranscriptArchive(result, { guildId: other, channelId: uid, memberId: other }), /ownership/);
+
+    const closure = message('3');
+    channel.messages.fetch = async () => new Collection([['3', closure], ['2', message('2')], ['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Added messages require a fresh transcript');
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result, { ignoredMessageIds: ['3'] })).current, true, 'The recorded closure notice alone must not trigger a second export');
+    channel.guild = { client: { user: { id: 'bot' } } };
+    const legacyNotice = { ...message('3'), author: { id: 'bot' }, createdTimestamp: Date.now() + 1000,
+      content: '🔓 **Investigation Closed**\n\nYour investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.' };
+    channel.messages.fetch = async () => new Collection([['3', legacyNotice], ['2', message('2')], ['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result, { allowLegacyClosureNotice: true })).current, true, 'Existing closed rooms should reuse their transcript despite the known closure notice');
+    legacyNotice.author = { id: 'other' };
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result, { allowLegacyClosureNotice: true })).current, false, 'Another author cannot impersonate the bot closure notice');
+    channel.messages.fetch = async () => new Collection([['2', { ...message('2'), content: 'edited evidence' }], ['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Edited messages must be detected');
+    channel.messages.fetch = async () => new Collection([['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Deleted messages must be detected');
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, { ...result, htmlPath: path.join(temp, 'missing.html') })).current, false);
+    channel.messages.fetch = async () => { throw Error('History unavailable'); };
+    await assert.rejects(transcripts.checkTranscriptCurrent(channel, result), /History unavailable/);
+    const human = message('1'), bot = message('2');
+    human.content = `**Evidence**\nHello <@${uid}> and <@&${other}> in <#${originalRole}>\n<script>alert(1)</script>\n[Unsafe](javascript:alert(1))`;
+    human.attachments = new Collection([['file', { id: 'file', name: 'evidence.png', url: 'https://example.com/evidence.png', contentType: 'image/png', size: 2048 }]]);
+    bot.author.bot = true; bot.embeds = [{ title: 'Review', description: '**Important**', fields: [{ name: 'Next steps', value: '• First\n• Second' }] }];
+    const json = transcripts.buildJsonTranscript(ticket, [human, bot], { guildName: 'Example Server', channelName: 'private-review', mentionNames: { users: { [uid]: 'Test Member' }, roles: { [other]: 'Management' }, channels: { [originalRole]: 'rules' } } });
+    assert.equal(json.analytics.userMessages, 1); assert.equal(json.analytics.botMessages, 1); assert.equal(json.analytics.attachments, 1); assert.equal(json.analytics.embeds, 1);
+    assert.equal(json.messages[0].content, human.content, 'Raw conversation content must remain unchanged');
+    const improved = transcripts.buildHtmlTranscript(ticket, json);
+    assert(!improved.includes('Goliath')); assert(!improved.includes('NaN'));
+    assert(improved.includes('<strong>Evidence</strong>')); assert(improved.includes('@Test Member')); assert(improved.includes('@Management')); assert(improved.includes('#rules'));
+    assert(improved.includes('• First\n• Second')); assert(improved.includes('1 Jan 1970') && improved.includes('UTC')); assert(improved.includes('width=device-width')); assert(improved.includes('@media print'));
+    assert(!improved.includes('<script>alert(1)</script>')); assert(!improved.includes('href="javascript:'));
+    assert(improved.includes('id="search"')); assert(improved.includes('Include bot messages')); assert(improved.includes('Server')); assert(improved.includes('Case reference'));
+    const old = structuredClone(json); old.analytics.attachments = null; old.analytics.botMessages = 0;
+    assert(!transcripts.buildHtmlTranscript(ticket, old).includes('NaN'), 'Legacy counter values must not break a rendered transcript');
+
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+}
+// Access/notification roles follow Goliath authority, with explicit mention limits.
+{
+  const f = fixture();
+  f.guild.ownerId = other;
+  f.guild.roles.cache.set('management', { id: 'management', permissions: new PermissionsBitField(), mentionable: true });
+  f.guild.roles.cache.set('unrelated', { id: 'unrelated', permissions: new PermissionsBitField([P.KickMembers]) });
+  const writes = [], sent = [];
+  const room = { id: 'room', guild: f.guild, permissionOverwrites: { edit: async id => writes.push(id) }, send: async payload => sent.push(payload) };
+  const rooms = load(base + 'investigationRooms.js', {
+    './state': f.api, './isolation': { investigationStaffOverwrite: () => ({ ViewChannel: true }) },
+    '../../../administration/mod/permissions': { canUseModAction: member => member.roles.cache.has('management') },
+  });
+  assert.deepEqual(rooms.getInvestigationStaffRoleIds(f.guild), ['management']);
+  await rooms.notifyInvestigationManagement(room, uid);
+  assert.deepEqual(writes, ['management']); assert.deepEqual(sent[0].allowedMentions.roles, ['management']);
+  assert.deepEqual(sent[0].allowedMentions.parse, []); assert.deepEqual(sent[0].allowedMentions.users, [other]);
+  assert.equal(rooms.investigationRoomControls(uid, 'room').components.length, 4);
+}
+// Fresh category creation scans guild naming styles; saved/custom names stay authoritative.
+{
+  const f = fixture();
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} });
+  const categories = names => new Collection(names.map((name, index) => [String(index), { id: String(index), name, type: ChannelType.GuildCategory }]));
+  for (const separator of [' | ', ' : ', ' · ', '|', '┃']) {
+    assert.equal(rooms.matchInvestigationCategoryStyle(categories([`🛡️${separator}Security`, `💎${separator}Vault`, `🎮${separator}Games`])), `🔎${separator}Investigations`);
+  }
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security', '💎 : Vault'])), 'Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['Security', 'Vault'])), 'Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security'])), 'Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security', '💎 | Vault', 'Games'])), '🔎 | Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security', '💎 | Vault', 'Games', 'Chat'])), 'Investigations');
+  let scans = 0, creates = 0;
+  f.guild.channels.fetch = async () => { scans++; f.guild.channels.cache = categories(['🛡️ · Security', '💎 · Vault']); };
+  f.guild.channels.create = async options => { creates++; return { ...options, id: 'created-category', permissionOverwrites: { edit: async () => {} } }; };
+  const savedRoles = [...f.state.users[uid].roles];
+  const created = await rooms.ensureInvestigationCategory(f.guild);
+  assert.equal(created.name, '🔎 · Investigations'); assert.equal(scans, 1); assert.equal(creates, 1);
+  assert.equal(f.state.investigationCategoryName, created.name);
+  assert.deepEqual(f.state.users[uid].roles, savedRoles);
+  created.name = 'Custom Management Rooms'; f.guild.channels.cache.set(created.id, created);
+  await rooms.ensureInvestigationCategory(f.guild);
+  assert.equal(scans, 1, 'Saved categories must not be rescanned/renamed');
+  assert.equal(f.state.investigationCategoryName, 'Custom Management Rooms');
+  f.guild.channels.cache.clear();
+  f.guild.channels.fetch = async () => { throw Error('Guild scan unavailable'); };
+  await assert.rejects(rooms.ensureInvestigationCategory(f.guild), /Guild scan unavailable/);
+  assert.equal(creates, 1, 'Failed scans must never create a duplicate category');
+}
+// Generic room presentation migrates the known old category/panel without touching custom names or history.
+{
+  const f = fixture(); f.state.investigationCategoryId = 'category';
+  const renames = [], edits = [];
+  const parent = { id: 'category', name: 'Goliath Investigations', setName: async name => { renames.push(name); parent.name = name; } };
+  f.guild.client = { user: { id: 'bot' } };
+  const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`mod_invroom_transcript:${uid}:room`).setLabel('Add Staff Note').setStyle(ButtonStyle.Secondary));
+  const panel = {
+    author: { id: 'bot' }, embeds: [{ title: '🔎 Private Investigation Room', description: 'Speak with investigating staff here.', footer: { text: 'Goliath • Private moderation review' }, fields: [{ name: 'Reason', value: 'Original case reason' }] }],
+    components: [{ components: [{ customId: `mod_invroom_transcript:${uid}:room`, label: 'Add Staff Note' }], toJSON: () => row.toJSON() }],
+    edit: async payload => edits.push(payload),
+  };
+  const channel = { id: 'room', parent, messages: { fetch: async () => new Collection([['other', { ...panel, author: { id: 'unrelated-bot' } }], ['panel', panel]]) } };
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} });
+  assert.equal(rooms.cleanCategoryName('Goliath Investigations'), 'Investigations');
+  assert.equal(rooms.cleanCategoryName('Custom Review Rooms'), 'Custom Review Rooms');
+  assert.equal(rooms.cleanChannelName('  Example___Member---  '), 'example-member');
+  assert.equal(rooms.cleanChannelName('💎'), 'member');
+  const roomRenames = [];
+  channel.name = `investigation-undecided4237-${uid.slice(-4)}`;
+  channel.setName = async name => { roomRenames.push(name); channel.name = name; };
+
+  await rooms.refreshInvestigationPresentation(f.guild, channel, uid);
+  assert.deepEqual(renames, ['Investigations']); assert.equal(edits.length, 1);
+  assert.deepEqual(roomRenames, ['undecided4237']);
+  assert.equal(edits[0].embeds[0].data.footer.text, 'Private Moderation Review');
+  assert.equal(edits[0].embeds[0].data.fields[0].value, 'Original case reason');
+  assert.equal(edits[0].components[0].components[0].data.label, 'Add Note');
+  assert.equal(f.state.users[uid].interviewChannelId, 'room');
+  await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.equal(edits.length, 1, 'Refresh must not repeatedly edit the room panel');
+  channel.name = 'custom-review-name';
+  channel.id = 'custom-room'; parent.name = 'Custom Review Rooms'; channel.messages.fetch = async () => new Collection();
+  await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.deepEqual(renames, ['Investigations']);
+  assert.deepEqual(roomRenames, ['undecided4237'], 'Custom room names must remain unchanged');
+}
+// Closed room names remain readable and archival preserves the same room and original-role snapshot.
+{
+  const f = fixture();
+  const rooms = load(base + 'investigationRooms.js', { './state': f.api, './isolation': {} });
+  const lifecycle = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './memberLifecycle': {}, './investigationRooms': rooms, '../../../ui/memberNotice': require(root + '/src/core/ui/memberNotice') });
+  const names = [], notices = [];
+  f.state.users[uid].caseId = 2;
+  const channel = { id: 'room', name: `investigation-undecided4237-${uid.slice(-4)}`, send: async payload => { notices.push(payload); return { id: 'closure-notice' }; }, permissionOverwrites: { edit: async () => {} }, setName: async name => { names.push(name); channel.name = name; }, setTopic: async () => {} };
+  f.guild.channels.cache.set('room', channel);
+  const originals = [...f.state.users[uid].roles];
+  assert.equal((await lifecycle.archiveInvestigationRoom(f.guild, f.state.users[uid])).archived, true);
+  assert.deepEqual(names, ['closed-undecided4237']);
+  const closure = notices[0].embeds[0].toJSON();
+  assert.equal(closure.title, '🔓 Investigation Closed');
+  assert.equal(closure.color, 0x57F287);
+  assert.equal(closure.footer.text, 'Private Moderation Review');
+  assert.equal(closure.fields[0].value, '#2');
+  assert(closure.timestamp);
+  assert(!JSON.stringify(closure).includes('Goliath'), 'Room closure must use generic wording');
+  assert.deepEqual(notices[0].allowedMentions, { parse: [] });
+
+  assert.deepEqual(f.state.users[uid].roles, originals);
+  assert.equal(f.state.archivedRooms[0].channelId, 'room');
+  assert.equal(f.state.archivedRooms[0].closureMessageId, 'closure-notice');
+}
+// Back/Close navigation from a shared room opens an independent ephemeral workspace.
+{
+  const f = fixture(); f.guild.client = { user: { id: 'bot' } };
+  const rooms = load(base + 'investigationRooms.js', { './state': f.api, './isolation': {} });
+  let sharedEdits = 0, sharedDeletes = 0, privateEdits = 0, privateDeletes = 0;
+  const publicMessage = { author: { id: 'bot' }, flags: { has: () => false }, edit: async () => { sharedEdits++; } };
+  const makeInteraction = id => {
+    const privateMessage = { id, flags: { has: () => true }, edit: async () => { privateEdits++; } };
+    const i = { customId: `mod_dashboard:${uid}:cases`, channelId: 'room', guild: f.guild, message: publicMessage,
+      deferReply: async options => { assert.equal(options.flags, 64); i.deferred = true; }, fetchReply: async () => privateMessage,
+      editReply: async () => { privateEdits++; }, update: async () => { sharedEdits++; },
+      deleteReply: async () => { if (i.deferred) privateDeletes++; else sharedDeletes++; },
+    };
+    return i;
+  };
+  const original = makeInteraction('moderator-one');
+  const first = await rooms.privateInvestigationNavigation(original);
+  for (let back = 0; back < 5; back++) await first.update({ content: 'Back' });
+  await first.message.edit({ content: 'Refreshed workspace' });
+  await first.deferUpdate(); await first.deleteReply();
+  const second = await rooms.privateInvestigationNavigation(makeInteraction('moderator-two'));
+  assert.notEqual(first.message.id, second.message.id, 'Moderators must never share their private workspace');
+  assert.equal(sharedEdits, 0); assert.equal(sharedDeletes, 0); assert.equal(privateEdits, 6); assert.equal(privateDeletes, 1);
+  const ephemeral = { ...makeInteraction('ephemeral'), message: { flags: { has: () => true } } };
+  assert.equal(await rooms.privateInvestigationNavigation(ephemeral), ephemeral);
+  const outside = { ...makeInteraction('outside'), channelId: 'other-channel' };
+  assert.equal(await rooms.privateInvestigationNavigation(outside), outside);
+  const modal = { ...makeInteraction('note'), customId: `mod_invroom_note:${uid}` };
+  assert.equal(await rooms.privateInvestigationNavigation(modal), modal, 'Room modal controls must keep their normal acknowledgement flow');
+  assert(read('src/core/administration/mod/interactions.js').includes('.privateInvestigationNavigation(i)'), 'Moderation routing must use the private room navigation boundary');
+}
+// Recover an erased room panel in place and reuse its saved message after restart.
+{
+  const f = fixture(); f.guild.client = { user: { id: 'bot' } };
+  let posts = 0, restored;
+  const channel = { id: 'room', messages: { fetch: async query => {
+    if (typeof query === 'string') return restored;
+    return new Collection();
+  } }, send: async payload => {
+    posts++; assert.deepEqual(payload.allowedMentions, { parse: [] });
+    restored = { id: 'restored-panel', author: { id: 'bot' }, embeds: payload.embeds.map(embed => embed.toJSON()),
+      components: payload.components.map(row => ({ components: row.components.map(component => ({ ...component.data, customId: component.data.custom_id })) })) };
+    return restored;
+  } };
+  const mock = { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} };
+  const originalRoles = [...f.state.users[uid].roles];
+  await load(base + 'investigationRooms.js', mock).refreshInvestigationPresentation(f.guild, channel, uid);
+  assert.equal(posts, 1); assert.equal(f.state.users[uid].controlMessageId, 'restored-panel');
+  assert.equal(f.state.users[uid].interviewChannelId, 'room'); assert.deepEqual(f.state.users[uid].roles, originalRoles);
+  await load(base + 'investigationRooms.js', mock).refreshInvestigationPresentation(f.guild, channel, uid);
+  assert.equal(posts, 1, 'Restart recovery must reuse the stored control message');
+  channel.messages.fetch = async () => { throw Error('Discord unavailable'); };
+  await assert.rejects(load(base + 'investigationRooms.js', mock).refreshInvestigationPresentation(f.guild, channel, uid), /Discord unavailable/);
+  assert.equal(posts, 1, 'An uncertain message fetch must never create another panel');
+}
+// Management controls cannot grant outside access or restore a revoked investigator's access.
+{
+  const f = fixture({ allowedChannelIds: ['one', 'two'] });
+  const accessWrites = [];
+  const one = { id: 'one', permissionOverwrites: { edit: async (id, value) => accessWrites.push(value.ViewChannel) } };
+  const two = { id: 'two', permissionOverwrites: { edit: async (id, value) => { accessWrites.push(value.ViewChannel); throw Error('Permission denied'); } } };
+  f.guild.channels.cache.set('one', one).set('two', two);
+  const access = load('src/core/administration/mod/investigationAccess.js', { '../../guild/guildManager': {}, '../../security/protection/quarantine': f.api, '../../../owner/auditIntelligence/auditIntelligence': {} });
+  const interaction = { guild: f.guild, user: { id: 'staff', tag: 'Staff' } };
+  await assert.rejects(access.updateAccess(interaction, f.member, 'add', one), /only to the assigned/);
+  assert.equal(accessWrites.length, 0);
+  await assert.rejects(access.updateAccess(interaction, f.member, 'clear'), /Permission denied/);
+  assert.deepEqual(accessWrites, [false, false], 'Failed cleanup must not regrant outside access');
+  f.guild.channels.cache.delete('two');
+  f.guild.channels.fetch = async () => { throw Error('Discord lookup unavailable'); };
+  await assert.rejects(access.updateAccess(interaction, f.member, 'clear'), /Discord lookup unavailable/);
+  assert.deepEqual(f.state.users[uid].allowedChannelIds, ['one', 'two']);
+  assert(auditQuarantineSnapshots({}, f.state.users).cases[0].reasons.includes('legacy_extra_channel_access'));
+  let authorised = true, grants = 0;
+  f.guild.channels.cache.set('room', { id: 'room', permissionOverwrites: { edit: async () => { grants++; } } });
+  f.guild.members.fetch = async () => ({ id: other });
+  const controls = load('src/core/administration/mod/quarantineInteractions.js', { '../../../core/ui/interactionResponse': {}, './permissions': { canUseModAction: () => authorised }, './storage': {}, '../../security/protection/quarantine': f.api, './panel': {}, './investigationAccess': access });
+  assert.equal((await controls.ensureInitiatorInterviewAccess(f.guild, 'room', other)).success, true);
+  assert.equal(grants, 1);
+  authorised = false;
+  assert.equal((await controls.ensureInitiatorInterviewAccess(f.guild, 'room', other)).success, false);
+  authorised = true;
+  f.state.users[other] = { mode: 'investigation', roles: [], interviewChannelId: 'different-room' };
+  assert.equal((await controls.ensureInitiatorInterviewAccess(f.guild, 'room', other)).success, false);
+  assert.equal(grants, 1);
+}
+// Real event routing: member joins, new/updated channels, deleted rooms and threads.
+{
+  const f = fixture();
+  let recoveries = 0, roomRepairs = 0, removals = 0, expired = false, releasing = false;
+  const events = load(base + 'recoveryEvents.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role }, './isolation': { syncQuarantineIsolation: async () => ({ success: true }) },
+    './investigationRooms': { ensureInvestigationRoomForSnapshot: async () => { roomRepairs++; return { id: 'room' }; } },
+    './enforcementRecovery': { enforceQuarantineOnMember: async () => { recoveries++; return { success: true, expired, interviewChannelId: 'room' }; } },
+    './expiryScheduler': {}, './releaseLifecycle': { isQuarantineReleaseInProgress: () => releasing }, '../../../administration/mod/quarantineInteractions': {},
+  });
+  const event = name => events.find(e => e.name === name).execute;
+  const outside = { id: 'outside', guild: f.guild, permissionsFor: () => new PermissionsBitField([P.ViewChannel]), members: { remove: async () => { removals++; } } };
+  await event(Events.GuildMemberAdd)(f.member);
+  assert.equal(recoveries, 1); assert.equal(roomRepairs, 1);
+  expired = true;
+  await event(Events.GuildMemberAdd)(f.member);
+  assert.equal(roomRepairs, 1, 'Expired rejoin must not recreate a released room');
+  expired = false;
+  await event(Events.ChannelCreate)(outside);
+  await event(Events.ChannelUpdate)({}, outside);
+  await event(Events.ThreadUpdate)({}, outside);
+  await event(Events.ThreadCreate)(outside);
+  await event(Events.ThreadMembersUpdate)(new Collection([[uid, { id: uid }]]), new Collection(), outside);
+  assert.equal(removals, 1);
+  releasing = true;
+  await event(Events.ThreadMembersUpdate)(new Collection([[uid, { id: uid }]]), new Collection(), outside);
+  assert.equal(removals, 1, 'Release must not race thread membership containment');
+  releasing = false;
+  await event(Events.ChannelDelete)({ id: 'room', guild: f.guild });
+  f.member.roles.cache.set(originalRole, { id: originalRole });
+  await event(Events.GuildMemberUpdate)({}, f.member);
+  assert(recoveries >= 9);
+}
+console.log('Quarantine containment audit passed: read-only legacy audit and evidence-backed adoption, effective permissions/threads, release rollback/locking, expiry policy, restart/rejoin/events, room reuse and management controls/transcripts/deletion (mocked Discord; live permissions not verified).');
+
+return true;
+}
+
+function legacyQuarantineAudit() {
+  const { getRuntimePaths, resolveBotMode } = require('../src/config/runtimePaths');
+  if (resolveBotMode(process.env.BOT_MODE) !== 'dev') throw new Error('Legacy quarantine audit is restricted to DEV.');
+  const directory = getRuntimePaths('dev').guilds;
+  if (!fs.existsSync(directory)) { console.error('DEV guild data is unavailable in this checkout; no live cases were audited.'); return false; }
+  const { auditQuarantineSnapshots } = require('../src/core/security/protection/quarantine/state');
+  const { getRoutedSection } = require('../src/core/guild/sectionRouting');
+  const reports = [];
+  for (const entry of fs.readdirSync(directory).filter(name => /^\d{16,20}\.json$/.test(name)).sort()) {
+    const raw = JSON.parse(fs.readFileSync(path.join(directory, entry), 'utf8'));
+    reports.push({ guildId: entry.slice(0, -5), ...auditQuarantineSnapshots(raw.modules?.verification?.sessions || {}, getRoutedSection(raw, 'security', {}).quarantine?.users || {}) });
+  }
+  console.log(JSON.stringify({ readOnly: true, mode: 'dev', guilds: reports.length, needsReview: reports.reduce((sum, report) => sum + report.needsReview, 0), reports }, null, 2));
+  if (!reports.length) { console.error('No DEV guild configurations found; live cases were not audited.'); return false; }
+  return reports.every(report => report.needsReview === 0);
+}
+
+async function legacyQuarantineReconcileCommand() {
+  if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') throw Error('Set BOT_MODE=dev; this command is restricted to DEV.');
+  const [guildId, userId, roomId, addEventId, stripEventId] = process.argv.slice(3);
+  if (![guildId, userId, roomId].every(id => /^\d{15,25}$/.test(id || '')) || !addEventId || !stripEventId || process.argv.length !== 8) {
+    throw Error('Usage: BOT_MODE=dev node scripts/goliath.js legacy-quarantine-reconcile <guildId> <userId> <roomId> <addEventId> <stripEventId>');
+  }
+  require('../src/config/envLoader').loadEnvironment('dev');
+  const { getRuntimePaths } = require('../src/config/runtimePaths');
+  if (!fs.existsSync(path.join(getRuntimePaths('dev').guilds, `${guildId}.json`))) throw Error('DEV guild data is unavailable; no maintenance request created.');
+  const store = require('../src/owner/auditIntelligence/auditStore');
+  const pending = (store.getConfig().control?.remoteCommands || []).find(c => ['pending', 'claimed'].includes(c.status) && c.targetMode === 'DEV' && Date.parse(c.expiresAt) > Date.now() && c.action === 'legacy-quarantine-reconcile' && c.guildId === guildId && c.payload?.userId === userId);
+  const request = pending || store.createRemoteCommand(guildId, 'DEV', 'legacy-quarantine-reconcile', { userId, roomId, addEventId, stripEventId }, 'local-dev-maintenance');
+  if (!request) throw Error('Could not create DEV maintenance request.');
+  console.log(`DEV reconciliation request ${request.id}; waiting for the running bot (no roles restored).`);
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const current = (store.getConfig().control?.remoteCommands || []).find(c => c.id === request.id);
+    if (['completed', 'failed', 'expired'].includes(current?.status)) {
+      console.log(JSON.stringify(current, null, 2));
+      return current.status === 'completed' && current.result?.ok === true;
+    }
+  }
+  console.error(`Request ${request.id} has not completed. It may still run; do not assume the case is repaired. Check the DEV bot logs and rerun the read-only legacy-quarantine audit.`);
+  return false;
+}
+
+async function dependencyRuntimeAudit() {
+// Exercise the APIs affected by dependency overrides without live credentials or guild data.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const { once } = require('node:events');
+const { Readable } = require('node:stream');
+const Database = require('better-sqlite3');
+const fetch = require('node-fetch');
+const { google } = require('googleapis');
+
+async function main() {
+  const lock = require('../package-lock.json');
+  for (const [name, entry] of Object.entries(lock.packages)) {
+    assert(!entry.deprecated, `Deprecated dependency remains: ${name}`);
+    assert(!name.endsWith('/prebuild-install'), 'Legacy SQLite installer remains');
+  }
+  const googleFetchPath = require.resolve('node-fetch', { paths: [path.dirname(require.resolve('gaxios'))] });
+  const googleFetch = await import(require('node:url').pathToFileURL(googleFetchPath).href);
+  const blobFromPath = require.resolve('fetch-blob/from.js', { paths: [path.dirname(googleFetchPath)] });
+  const { fileFromSync } = await import(require('node:url').pathToFileURL(blobFromPath).href);
+  const domPath = require.resolve('node-domexception', { paths: [path.dirname(blobFromPath)] });
+  assert.equal(require(domPath), globalThis.DOMException);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-dependency-'));
+  const databasePath = path.join(directory, 'existing.sqlite');
+  let db;
+  let server;
+  try {
+    db = new Database(databasePath);
+    db.exec('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)');
+    db.prepare('INSERT INTO settings VALUES (?, ?)').run('preserved', 'yes');
+    db.close();
+    db = new Database(databasePath);
+    assert.equal(db.prepare('SELECT value FROM settings WHERE key = ?').get('preserved').value, 'yes');
+    assert.throws(db.transaction(() => { db.prepare('UPDATE settings SET value = ?').run('no'); throw Error('rollback'); }), /rollback/);
+    assert.equal(db.prepare('SELECT value FROM settings').get().value, 'yes');
+    const backupPath = path.join(directory, 'backup.sqlite');
+    await db.backup(backupPath);
+    const backup = new Database(backupPath, { readonly: true });
+    try { assert.equal(backup.prepare('PRAGMA integrity_check').get().integrity_check, 'ok'); }
+    finally { backup.close(); }
+    const filePath = path.join(directory, 'fixture.txt');
+    fs.writeFileSync(filePath, 'fixture');
+    const file = fileFromSync(filePath);
+    assert.equal(await file.text(), 'fixture');
+    fs.appendFileSync(filePath, 'changed');
+    await assert.rejects(file.text(), error => error instanceof DOMException && error.name === 'NotReadableError');
+
+    server = http.createServer(async (request, response) => {
+      const url = new URL(request.url, 'http://localhost');
+      if (url.pathname === '/slow') return; // Closed by the client timeout, below.
+      if (url.pathname === '/redirect') { response.writeHead(302, { Location: '/bytes' }); response.end(); return; }
+      if (url.pathname === '/bytes' || url.searchParams.get('alt') === 'media') { response.end('fixture'); return; }
+      if (request.method === 'POST') {
+        let body = '';
+        for await (const chunk of request) body += chunk;
+        assert(body.includes('fixture'), 'Drive streaming upload lost the source body');
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ id: 'uploaded' }));
+        return;
+      }
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ files: [{ id: 'folder', name: 'guilds' }] }));
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const root = `http://127.0.0.1:${server.address().port}`;
+    const agent = new http.Agent({ lookup: (hostname, options, callback) => {
+      assert.equal(hostname, 'goliath.invalid');
+      if (options?.all) callback(null, [{ address: '127.0.0.1', family: 4 }]);
+      else callback(null, '127.0.0.1', 4);
+    } });
+    try {
+      const pinned = await fetch(root.replace('127.0.0.1', 'goliath.invalid') + '/bytes', { agent });
+      assert.equal((await pinned.buffer()).toString(), 'fixture');
+    } finally { agent.destroy(); }
+    assert.equal((await fetch(root + '/redirect', { redirect: 'manual' })).status, 302);
+    assert.equal(await (await fetch(root + '/redirect')).text(), 'fixture');
+    await assert.rejects(fetch(root + '/slow', { timeout: 30 }), error => error.type === 'request-timeout');
+    const controller = new AbortController();
+    const pending = fetch(root + '/slow', { signal: controller.signal });
+    controller.abort();
+    await assert.rejects(pending, error => error.name === 'AbortError');
+    assert.equal(await (await googleFetch.default(root + '/bytes')).text(), 'fixture');
+
+    const drive = google.drive({ version: 'v3', rootUrl: root + '/', retry: false, timeout: 2000,
+      fetchImplementation: (url, options) => {
+        // The SDK rewrites media uploads after rootUrl; redirect its transport to the fixture too.
+        const target = new URL(url);
+        assert([root, 'https://www.googleapis.com'].includes(target.origin));
+        return googleFetch.default(root + target.pathname + target.search, { ...options, agent: undefined });
+      }
+    });
+    assert.equal((await drive.files.list({ fields: 'files(id,name)' })).data.files[0].id, 'folder');
+    const upload = await drive.files.create({ requestBody: { name: 'fixture' }, media: { mimeType: 'text/plain', body: Readable.from(['fixture']) }, fields: 'id' });
+    assert.equal(upload.data.id, 'uploaded');
+    const download = await drive.files.get({ fileId: 'uploaded', alt: 'media' }, { responseType: 'stream' });
+    let downloaded = '';
+    for await (const chunk of download.data) downloaded += chunk;
+    assert.equal(downloaded, 'fixture');
+    console.log('✅ Dependency runtime audit: SQLite persistence/rollback/backup, native DOMException, pinned-agent downloads, redirects, timeouts, aborts and Drive list/upload/download');
+  } finally {
+    if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+    if (db?.open) db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+await main();
+return true;
+}
+
+async function freeGamesAudit() {
+  const assert = require('node:assert/strict');
+  const providers = require('../src/modules/utilityStudio/games/gamesProviders');
+  const embeds = require('../src/modules/utilityStudio/games/gamesEmbeds');
+  const store = require('../src/modules/utilityStudio/games/games');
+
+  const fs = require('node:fs');
+  assert(fs.existsSync(root + '/src/modules/utilityStudio/games'), 'Canonical Games folder must exist.');
+  // Keep the public module naming stable without changing persisted guild keys.
+  for (const file of ['games.js', 'gamesEmbeds.js', 'gamesMonitor.js', 'gamesProviders.js']) {
+    assert(fs.existsSync(root + '/src/modules/utilityStudio/games/' + file), 'Missing canonical Games file: ' + file);
+  }
+  for (const file of ['freeGames.js', 'freeGamesEmbeds.js', 'freeGamesMonitor.js', 'freeGamesProviders.js']) {
+    assert(!fs.existsSync(root + '/src/modules/utilityStudio/games/' + file), 'Legacy Games filename remains: ' + file);
+  }
+  assert(fs.existsSync(root + '/src/server/routes/modules/utilityStudio/games.js'));
+  assert(!fs.existsSync(root + '/src/server/routes/modules/utilityStudio/freeGames.js'));
+  assert(fs.existsSync(root + '/src/dashboard/js/pages/modules/Games.jsx'));
+  assert(!fs.existsSync(root + '/src/dashboard/js/pages/modules/FreeGames.jsx'));
+  const oldTracked = require('node:child_process').spawnSync('git', ['ls-files', '--', 'src/modules/utilityStudio/' + 'freeGames'], { cwd: root, encoding: 'utf8' });
+  if (oldTracked.status === 0) assert.equal(oldTracked.stdout.trim(), '', 'The previous folder must be moved, not duplicated in Git.');
+  assert.equal(store.MODULE_KEY, 'freeGames', 'Renaming must preserve the established guild storage and authority key.');
+  assert.equal(store.MODULE_NAME, 'Games');
+  const serverSource = fs.readFileSync(root + '/server.js', 'utf8');
+  assert(serverSource.includes("['/api/games', freeGamesRoutes]"));
+  assert(serverSource.includes("['/api/free-games', freeGamesRoutes]"), 'Existing API clients remain compatible.');
+  const now = Date.now();
+  const config = { ...structuredClone(store.DEFAULTS), enabled: false, stores: Object.keys(providers.STORES), types: Object.keys(providers.TYPES), pricing: { mode: 'converted', currency: 'GBP', rate: 0.8, date: new Date(now).toISOString().slice(0, 10) } };
+  const offer = { id: 'gamerpower:1', title: 'A Game (Steam) Key Giveaway', type: 'game', stores: ['steam', 'xbox', 'playstation'], url: 'https://www.gamerpower.com/offer/1', worth: '$10.00', endsAt: now + 3600000, endDateText: null };
+  const offers = Array.from({ length: 120 }, (_, index) => ({ ...offer, id: `gamerpower:${index + 1}`, title: `Offer ${index} ` + 'Long title '.repeat(15), url: `https://www.gamerpower.com/offer/${index + 1}`, type: Object.keys(providers.TYPES)[index % 6] }));
+  const pages = embeds.buildListing([...offers, offers[0]], config, now);
+  const text = pages.map(page => [page.embeds[0].description, ...page.embeds[0].fields.map(field => field.value)].join('\n')).join('\n');
+  for (const item of offers) assert.equal(text.split(`](${item.url})`).length - 1, 1, 'Offer must appear exactly once');
+  for (const page of pages) {
+    const embed = page.embeds[0];
+    assert(embed.description.length <= 4096);
+    assert(embed.fields.length <= 25);
+    for (const field of embed.fields) { assert.equal(typeof field.inline, 'boolean'); if (field.value.length >= 280 || field.value.split('\n').some(line => line.length > 55)) assert.equal(field.inline, false, 'Long offer groups must use full-width fields'); assert(field.name.length <= 256); assert(field.value.length <= 1024); }
+    assert(embed.title.length + embed.description.length + embed.footer.text.length + embed.fields.reduce((sum, field) => sum + field.name.length + field.value.length, 0) < 6000);
+    assert.deepEqual(page.allowedMentions, { parse: [] });
+  }
+  assert.equal(pages[0].embeds[0].title, '🎁 Free Games');
+  assert.equal(new Set(pages.map(page => page.embeds[0].color)).size, 3);
+  assert(pages[0].embeds[0].fields[0].name.startsWith('🚂'));
+  const icons = embeds.platformPresentation({ application: { emojis: { cache: { find: fn => [{ name: 'goliath_steam', id: '123456789012345678' }].find(fn) } } } });
+  assert.equal(icons.steam.emoji, '<:goliath_steam:123456789012345678>');
+  assert(icons.steam.imageUrl.includes('123456789012345678.png'));
+  assert.equal(icons.epic.emoji, '⚡');
+  // Cold-cache platform icons must come from the shared Emoji module, including replacements.
+  {
+    const fs = require('node:fs'), vm = require('node:vm');
+    let loads = 0;
+    let emojiId = '123456789012345681';
+    const moduleFixture = { exports: {} };
+    const emojiService = {
+      render: (emoji) => '<:' + emoji.name + ':' + emoji.id + '>',
+      allowedGuildEmojis: async (_client, guildId, context) => {
+        assert.equal(guildId, 'fixture'); assert.equal(context, 'freeGames'); loads++;
+        return new Map([['steam', { name: 'goliath_steam', id: emojiId }], ['epic', { name: 'goliath_epic', id: '123456789012345682' }]]);
+      },
+    };
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/gamesEmbeds.js', 'utf8');
+    vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(
+      name => name === './gamesProviders' ? providers : emojiService, moduleFixture, moduleFixture.exports);
+    const coldClient = { application: { emojis: { fetch: async () => { throw Error('Use the shared module'); }, cache: new Map() } } };
+    const resolved = await moduleFixture.exports.loadPlatformPresentation(coldClient, 'fixture');
+    assert.equal(loads, 1); assert.equal(resolved.steam.emoji, '<:goliath_steam:' + emojiId + '>');
+    assert.equal(resolved.epic.emoji, '<:goliath_epic:123456789012345682>');
+    emojiId = '123456789012345683';
+    assert((await moduleFixture.exports.loadPlatformPresentation(coldClient, 'fixture')).steam.emoji.includes(emojiId));
+  }
+  const datedOffer = { ...offer, endDateText: '2026-10-31 23:59:59' };
+  for (const entry of [datedOffer, { ...datedOffer, endsAt: null }]) {
+    const rendered = embeds.line(entry, {}, now, { ...config, showExpiry: true });
+    assert(!rendered.includes('<t:')); assert(!rendered.includes('23:59:59')); assert(!rendered.includes('source time'));
+  }
+
+  const mixed = embeds.buildListing([offer, { ...offer, id: 'epic', stores: ['epic'] }, { ...offer, id: 'gog', stores: ['gog'] }], config, now);
+  assert.equal(mixed.length, 1); assert.equal(mixed[0].embeds[0].fields.length, 3);
+  assert(text.includes('≈£8.00'));
+  assert(!text.includes('🆕'));
+  assert(embeds.line(offer, { [offer.id]: now }, now, config).includes('🆕'));
+  assert(!embeds.line(offer, { [offer.id]: now - embeds.NEW_MS }, now, config).includes('🆕'));
+  assert.equal(embeds.shortTitle(offer.title), 'A Game');
+  assert.equal(embeds.price(offer, { ...config, pricing: { mode: 'hidden' } }), '');
+  assert.equal(embeds.price(offer, { ...config, pricing: { mode: 'unavailable' } }), '');
+  assert(embeds.price(offer, { ...config, pricing: { mode: 'source' } }).includes('US$10.00'));
+  const unknown = embeds.line({ ...offer, endsAt: null }, {}, now, config);
+  assert(!unknown.includes('<t:'));
+  assert.equal(embeds.orderedOffers([{ ...offer, id: 'later', endsAt: now + 7200000 }, offer], now)[0].id, offer.id);
+  assert.equal(store.validateSettings({ currency: 'JPY', locale: 'ja-JP', region: 'JP', timeZone: 'Asia/Tokyo' }, config).currency, 'JPY');
+  for (const patch of [{ currency: 'ZZZ' }, { priceMode: 'fake' }, { timeZone: 'invalid' }, { locale: 'not_a_locale' }, { region: 'ZZ' }]) assert.throws(() => store.validateSettings(patch, config));
+
+  // Public presentation stays compact; source timestamps are stable between monitor ticks.
+  const listing = embeds.buildListing([offer], { ...config, listingUpdatedAt: now }, now)[0].embeds[0];
+  assert.equal(listing.timestamp, new Date(now).toISOString());
+  assert(!listing.description.includes('Estimated'));
+  assert(!listing.description.includes('Frankfurter'));
+  assert(listing.description.includes('GamerPower'));
+  const hiddenDetails = { ...config, layout: 'list', showTimestamps: false, showExpiry: false, showPlatforms: false, showNew: false, showOfferCount: false };
+  const cleanListing = embeds.buildListing([offer], hiddenDetails, now)[0].embeds[0];
+  assert.equal(cleanListing.timestamp, undefined);
+  assert(!cleanListing.description.includes('available'));
+  assert(cleanListing.fields.every(field => field.inline === false));
+  const cleanLine = embeds.line(offer, { [offer.id]: now }, now, hiddenDetails);
+  assert(!cleanLine.includes('<t:')); assert(!cleanLine.includes('🆕')); assert(!cleanLine.includes('Xbox'));
+  assert.equal(store.validateSettings({ layout: 'list', showTimestamps: false }, config).showTimestamps, false);
+  assert.throws(() => store.validateSettings({ layout: 'invalid' }, config));
+  assert.throws(() => store.validateSettings({ showExpiry: 'false' }, config));
+  for (const page of ['home', 'delivery', 'filters', 'pricing', 'display']) {
+    const payload = store.buildAdminPanel({ id: 'fixture' }, page, '', config);
+    assert(payload.components.length <= 5);
+    for (const row of payload.components) {
+      assert(row.components.length <= 5);
+      for (const component of row.components) {
+        assert(component.custom_id.length <= 100);
+        if (component.options) { assert(component.options.length <= 25); assert(component.max_values <= component.options.length); }
+      }
+    }
+    assert.deepEqual(payload.allowedMentions, { parse: [] });
+  }
+  assert.equal(store.regionalModal({ id: 'fixture' }, config).components.length, 4);
+  // Exercise the real Discord handler against in-memory config; never create guild data.
+  {
+    const fs = require('node:fs'), vm = require('node:vm');
+    let memory = structuredClone(config), writes = 0, sends = 0, permitted = true;
+    let panelOffers = [offer];
+    const mod = { exports: {} };
+    const injectedRequire = name => {
+      if (name.endsWith('/guildManager')) return { isModuleEnabled: () => memory.enabled };
+      if (name.endsWith('/moduleSectionManager')) return {
+        getModuleSection: () => structuredClone(memory),
+        updateModuleSection: (_id, _key, fn) => { memory = fn(structuredClone(memory)); writes++; return memory; },
+      };
+      if (name === './gamesProviders') return { ...providers, getOffers: async () => ({ offers: panelOffers, fetchedAt: now }), getPricing: async () => config.pricing };
+      if (name === './gamesEmbeds') return embeds;
+      if (name === './gamesMonitor') return { withGuildLock: async (_id, task) => task(), validateDestination: async () => { sends++; } };
+      if (name.endsWith('/security/protection/core')) return { isBotOwner: () => false };
+      if (name.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
+      if (name === 'discord.js') return require('discord.js');
+      throw new Error('Unexpected Free Games panel dependency: ' + name);
+    };
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/games.js', 'utf8');
+    vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(injectedRequire, mod, mod.exports);
+    const handler = mod.exports.handleAdminInteraction;
+    const guildFixture = { id: 'fixture', client: {}, members: { fetch: async () => ({ permissions: { has: () => permitted } }) } };
+    let last;
+    const interaction = action => ({
+      customId: 'admin:module:freeGames:' + action, guild: guildFixture, user: { id: 'manager', username: 'Manager' },
+      isButton: () => true, deferUpdate: async () => {}, editReply: async payload => { last = payload; },
+      update: async payload => { last = payload; }, deferred: true,
+    });
+    permitted = false;
+    await handler(interaction('enabled'));
+    assert.equal(writes, 0); assert.match(last.content, /Manage Server/);
+    permitted = true;
+    const settings = interaction('regionalSubmit');
+    settings.isModalSubmit = () => true;
+    settings.fields = { getTextInputValue: key => ({ currency: 'eur', locale: 'de-DE', timeZone: 'Europe/Berlin', region: 'de' })[key] };
+    await handler(settings);
+    assert.equal(memory.currency, 'EUR'); assert.equal(memory.region, 'DE'); assert.equal(writes, 1);
+    const before = JSON.stringify(memory);
+    const preview = interaction('preview:0'); await handler(preview);
+    assert.equal(JSON.stringify(memory), before); assert.equal(writes, 1); assert.equal(sends, 0);
+    assert.match(last.content, /Preview only/);
+    const featurePanel = await mod.exports.buildFeaturedPanel(guildFixture);
+    assert(featurePanel.components.length <= 5); assert.equal(writes, 1);
+    panelOffers = Array.from({ length: 80 }, (_, index) => ({ ...offer, id: 'gamerpower:' + (8000 + index), title: 'Main ' + index, image: 'https://www.gamerpower.com/game.jpg', popularityRank: index }));
+    const paginatedFeature = await mod.exports.buildFeaturedPanel(guildFixture, 2);
+    assert.equal(paginatedFeature.components.length, 5);
+    assert.equal(paginatedFeature.components[1].components[0].options.length, 25);
+    assert(paginatedFeature.components[1].components[0].options[0].value.startsWith('gamerpower:'));
+    panelOffers = [offer];
+    settings.fields.getTextInputValue = key => key === 'currency' ? 'ZZZ' : ({ locale: 'en-GB', timeZone: 'Europe/London', region: 'GB' })[key];
+    await handler(settings);
+    assert.equal(writes, 1); assert.equal(memory.currency, 'EUR');
+    const display = interaction('displayOptions');
+    display.isStringSelectMenu = () => true; display.values = ['showTimestamps']; await handler(display);
+    assert.equal(memory.showTimestamps, true); assert.equal(memory.showExpiry, false); assert.equal(memory.showPlatforms, false);
+  }
+
+  // One main title is featured once, above the list, without promoting DLC/mobile/indie-only offers.
+  const mainA = { ...offer, id: 'gamerpower:7001', title: 'Main game A', image: 'https://www.gamerpower.com/a.jpg', popularityRank: 9, description: 'A main game.' };
+  const mainB = { ...mainA, id: 'gamerpower:7002', title: 'Main game B', stores: ['epic'], popularityRank: 1 };
+  const notMain = [{ ...mainA, id: 'loot', type: 'loot', popularityRank: 0 }, { ...mainA, id: 'indie', stores: ['itchio'], popularityRank: 0 },
+    { ...mainA, id: 'trial', type: 'weekend', popularityRank: 0 }];
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB, ...notMain], config).id, mainB.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB], { ...config, featuredMode: 'manual', featuredOfferId: mainA.id }).id, mainA.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB], { ...config, featuredMode: 'manual', featuredOfferId: 'gamerpower:999999' }).id, mainB.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB], { ...config, stores: ['steam'] }).id, mainA.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA], { ...config, featuredMode: 'off' }), null);
+  assert.equal(embeds.selectFeaturedOffer(notMain, config), null);
+  const featuredPages = embeds.buildListing([mainA, mainB, ...notMain], config, now, icons);
+  assert.equal(featuredPages[0].embeds[0].thumbnail.url, mainB.image);
+  assert(featuredPages[0].embeds[0].description.includes('Main game B'));
+  assert.equal(featuredPages.filter(page => page.embeds[0].thumbnail).length, 1);
+  const featuredText = featuredPages.map(page => [page.embeds[0].description, ...page.embeds[0].fields.map(field => field.value)].join('\n')).join('\n');
+  // These fixture games share a URL, so distinguish the highlighted title from the remaining list.
+  assert.equal(featuredText.split('[Main game B]').length - 1, 1);
+  assert(!featuredPages[0].embeds[0].fields.some(field => field.value.includes('[Main game B]')));
+  assert.equal(featuredPages[0].components[0].components[0].url, mainB.url);
+  assert.equal(embeds.buildListing([mainA], { ...config, featuredArtwork: 'hidden' }, now)[0].embeds[0].thumbnail, undefined);
+  assert.equal(embeds.buildListing([mainA], config, now)[0].embeds[0].fields.length, 0);
+  assert.throws(() => store.validateSettings({ featuredMode: 'fake' }, config));
+  assert.throws(() => store.validateSettings({ featuredOfferId: 'https://example.com' }, config));
+  assert.throws(() => store.validateSettings({ featuredArtwork: 'fake' }, config));
+  assert.equal(store.validateSettings({ featuredMode: 'manual', featuredOfferId: mainA.id }, config).featuredOfferId, mainA.id);
+
+  // A fresh provider module must request and retain the provider's popularity ordering.
+  {
+    const fs = require('node:fs'), vm = require('node:vm'), moduleFixture = { exports: {} };
+    const originalFetch = global.fetch;
+    try {
+      global.fetch = async url => {
+        assert(String(url).includes('sort-by=popularity'));
+        return { status: 200, json: async () => [12, 11].map(id => ({ id, title: 'Main ' + id, type: 'Game', status: 'Active', platforms: 'Steam', gamerpower_url: 'https://www.gamerpower.com/offer/' + id, image: 'https://www.gamerpower.com/game.jpg', worth: '$10.00' })) };
+      };
+      const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/gamesProviders.js', 'utf8');
+      vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(require, moduleFixture, moduleFixture.exports);
+      const ranked = await moduleFixture.exports.getOffers();
+      assert.deepEqual(ranked.offers.map(item => [item.id, item.popularityRank]), [['gamerpower:12', 0], ['gamerpower:11', 1]]);
+    } finally { global.fetch = originalFetch; }
+  }
+  const savedFetch = global.fetch;
+  let calls = 0;
+  try {
+    global.fetch = async () => { calls++; return { ok: true, json: async () => ({ base: 'USD', quote: 'GBP', rate: 0.8, date: new Date(now).toISOString().slice(0, 10) }) }; };
+    const [a, b] = await Promise.all([providers.getPricing(config), providers.getPricing(config)]);
+    assert.equal(a.rate, 0.8); assert.deepEqual(a, b); assert.equal(calls, 1);
+    global.fetch = async () => { throw Error('offline'); };
+    const failed = await providers.getPricing({ ...config, currency: 'EUR' });
+    assert.equal(failed.mode, 'unavailable'); assert(failed.warning);
+    assert.equal((await providers.getPricing({ ...config, priceMode: 'hidden' })).mode, 'hidden');
+  } finally { global.fetch = savedFetch; }
+  const monitor = require('../src/modules/utilityStudio/games/gamesMonitor');
+  const originals = { getConfig: store.getConfig, update: store.update, getOffers: providers.getOffers, getPricing: providers.getPricing };
+  let state = { ...structuredClone(config), enabled: true, channelId: '123456789012345678', alerts: true, roleId: null };
+  let feedOffers = [offer];
+  const messages = new Map();
+  let serial = 0;
+  let alerts = 0;
+  let edits = 0;
+  const channel = { id: state.channelId, type: 0, permissionsFor: () => ({ has: () => true }), messages: { fetch: async (id) => {
+    if (typeof id === 'object') return { find: (fn) => [...messages.values()].find(fn) };
+    if (!messages.has(id)) throw Object.assign(Error('deleted'), { code: 10008 });
+    return messages.get(id);
+  } }, send: async (payload) => {
+    if (/new free offers?$/.test(payload.embeds[0].title)) { alerts++; return {}; }
+    const message = { id: String(++serial), author: { id: 'bot' }, embeds: payload.embeds, edit: async (next) => { edits++; message.embeds = next.embeds; }, delete: async () => messages.delete(message.id) };
+    messages.set(message.id, message); return message;
+  } };
+  const guild = { id: '123456789012345679', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} } };
+  try {
+    store.getConfig = () => structuredClone(state);
+    store.update = (id, fn) => { state = fn(structuredClone(state)); return state; };
+    providers.getOffers = async () => ({ offers: feedOffers, fetchedAt: now });
+    providers.getPricing = async () => config.pricing;
+    await monitor.processGuild(guild);
+    assert.equal(alerts, 0); assert.deepEqual(state.state.newSince, {});
+    assert.equal(messages.size, 1);
+    const baselineEdits = edits;
+    await Promise.all([monitor.processGuild(guild), monitor.processGuild(guild)]);
+    assert.equal(messages.size, 1); assert.equal(edits, baselineEdits);
+    const addition = { ...offer, id: 'gamerpower:999', title: 'New offer', type: 'dlc' };
+    feedOffers = [offer, addition];
+    await monitor.processGuild(guild);
+    assert.equal(alerts, 1); assert(state.state.newSince[addition.id]); assert.equal(messages.size, 2);
+    await monitor.processGuild(guild); assert.equal(alerts, 1);
+    messages.clear(); await monitor.processGuild(guild); assert.equal(messages.size, 2); assert.equal(alerts, 1);
+    providers.getOffers = async () => { throw Error('provider offline'); };
+    await assert.rejects(monitor.processGuild(guild), /provider offline/);
+    assert.equal(messages.size, 2); assert(state.state.error.includes('provider offline'));
+    providers.getOffers = async () => ({ offers: [offer], fetchedAt: now });
+    await monitor.processGuild(guild); assert.equal(messages.size, 1); assert.equal(state.state.error, null);
+  } finally {
+    store.getConfig = originals.getConfig; store.update = originals.update;
+    providers.getOffers = originals.getOffers; providers.getPricing = originals.getPricing;
+  }
+  // Verify the preview is access-controlled and never writes config or posts messages.
+  const express = require('express');
+  const http = require('node:http');
+  const { once } = require('node:events');
+  const routePath = require.resolve('../src/server/routes/modules/utilityStudio/games');
+  const priorRoute = require.cache[routePath];
+  let server;
+  const priorConfig = store.getConfig;
+  const priorOffers = providers.getOffers;
+  const priorPricing = providers.getPricing;
+  try {
+    providers.getOffers = async () => ({ offers: [offer], fetchedAt: now });
+    providers.getPricing = async () => config.pricing;
+    store.getConfig = () => structuredClone(config);
+    delete require.cache[routePath];
+    const app = express(); app.use(express.json());
+    app.use((req, res, next) => {
+      req.session = req.headers['x-fixture-user'] ? { user: { id: '123456789012345680' } } : {};
+      req.client = { guilds: { cache: new Map([[guild.id, { ...guild, members: { fetch: async () => ({ permissions: { has: () => req.headers['x-fixture-user'] === 'manager' } }) } }]]) } };
+      next();
+    });
+
+    const freeGamesRoutes = require(routePath);
+    const orderedChannels = freeGamesRoutes.orderListingChannels({ channels: { cache: new Map([
+      ['20', { id: '20', name: 'Alpha lower category', type: 4, rawPosition: 2 }],
+      ['200', { id: '200', name: 'lower-channel', type: 0, parentId: '20', rawPosition: 0 }],
+      ['102', { id: '102', name: 'top-second', type: 5, parentId: '10', rawPosition: 3 }],
+      ['10', { id: '10', name: 'Zulu first category', type: 4, rawPosition: 1 }],
+      ['101', { id: '101', name: 'top-first', type: 0, parentId: '10', rawPosition: 1 }],
+      ['1', { id: '1', name: 'uncategorized', type: 0, rawPosition: 5 }],
+      ['300', { id: '300', name: 'voice-excluded', type: 2, parentId: '10', rawPosition: 0 }],
+    ]) } });
+    assert.deepEqual(orderedChannels.map(channel => channel.id), ['1', '101', '102', '200']);
+    assert.equal(orderedChannels[1].groupName, 'Zulu first category');
+    assert.equal(orderedChannels[3].groupName, 'Alpha lower category');
+    app.use('/api/free-games', freeGamesRoutes);
+    server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const url = `http://127.0.0.1:${server.address().port}/api/free-games/${guild.id}/preview`;
+    assert.equal((await savedFetch(url, { method: 'POST' })).status, 401);
+    assert.equal((await savedFetch(url, { method: 'POST', headers: { 'x-fixture-user': 'member' } })).status, 403);
+    for (const [suffix, method] of [['settings', 'PATCH'], ['subscriptions', 'POST'], ['subscriptions/730', 'DELETE'], ['730/preview', 'POST'], ['730/send-latest', 'POST'], ['730/retry', 'POST'], ['check', 'POST']]) {
+      const endpoint = url.replace('/preview', '/updates/' + suffix);
+      assert.equal((await savedFetch(endpoint, { method })).status, 401);
+      assert.equal((await savedFetch(endpoint, { method, headers: { 'x-fixture-user': 'member' } })).status, 403);
+    }
+    const response = await savedFetch(url, { method: 'POST', headers: { 'x-fixture-user': 'manager', 'content-type': 'application/json' }, body: JSON.stringify({ currency: 'GBP' }) });
+    assert.equal(response.status, 200);
+    const payload = await response.json(); assert.equal(payload.offers.length, 1); assert(payload.pages.length);
+    assert.equal(alerts, 1); assert.equal(messages.size, 1);
+  } finally {
+    if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+    store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
+    delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
+  }
+  await gameUpdatesAudit();
+  console.log('✅ Games: folder rename/storage compatibility, single featured main title/popularity/manual/fallback/thumbnail, guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  return true;
+}
+
+// Read-only, on-demand Steam catalogue identity audit. No guild data is touched.
+// Usage: BOT_MODE=dev node scripts/goliath.js game-catalogue-identity [limit]
+function classifySteamCatalogueIdentity(game, result) {
+  const declaredType = game.catalogueType || 'game';
+  // Legacy non-game subscriptions remain supported, but their store names must
+  // still agree with the catalogue. A matching type alone is not identity proof.
+  const normalizeName = value => String(value || '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (declaredType !== 'game' && result.status === 'non-game' && result.storeType === declaredType &&
+      result.storeName && normalizeName(game.name) === normalizeName(result.storeName)) {
+    return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType, storeName: result.storeName };
+  }
+  // Steam's basic appdetails metadata labels Wallpaper Engine as a game even
+  // though Goliath deliberately keeps this legacy subscription under software.
+  // Require the exact App ID and matching Store name; never generalize this
+  // exception to other mismatched catalogue types.
+  if (String(game.appId) === '431960' && declaredType === 'software' &&
+      result.status === 'match' && result.storeType === 'game' &&
+      normalizeName(game.name) === 'wallpaper engine' &&
+      normalizeName(result.storeName) === 'wallpaper engine') {
+    return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType,
+      storeName: result.storeName, storeType: result.storeType, note: 'Steam reports game; legacy catalogue retains software.' };
+  }
+  // A missing Steam Store listing is not proof that a historical DLC App ID
+  // is wrong. Keep it visible as unverified, without treating it as a pass.
+  if (String(game.appId) === '2519060' && declaredType === 'dlc' &&
+      result.status === 'not-found' && normalizeName(game.name) === 'call of duty modern warfare iii campaign') {
+    return { kind: 'unverified-legacy', issue: { appId: game.appId,
+      expectedName: game.name, catalogueType: declaredType, status: result.status,
+      storeName: null, storeType: null, suggestedAction: 'review-unlisted-legacy-dlc',
+      note: 'Steam Store metadata did not verify this historical DLC; preserve existing subscriptions.' } };
+  }
+  if (declaredType === 'game' && result.status === 'match' && result.storeType === 'game') {
+    return { kind: 'confirmed-game' };
+  }
+  const issue = { appId: game.appId, expectedName: game.name, catalogueType: declaredType,
+    storeName: result.storeName || null, storeType: result.storeType || null,
+    status: result.status, error: result.error || null };
+  if (result.storeName && result.storeType === declaredType && normalizeName(game.name) !== normalizeName(result.storeName)) {
+    issue.suggestedAction = 'review-display-name';
+    issue.suggestedName = result.storeName;
+  } else if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
+    issue.suggestedAction = 'review-display-name';
+    issue.suggestedName = result.storeName;
+  } else if (result.status === 'non-game') issue.suggestedAction = 'review-app-type';
+  else issue.suggestedAction = 'investigate';
+  return { kind: 'issue', issue };
+}
+
+function selectSteamCatalogueAuditBatch(catalogue, requested, offsetArg) {
+  const offset = offsetArg === undefined ? 0 : Number(offsetArg);
+  if (offsetArg !== undefined && (!/^(0|[1-9]\d*)$/.test(offsetArg) || !Number.isSafeInteger(offset) || offset >= catalogue.length)) {
+    throw new Error('Offset must be a non-negative integer below the Steam catalogue size.');
+  }
+  const remaining = catalogue.length - offset;
+  if (requested !== undefined && (!/^[1-9]\d*$/.test(requested) || !Number.isSafeInteger(Number(requested)) || Number(requested) > remaining)) {
+    throw new Error('Limit must be a positive integer no greater than the remaining Steam catalogue size.');
+  }
+  return { offset, games: catalogue.slice(offset, requested ? offset + Number(requested) : undefined) };
+}
+
+async function gameCatalogueIdentityAudit() {
+  const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/gamesProviders');
+  const { offset, games } = selectSteamCatalogueAuditBatch(UPDATE_CATALOG, process.argv[3], process.argv[4]);
+  const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
+  const issues = [], expectedLegacy = [], unverifiedLegacy = [];
+  let confirmedGames = 0;
+  // Space out Steam Store batches to reduce burst traffic and avoid treating throttling as bad catalogue data.
+  for (let index = 0; index < games.length; index += 4) {
+    if (index > 0) await new Promise(resolve => setTimeout(resolve, 750));
+    const batch = games.slice(index, index + 4);
+    const results = await Promise.all(batch.map(async game => {
+      // Transient Steam Store failures should be retried before being reported.
+      // Keep the retry bounded; this audit must never change the catalogue.
+      let result;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { result = await inspectSteamGameIdentity(game.appId); }
+        catch (error) { result = { status: 'unavailable', error: String(error.message).slice(0, 200) }; }
+        if (result.status !== 'unavailable') break;
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+      return result;
+    }));
+    results.forEach((result, offset) => {
+      const game = batch[offset];
+      totals[result.status] = (totals[result.status] || 0) + 1;
+      const classification = classifySteamCatalogueIdentity(game, result);
+      if (classification.kind === 'expected-legacy') {
+        expectedLegacy.push({ appId: classification.appId, catalogueType: classification.catalogueType, storeName: classification.storeName, storeType: classification.storeType || classification.catalogueType, note: classification.note || null });
+      } else if (classification.kind === 'confirmed-game') {
+        confirmedGames++;
+      } else if (classification.kind === 'unverified-legacy') {
+        unverifiedLegacy.push(classification.issue);
+        console.log(JSON.stringify(classification.issue));
+      } else {
+        issues.push(classification.issue);
+        console.log(JSON.stringify(classification.issue));
+      }
+    });
+    console.log('Catalogue identity progress: ' + (offset + Math.min(index + batch.length, games.length)) + '/' + UPDATE_CATALOG.length);
+  }
+  console.log(JSON.stringify({ offset, checked: games.length, totalCatalogue: UPDATE_CATALOG.length, totals, issues: issues.length,
+    confirmedGames, expectedLegacy: expectedLegacy.length, unverifiedLegacy: unverifiedLegacy.length,
+    suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,
+    note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
+  if (expectedLegacy.length) console.log(JSON.stringify({ expectedLegacy }));
+  if (unverifiedLegacy.length) console.log(JSON.stringify({ unverifiedLegacy }));
+  // Unverified legacy identities still require review; never silently pass them.
+  return issues.length === 0 && unverifiedLegacy.length === 0;
+}
+
+async function gameUpdatesAudit() {
+  const assert = require('node:assert/strict'), fs = require('node:fs');
+  // Isolated in-memory guild state: this audit never writes a server's configuration.
+  const directory = root + '/src/modules/utilityStudio/games/';
+  const modules = {}, memory = { enabled: false, currency: 'GBP', state: { deliveries: [{ messageId: 'preserve' }] } };
+  const permissions = new Proxy({}, { get: (_, key) => key });
+  const section = { getModuleSection: () => memory, updateModuleSection: (_id, _key, fn) => { const next = fn(memory); for (const key of Object.keys(memory)) delete memory[key]; Object.assign(memory, next); return memory; } };
+  function load(name) {
+    if (modules[name]) return modules[name].exports;
+    const module = { exports: {} }; modules[name] = module;
+    const localRequire = id => {
+      if (id.startsWith('./games')) return load(id.slice(2));
+      if (id.includes('moduleSectionManager')) return section;
+      if (id.includes('guildManager')) return { isModuleEnabled: () => memory.enabled };
+      if (id.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
+      if (id === 'discord.js') return { PermissionFlagsBits: permissions };
+      if (id.includes('security/protection/core')) return { isBotOwner: () => false };
+      if (id.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
+      return require(id);
+    };
+    new Function('require', 'module', 'exports', fs.readFileSync(directory + name + '.js', 'utf8'))(localRequire, module, module.exports);
+    return module.exports;
+  }
+  const providers = load('gamesProviders'), store = load('games'), embeds = load('gamesEmbeds');
+  let monitor = load('gamesMonitor');
+  // Catalogue regression: IDs are unique, publisher entries remain discovery-only,
+  // and source checks cannot silently turn into subscriptions.
+  assert(providers.UPDATE_CATALOG.length >= 189, 'Steam catalogue unexpectedly shrank below validated baseline');
+  assert(providers.PUBLISHER_UPDATE_CATALOG.length >= 16, 'Publisher catalogue unexpectedly shrank');
+  assert.equal(new Set(providers.UPDATE_CATALOG.map(game => game.appId)).size, providers.UPDATE_CATALOG.length);
+  assert.equal(new Set(providers.PUBLISHER_UPDATE_CATALOG.map(game => game.id)).size, providers.PUBLISHER_UPDATE_CATALOG.length);
+  for (const game of providers.UPDATE_CATALOG) {
+    assert.equal(providers.steamAppId(game.appId), game.appId);
+    assert.equal(game.source.type, 'steam');
+    assert.equal(game.source.verified, false);
+  }
+  for (const game of providers.PUBLISHER_UPDATE_CATALOG) {
+    assert.equal(game.subscribable, false);
+    assert.equal(game.source.status, 'pending-adapter');
+    assert.equal(game.source.verified, false);
+    assert(game.newsUrl.startsWith('https://'));
+  }
+  // Confirmed identity corrections: preserve App IDs so guild subscriptions remain stable.
+  const catalogueName = appId => providers.UPDATE_CATALOG.find(game => game.appId === appId)?.name;
+  assert.equal(catalogueName('1811260'), 'EA SPORTS™ FIFA 23');
+  assert.equal(catalogueName('2195250'), 'EA SPORTS FC™ 24');
+  assert.equal(catalogueName('1966900'), '20 Minutes Till Dawn');
+  assert.equal(catalogueName('2144740'), 'Ghostrunner 2');
+  assert.equal(catalogueName('1080110'), 'F1® 2020');
+  assert.equal(catalogueName('524220'), 'NieR:Automata™');
+  assert.equal(catalogueName('1113560'), 'NieR Replicant™ ver.1.22474487139...');
+  assert.equal(catalogueName('2519060'), 'Call of Duty: Modern Warfare III - Campaign');
+  assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '431960')?.catalogueType, 'software');
+  assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '2519060')?.catalogueType, 'dlc');
+  // Discord catalogue discovery excludes non-games without hiding existing subscriptions.
+  const starter = store.visibleSteamUpdateCatalog(providers.UPDATE_CATALOG);
+  assert.equal(starter.length, providers.UPDATE_CATALOG.filter(game => game.catalogueType === 'game').length);
+  assert(!starter.some(game => game.appId === '431960' || game.appId === '2519060'));
+  const withLegacy = store.visibleSteamUpdateCatalog(providers.UPDATE_CATALOG, {
+    '431960': { appId: '431960' }, '2519060': { appId: '2519060' }
+  });
+  assert(withLegacy.some(game => game.appId === '431960'));
+  assert(withLegacy.some(game => game.appId === '2519060'));
+  assert.equal(withLegacy.length, starter.length + 2);
+  assert.equal(new Set(withLegacy.map(game => game.appId)).size, withLegacy.length);
+  assert.deepEqual(withLegacy.map(game => game.name), [...withLegacy.map(game => game.name)].sort((a, b) => a.localeCompare(b)));
+  // Audit batching must cover the entire catalogue without duplicates or skipped IDs.
+  const firstBatch = selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, '25');
+  assert.equal(firstBatch.offset, 0);
+  assert.equal(firstBatch.games.length, 25);
+  const secondBatch = selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, '25', '25');
+  assert.deepEqual(secondBatch.games, providers.UPDATE_CATALOG.slice(25, 50));
+  const lastBatch = selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, '1', String(providers.UPDATE_CATALOG.length - 1));
+  assert.deepEqual(lastBatch.games, providers.UPDATE_CATALOG.slice(-1));
+  assert.deepEqual(selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG).games, providers.UPDATE_CATALOG);
+  const stitched = [];
+  for (let offset = 0; offset < providers.UPDATE_CATALOG.length; offset += 25) {
+    const size = Math.min(25, providers.UPDATE_CATALOG.length - offset);
+    stitched.push(...selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, String(size), String(offset)).games);
+  }
+  assert.deepEqual(stitched.map(game => game.appId), providers.UPDATE_CATALOG.map(game => game.appId));
+  for (const [limit, offset] of [['0', undefined], ['-1', undefined], ['1.5', undefined],
+    ['999999', undefined], ['1', '-1'], ['1', '1.5'], ['1', '999999'], ['2', String(providers.UPDATE_CATALOG.length - 1)]]) {
+    assert.throws(() => selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, limit, offset));
+  }
+  // Offline identity-audit classification: expected legacy types are not failures.
+  const gameIdentity = { appId: '730', name: 'Counter-Strike 2', catalogueType: 'game' };
+  const softwareIdentity = { appId: '431960', name: 'Wallpaper Engine', catalogueType: 'software' };
+  const dlcIdentity = { appId: '2519060', name: 'Call of Duty: Modern Warfare III - Campaign', catalogueType: 'dlc' };
+  assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'match', storeType: 'game' }).kind, 'confirmed-game');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software', storeName: 'Wallpaper Engine' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'non-game', storeType: 'dlc', storeName: 'Call of Duty: Modern Warfare III - Campaign' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software' }).kind, 'issue');
+  const legacyMismatch = classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software', storeName: 'Another Software Product' });
+  assert.equal(legacyMismatch.kind, 'issue');
+  assert.equal(legacyMismatch.issue.suggestedAction, 'review-display-name');
+  assert.equal(legacyMismatch.issue.suggestedName, 'Another Software Product');
+  const dlcMismatch = classifySteamCatalogueIdentity(dlcIdentity, { status: 'non-game', storeType: 'dlc', storeName: 'Different Campaign DLC' });
+  assert.equal(dlcMismatch.kind, 'issue');
+  assert.equal(dlcMismatch.issue.suggestedAction, 'review-display-name');
+  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'non-game', storeType: 'dlc', storeName: 'call of duty modern warfare iii campaign' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'dlc' }).issue.suggestedAction, 'review-app-type');
+  assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'non-game', storeType: 'software' }).kind, 'issue');
+  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'unavailable' }).kind, 'issue');
+  assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'not-found' }).kind, 'issue');
+  const mismatch = classifySteamCatalogueIdentity(gameIdentity, { status: 'name-mismatch', storeType: 'game', storeName: 'Different name' });
+  assert.equal(mismatch.issue.suggestedAction, 'review-display-name');
+  assert.equal(mismatch.issue.suggestedName, 'Different name');
+  assert.equal(typeof providers.verifyGameUpdateSource, 'function');
+
+  assert.equal(providers.steamAppId('https://store.steampowered.com/app/730/Counter_Strike_2/'), '730');
+  for (const value of ['0', '-1', '4294967296', 'https://example.com/app/730', 'http://store.steampowered.com/app/730/', 'https://user@store.steampowered.com/app/730/']) assert.throws(() => providers.steamAppId(value));
+  const raw = { gid: '100', title: 'Patch update', contents: '<script>bad()</script>[b]Fixed[/b] &amp; improved', date: Math.floor(Date.now() / 1000), feedname: 'steam_community_announcements', url: 'https://store.steampowered.com/news/app/730/view/100' };
+  const item = providers.normalizeNews(raw);
+  assert.equal(item.kind, 'patches'); assert.equal(item.description, 'Fixed & improved');
+  assert.equal(providers.normalizeNews({ ...raw, feedname: 'pcgamer' }), null);
+  assert.equal(providers.normalizeNews({ ...raw, url: 'https://example.com/news' }), null);
+  assert.equal(providers.normalizeNews({ ...raw, date: 'invalid' }), null);
+  assert.throws(() => store.validateUpdateSettings({ enabled: 'true' }, store.UPDATE_DEFAULTS));
+  assert.throws(() => store.validateUpdateSettings({ quietStart: '25:00', quietEnd: '06:00' }, store.UPDATE_DEFAULTS));
+  assert.throws(() => store.validateUpdateSettings({ quietStart: '22:00' }, store.UPDATE_DEFAULTS));
+  assert(monitor.updatesQuietNow({ quietStart: '22:00', quietEnd: '06:00' }, 'UTC', Date.parse('2026-01-01T23:00:00Z')));
+  assert(!monitor.updatesQuietNow({ quietStart: '22:00', quietEnd: '06:00' }, 'UTC', Date.parse('2026-01-01T12:00:00Z')));
+  // Steam identity regression tests use mocked store responses, never live requests.
+  assert.equal(typeof providers.inspectSteamGameIdentity, 'function');
+  const identityFetch = global.fetch;
+  try {
+    global.fetch = async (url, options) => {
+      assert.match(url, /^https:\/\/store\.steampowered\.com\/api\/appdetails\?appids=730&filters=basic$/);
+      assert.equal(options.redirect, 'error');
+      return { ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2', type: 'game' } } }) };
+    };
+    let identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'match');
+    assert.equal(identity.storeType, 'game');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Different Game', type: 'game' } } }) });
+    identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'name-mismatch');
+    assert.equal(identity.storeName, 'Different Game');
+    // A punctuation/case-only difference should not generate a false correction.
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'COUNTER STRIKE 2', type: 'game' } } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'match');
+    // A valid store game outside the curated catalogue is informational, not a mismatch.
+    global.fetch = async () => ({ ok: true, json: async () => ({ 999999999: { success: true, data: { steam_appid: 999999999, name: 'Unlisted Test Game', type: 'game' } } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('999999999')).status, 'unlisted');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2', type: 'software' } } }) });
+    identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'non-game');
+    assert.equal(identity.storeType, 'software');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2' } } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'non-game');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: false } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'not-found');
+    global.fetch = async () => { throw new Error('Network unavailable'); };
+    identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'unavailable');
+    assert.match(identity.error, /Network unavailable/);
+  } finally { global.fetch = identityFetch; }
+  const originalFetch = global.fetch;
+  try {
+    let calls = 0;
+    global.fetch = async (url, options) => { calls++; assert(url.startsWith('https://api.steampowered.com/ISteamNews/')); assert.equal(options.redirect, 'error'); return { ok: true, json: async () => ({ appnews: { appid: 730, newsitems: [raw, raw] } }) }; };
+    const [first, second] = await Promise.all([providers.getGameNews('730'), providers.getGameNews('730')]);
+    assert.equal(calls, 1); assert.equal(first.items.length, 1); assert.equal(first, second);
+    global.fetch = async () => ({ ok: true, json: async () => ({ appnews: { appid: 999, newsitems: [] } }) });
+    await assert.rejects(providers.getGameNews('570'), /invalid announcement feed/);
+  } finally { global.fetch = originalFetch; }
+  let feed = [item], sourceFailed = false, sendError = null, historyError = null, allowed = true, messages = [], sent = [];
+  providers.getGameNews = async () => { if (sourceFailed) throw new Error('Source unavailable'); return { items: feed }; };
+  const channelId = '222222222222222222', roleId = '333333333333333333';
+  const channel = { id: channelId, type: 0, permissionsFor: () => ({ has: () => allowed }), messages: { fetch: async () => { if (historyError) throw historyError; return { find: fn => messages.find(fn) }; } }, send: async payload => { if (sendError) throw sendError; sent.push(payload); messages.push({ author: { id: 'bot' }, embeds: payload.embeds }); return { id: String(sent.length) }; } };
+  const guild = { id: '111111111111111111', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} }, roles: { fetch: async () => ({ id: roleId, managed: false, mentionable: true }) } };
+  await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId, enabled: true });
+  // Destination validation permits up to ten unique routes. Multi-route
+  // delivery is exercised after the legacy single-channel regression cases.
+  assert.equal(store.normalizeUpdateDestinations([{ channelId }, { channelId: '444444444444444444' }]).length, 2);
+  assert.throws(() => store.normalizeUpdateDestinations([{ channelId }, { channelId }]), /unique valid/);
+  await monitor.configureGameUpdates(guild, { enabled: true });
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 0, 'A new subscription quietly baselines existing news.');
+  const makeItem = id => ({ ...item, id: String(id), url: 'https://store.steampowered.com/news/app/730/view/' + id });
+  feed = [makeItem(101), ...feed];
+  await Promise.all([monitor.processGameUpdates(guild), monitor.processGameUpdates(guild)]);
+  assert.equal(sent.length, 1); assert.deepEqual(sent[0].allowedMentions.roles, [roleId]); assert.equal(memory.enabled, false, 'Game Updates works independently of free-offer delivery.');
+  delete modules.gamesMonitor; monitor = load('gamesMonitor');
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 1, 'Persistent state prevents reposting after restart.');
+  const beforePreview = JSON.stringify(memory); await monitor.previewGameUpdate(guild, '730'); assert.equal(JSON.stringify(memory), beforePreview);
+  assert((await monitor.sendLatestGameUpdate(guild, '730')).alreadyDelivered); assert.equal(sent.length, 1);
+  feed = [makeItem(102), ...feed];
+  await monitor.sendLatestGameUpdate(guild, '730'); assert.equal(sent.length, 2); assert.deepEqual(sent[1].allowedMentions.roles, []);
+  sourceFailed = true; await monitor.processGameUpdates(guild); assert.match(store.getGameUpdates(guild.id).subscriptions['730'].error, /Source unavailable/); assert.equal(sent.length, 2); sourceFailed = false;
+  feed = [makeItem(103), ...feed]; allowed = false;
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 2); assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 1);
+  allowed = true; await monitor.processGameUpdates(guild); assert.equal(sent.length, 3);
+  feed = [makeItem(104), ...feed]; sendError = new Error('Connection lost');
+  await monitor.processGameUpdates(guild); sendError = null;
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 3, 'Uncertain delivery is not blindly retried.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
+  // A failed destination check must not turn an ambiguous delivery into dispatching.
+  allowed = false;
+  const heldBeforeRetry = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'));
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), heldBeforeRetry,
+    'Failed retry validation must preserve held delivery state.');
+  assert.equal(sent.length, 3, 'Failed retry validation must not send a message.');
+  allowed = true;
+  // Failure to read recent Discord history must not unlock an uncertain delivery.
+  historyError = new Error('Discord message history unavailable');
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /Discord message history unavailable/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), heldBeforeRetry,
+    'Failed history lookup must preserve held delivery state.');
+  assert.equal(sent.length, 3, 'Failed history lookup must not send an announcement.');
+  historyError = null;
+  const retryOutcome = await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 4); assert.deepEqual(sent[3].allowedMentions.roles, []);
+  assert.equal(retryOutcome.delivered, 1, 'Retry should report the announcement actually sent.');
+  assert.equal(retryOutcome.recovered, 0, 'Retry should not claim recovery of a missing message.');
+  assert.equal(retryOutcome.held, 0, 'Successful retry should clear the held count.');
+  // Simulate a crash after Discord accepted a send but before local confirmation persisted.
+  const recovered = makeItem(105); feed = [recovered, ...feed];
+  store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [recovered.id, ...sub.seenIds], pending: [{ item: recovered, status: 'dispatching' }] } } }; });
+  messages.push({ author: { id: 'bot' }, embeds: embeds.buildGameUpdate(store.getGameUpdates(guild.id).subscriptions['730'], recovered).embeds });
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).history[0].status, 'recovered');
+  // An explicit Retry held that discovers an existing Discord message must journal
+  // that channel's recovered message ID, without sending another announcement.
+  const retryRecovered = makeItem(1052);
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [{ item: retryRecovered, status: 'ambiguous' }] } } }; });
+  messages.push({ id: 'recovered-1052', author: { id: 'bot' }, embeds: embeds.buildGameUpdate(store.getGameUpdates(guild.id).subscriptions['730'], retryRecovered).embeds });
+  const recoveredOutcome = await monitor.retryHeldGameUpdates(guild, '730');
+  assert.equal(recoveredOutcome.recovered, 1);
+  assert.equal(recoveredOutcome.delivered, 0);
+  assert.equal(sent.length, 4, 'Recovery of an existing message must not resend it.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].routeDeliveries[channelId][0].messageId, 'recovered-1052');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].routeDeliveries[channelId][0].status, 'recovered');
+  // A restart with a dispatching item absent from recent channel history is uncertain,
+  // not proof of non-delivery. Hold it for review rather than risk a duplicate post.
+  const uncertain = makeItem(1051);
+  store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [uncertain.id, ...sub.seenIds], pending: [{ item: uncertain, status: 'dispatching' }] } } }; });
+  delete modules.gamesMonitor; monitor = load('gamesMonitor');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, 4, 'Restart must not resend an unconfirmed dispatch absent from channel history.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, 4, 'Ambiguous dispatch remains held across subsequent polls.');
+  store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, pending: [] } } }; });
+  const sub = store.getGameUpdates(guild.id).subscriptions['730'];
+  memory.timeZone = 'UTC';
+  const clock = new Date(), clockText = date => date.toISOString().slice(11, 16);
+  await monitor.configureGameUpdates(guild, { quietStart: clockText(clock), quietEnd: clockText(new Date(clock.getTime() + 60000)) });
+  feed = [makeItem(107), makeItem(106), ...feed];
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 2);
+  const queuedBeforeManual = store.getGameUpdates(guild.id).subscriptions['730'].pending.map(entry => entry.item.id);
+  const queuedSnapshot = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
+  await assert.rejects(monitor.removeGameSubscription(guild, '730'), /queued updates/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), queuedSnapshot,
+    'Unsubscribe must not discard undelivered announcements.');
+  await monitor.sendLatestGameUpdate(guild, '730'); assert.equal(sent.length, 5); assert.deepEqual(sent[4].allowedMentions.roles, []);
+  assert(queuedBeforeManual.includes('107') && queuedBeforeManual.includes('106'), 'Quiet hours must queue both announcements before manual delivery.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 1, 'Manual send must not flush another queued announcement.');
+  await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 5, 'Retry held must not flush unrelated queued announcements.');
+  await monitor.configureGameUpdates(guild, { quietStart: null, quietEnd: null }); await monitor.processGameUpdates(guild); assert.equal(sent.length, 6);
+  let canManage = false, lastReply;
+  guild.members.fetch = async () => ({ permissions: { has: () => canManage } });
+  const interaction = action => ({ customId: 'admin:module:freeGames:updates:' + action, guild, user: { id: 'manager' }, deferred: true, isButton: () => true, editReply: async payload => { lastReply = payload; } });
+  const beforeDenied = JSON.stringify(memory); await store.handleAdminInteraction(interaction('toggle')); assert.match(lastReply.content, /Manage Server/); assert.equal(JSON.stringify(memory), beforeDenied);
+  canManage = true; await store.handleAdminInteraction(interaction('home:0')); assert.match(lastReply.embeds[0].title, /Game Updates/);
+  sourceFailed = true; await store.handleAdminInteraction(interaction('preview:730')); assert.match(lastReply.embeds[0].description, /Unable to apply change/); sourceFailed = false;
+  assert.equal(store.matchesGameUpdate(item, { ...sub, includeWords: ['fixed'], excludeWords: [] }), true);
+  assert.equal(store.matchesGameUpdate(item, { ...sub, includeWords: [], excludeWords: ['fixed'] }), false);
+  const detailed = embeds.buildGameUpdate({ ...sub, detail: 'detailed', artwork: 'hidden' }, { ...item, description: '*'.repeat(3500) }, { suppressMention: true });
+  assert(detailed.embeds[0].description.length < 4096); assert(!detailed.embeds[0].image); assert.deepEqual(detailed.allowedMentions.roles, []);
+  for (const panel of [store.buildUpdatesPanel(guild), store.buildUpdateSubscriptionPanel(guild, '730'), store.buildUpdateSubscriptionPanel(guild, '730', '', true)]) {
+    assert(panel.components.length <= 5); for (const row of panel.components) assert(row.components.length <= 5);
+    assert.deepEqual(panel.allowedMentions, { parse: [] });
+  }
+  // Concurrent held retries and polling must serialize per guild and never double-send.
+  const concurrentHeld = makeItem(108);
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, seenIds: [concurrentHeld.id, ...current.seenIds], pending: [{ item: concurrentHeld, status: 'ambiguous' }] } } }; });
+  const beforeConcurrent = sent.length;
+  await Promise.all([
+    monitor.retryHeldGameUpdates(guild, '730'),
+    monitor.retryHeldGameUpdates(guild, '730'),
+    monitor.processGameUpdates(guild)
+  ]);
+  assert.equal(sent.length, beforeConcurrent + 1, 'Concurrent retries and polling must send held update exactly once.');
+  assert.deepEqual(sent[sent.length - 1].allowedMentions.roles, [], 'Retry must not repeat role mentions.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 0);
+  // Disabled subscriptions must not deliver new announcements; re-enabling
+  // quietly baselines news accumulated while disabled, then resumes normally.
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: false });
+  const beforeDisabled = sent.length;
+  feed = [makeItem(109), ...feed];
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled, 'Disabled subscription must not send updates.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 0);
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: true });
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled, 'Re-enabled subscription must quietly baseline disabled-period news.');
+  feed = [makeItem(110), ...feed];
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled + 1, 'New announcements after re-enable must deliver normally.');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled + 1, 'Re-enabled subscription must not duplicate delivered news.');
+  // Uncertain deliveries must survive disable/re-enable and must prevent
+  // changing their destination until an administrator resolves them.
+  const heldAcrossToggle = makeItem(111);
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [{ item: heldAcrossToggle, status: 'ambiguous' }] } } }; });
+  const beforeHeldToggle = sent.length;
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: false });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous', 'Disabling must retain uncertain delivery.');
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: true });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].item.id, heldAcrossToggle.id, 'Re-enabling must retain uncertain delivery.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].channelId, channelId, 'Rejected destination change must preserve original channel.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [{ channelId, enabled: true }] }), /Resolve held deliveries/);
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
+    { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
+  ] }), /Resolve held deliveries/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous',
+    'Unsupported multi-channel changes must not override held-delivery safety or clear its state.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].destinationsConfigured, undefined,
+    'Rejected multi-destination change must not persist while delivery is uncertain.');
+  // Legacy multi-route data must not let Retry held inspect or resend against an unrelated primary channel.
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, destinationsConfigured: true, destinations: [
+    { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
+  ] } } }; });
+  // A legacy multi-route subscription must recover safely, without discarding
+  // the original uncertain entry when a channel cannot be inspected.
+  historyError = new Error('Discord history unavailable');
+  const beforeUnsafeManual = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /Discord history unavailable/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), beforeUnsafeManual,
+    'Failed multi-route history inspection must preserve held deliveries.');
+  historyError = null;
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; const { destinationsConfigured, destinations, ...rest } = current; return { ...state, subscriptions: { ...state.subscriptions, '730': rest } }; });
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  const heldPanel = store.buildUpdateSubscriptionPanel(guild, '730', '', true);
+  assert.match(heldPanel.embeds[0].fields.find(field => field.name === 'Updates').value, /Held for review: 1/);
+  assert.match(heldPanel.embeds[0].description, /require review/);
+  assert.equal(heldPanel.components[2].components.find(button => button.custom_id?.endsWith('retry-view:730')).disabled, false,
+    'Retry held should be available when an uncertain delivery exists.');
+  // History panels must be bounded, filterable and read-only.
+  const historyBefore = JSON.stringify(store.getGameUpdates(guild.id));
+  const allHistory = store.buildGameUpdateHistoryPanel(guild);
+  assert.match(allHistory.embeds[0].title, /Delivery history/);
+  assert(allHistory.embeds[0].fields.length <= 8, 'History must fit the Discord embed field limit.');
+  assert(allHistory.components.length <= 5);
+  assert.deepEqual(allHistory.allowedMentions, { parse: [] });
+  const recoveredHistory = store.buildGameUpdateHistoryPanel(guild, 0, 'recovered');
+  assert(recoveredHistory.embeds[0].fields.every(field => /recovered/i.test(field.value)));
+  const emptyHistory = store.buildGameUpdateHistoryPanel(guild, 0, 'unknown-status');
+  assert.match(emptyHistory.embeds[0].title, /Delivery history/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), historyBefore, 'History browsing must not mutate delivery state.');
+  const originalHistory = store.getGameUpdates(guild.id).history;
+  store.updateGameUpdates(guild.id, state => ({ ...state, history: Array.from({ length: 20 }, (_, index) => ({
+    appId: '730', itemId: String(index), title: 'Announcement ' + index, status: index % 2 ? 'failed' : 'delivered', at: Date.now()
+  })) }));
+  const firstHistoryPage = store.buildGameUpdateHistoryPanel(guild, 0, 'all');
+  const lastHistoryPage = store.buildGameUpdateHistoryPanel(guild, 99, 'all');
+  assert.equal(firstHistoryPage.embeds[0].fields.length, 8, 'History must paginate after eight records.');
+  assert.equal(lastHistoryPage.embeds[0].fields.length, 4, 'History page must clamp to the last page.');
+  assert.match(lastHistoryPage.embeds[0].footer.text, /3\/3/);
+  assert.equal(store.buildGameUpdateHistoryPanel(guild, 0, 'failed').embeds[0].fields.length, 8);
+  store.updateGameUpdates(guild.id, state => ({ ...state, history: originalHistory }));
+  const beforeRejectedRemoval = JSON.stringify(store.getGameUpdates(guild.id));
+  await assert.rejects(monitor.removeGameSubscription(guild, '730'), /Resolve held deliveries/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), beforeRejectedRemoval,
+    'Rejected unsubscribe must preserve the entire subscription and delivery history.');
+  // Once the uncertain delivery is resolved, unsubscribe retains global history.
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [] } } }; });
+  await monitor.removeGameSubscription(guild, '730');
+  assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
+  // Multi-channel delivery: independent role mention, durable journal and
+  // no duplicate in the successful channel when the other channel fails.
+  const secondId = '444444444444444444', secondSent = [], secondMessages = [];
+  let secondFailure = false;
+  const secondChannel = { id: secondId, type: 0, permissionsFor: () => ({ has: () => true }),
+    messages: { fetch: async () => ({ find: fn => secondMessages.find(fn) }) },
+    send: async payload => {
+      if (secondFailure) throw new Error('Connection lost');
+      secondSent.push(payload);
+      const message = { id: 'second-' + secondSent.length, author: { id: 'bot' }, embeds: payload.embeds };
+      secondMessages.push(message);
+      return message;
+    } };
+  guild.channels.fetch = async id => id === secondId ? secondChannel : channel;
+  await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId,
+    destinations: [{ channelId, roleId, enabled: true }, { channelId: secondId, enabled: true }], enabled: true });
+  const beforeMulti = sent.length;
+  feed = [makeItem(201), ...feed];
+  secondFailure = true;
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeMulti + 1, 'Primary route must deliver even when another route fails.');
+  assert.equal(secondSent.length, 0);
+  let multi = store.getGameUpdates(guild.id).subscriptions['730'];
+  assert.equal(multi.pending.length, 1, 'Failed secondary route must retain pending delivery.');
+  assert.equal(multi.pending[0].routes[channelId].status, 'delivered');
+  assert.equal(multi.pending[0].routes[secondId].status, 'ambiguous');
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: false });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].routes[channelId].status, 'delivered',
+    'Pausing must preserve the already delivered route receipt.');
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: true });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].routes[secondId].status, 'ambiguous',
+    'Re-enabling must retain unresolved secondary channel state.');
+  const partiallyDelivered = JSON.stringify(multi.pending);
+  await assert.rejects(monitor.sendLatestGameUpdate(guild, '730'), /queued or unresolved destination deliveries/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), partiallyDelivered,
+    'Manual latest must not replace partially delivered per-channel receipts.');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeMulti + 1, 'A successful route must not duplicate after another route becomes uncertain.');
+  secondFailure = false;
+  // The primary channel is already delivered; its unavailable history must
+  // not prevent recovery of the uncertain secondary destination.
+  historyError = new Error('Unrelated primary history unavailable');
+  const multiRetry = await monitor.retryHeldGameUpdates(guild, '730');
+  historyError = null;
+  assert.equal(multiRetry.delivered, 1);
+  assert.equal(secondSent.length, 1);
+  assert.deepEqual(secondSent[0].allowedMentions.roles, [], 'Retry must suppress role mentions.');
+  assert.equal(sent.length, beforeMulti + 1, 'Retry must not resend a successful channel.');
+  multi = store.getGameUpdates(guild.id).subscriptions['730'];
+  assert.equal(multi.pending.length, 0);
+  assert.equal(multi.routeDeliveries[channelId][0].status, 'delivered');
+  assert.equal(multi.routeDeliveries[secondId][0].status, 'delivered');
+  await monitor.processGameUpdates(guild);
+  assert.equal(secondSent.length, 1, 'Restart-safe channel journal must prevent duplicate secondary delivery.');
+  await monitor.removeGameSubscription(guild, '730');
+  assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
+  console.log('✅ Game Updates: isolated state, official Steam source/cache, validation, independent enablement, quiet baseline, concurrent/restart dedupe, private preview, role-safe manual sends, permission recovery, uncertain-send review, crash recovery, filters, embed/component limits and legacy data preservation');
+  return true;
+}
+
+
+function dashboardRoutingAudit() {
+  const assert = require('node:assert/strict');
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const routing = require('../src/config/dashboardRouting');
+  const previousBase = process.env.DASHBOARD_BASE_PATH;
+  const frontend = fs.readFileSync(require('node:path').join(__dirname, '../src/dashboard/js/services/dashboardPath.js'), 'utf8');
+  const auth = fs.readFileSync(require('node:path').join(__dirname, '../src/server/routes/auth.js'), 'utf8');
+  try {
+    for (const base of ['', '/dev', '/beta']) {
+      process.env.DASHBOARD_BASE_PATH = base;
+      assert.equal(routing.dashboardBasePath(), base);
+      assert.equal(routing.dashboardUrl('https://goliath.ksjdigital.co.uk/ignored', '/portal'), 'https://goliath.ksjdigital.co.uk' + base + '/portal');
+      const sandbox = { window: { location: { assign(value) { sandbox.destination = value; }, replace(value) { sandbox.destination = value; } } } };
+      vm.createContext(sandbox);
+      vm.runInContext(frontend.replace('import.meta.env.BASE_URL', JSON.stringify(base + '/')).replace(/export /g, '') + '\nglobalThis.helpers = { dashboardPath, localDashboardPath, goDashboard };', sandbox);
+      const h = sandbox.helpers;
+      assert.equal(h.dashboardPath('/api/auth/login'), base + '/api/auth/login');
+      assert.equal(h.dashboardPath(base + '/portal?guild=1'), base + '/portal?guild=1');
+      assert.equal(h.localDashboardPath(base + '/portal'), '/portal');
+      assert.equal(h.dashboardPath('https://discord.com/example'), 'https://discord.com/example');
+      assert.equal(h.dashboardPath('//example.com'), '//example.com');
+      h.goDashboard('/overview?guild=1');
+      assert.equal(sandbox.destination, base + '/overview?guild=1');
+      const authSandbox = { URL, URLSearchParams, Buffer, process, console, require(name) {
+        if (name === 'node:crypto') return require(name);
+        if (name === 'express') return { Router: () => ({ get() {}, post() {} }) };
+        if (name.includes('dashboardRouting')) return routing;
+        if (name.includes('dashboardAccess')) return { MEMBER_PORTAL: '/portal', listDashboardGuilds: async () => [] };
+        return {};
+      }, module: { exports: {} } };
+      vm.createContext(authSandbox);
+      vm.runInContext(auth + '\nglobalThis.helpers = { buildPostOAuthTarget, getCookieOptions, safeReturnPath, createOAuthState, readOAuthState };', authSandbox);
+      const a = authSandbox.helpers;
+      assert.equal(a.buildPostOAuthTarget('https://goliath.ksjdigital.co.uk', '/portal'), 'https://goliath.ksjdigital.co.uk' + base + '/portal');
+      assert.equal(a.getCookieOptions().path, base || '/');
+      assert.equal(a.safeReturnPath('//evil.example/portal'), '/');
+      const signed = a.createOAuthState('/appeals?guild=111111111111111111&case=2', 'test-only');
+      assert.equal(a.readOAuthState(signed, 'test-only'), '/appeals?guild=111111111111111111&case=2');
+      assert.equal(a.readOAuthState(signed, 'different-test-secret'), null);
+    }
+    process.env.DASHBOARD_BASE_PATH = '/invalid';
+    assert.throws(() => routing.dashboardBasePath());
+    process.env.DASHBOARD_BASE_PATH = '/dev'; const devName = routing.dashboardSessionName();
+    process.env.DASHBOARD_BASE_PATH = '/beta'; assert.notEqual(routing.dashboardSessionName(), devName);
+    console.log('Dashboard routing audit passed: production/dev/beta paths, redirects, cookie names and signed return targets.');
+    return true;
+  } finally {
+    if (previousBase === undefined) delete process.env.DASHBOARD_BASE_PATH;
+    else process.env.DASHBOARD_BASE_PATH = previousBase;
+  }
+}
+
+
+async function goliathAiBlueprintAudit() {
+const assert = require('node:assert/strict');
+const { parseBlueprint, toBlueprint, planBlueprint } = require('../src/owner/dev/goliathBlueprint');
+
+const guildId = '123456789012345678';
+const categoryId = '223456789012345678';
+const channelId = '323456789012345678';
+const otherId = '423456789012345678';
+const audit = {
+  readOnly: true, environment: 'DEV', timestamp: '2026-11-12T01:00:00.000Z',
+  guild: { id: guildId, name: 'Test Discord' }, channels: [
+    { id: categoryId, name: 'Community', type: 4, parentId: null },
+    { id: channelId, name: 'general', type: 0, parentId: categoryId },
+    { id: otherId, name: 'archive', type: 0, parentId: null }
+  ]
+};
+const original = JSON.stringify(audit);
+const starter = toBlueprint(audit);
+assert.equal(planBlueprint(audit, starter).operationCount, 0);
+const changed = structuredClone(starter);
+changed.categories[0].name = 'Social';
+changed.categories[0].channels[0].name = 'chat';
+changed.categories[0].channels.push({ name: 'guides', type: 'text' });
+changed.categories.push({ name: 'Voice', channels: [{ name: 'General Voice', type: 'voice' }] });
+const preview = planBlueprint(audit, changed);
+assert.equal(preview.executable, false);
+assert.equal(preview.readOnly, true);
+assert.deepEqual(preview.operations.map(entry => entry.kind),
+  ['rename_category', 'edit_channel', 'create_channel', 'create_category', 'create_channel']);
+assert.equal(preview.untouchedCount, 1);
+assert.equal(JSON.stringify(audit), original, 'Audit must never be mutated by preview');
+assert.throws(() => parseBlueprint({ categories: [{ name: 'x', channels: [{ name: 'bad', type: 'invalid' }] }] }));
+assert.throws(() => parseBlueprint({ categories: [{ name: 'bad\ncategory', channels: [] }] }));
+assert.throws(() => parseBlueprint({ categories: [{ name: 'x', channels: [{ id: categoryId, name: 'c', type: 'text' }] , id: categoryId }] }));
+assert.throws(() => planBlueprint(audit, { categories: [{ id: '999999999999999999', name: 'missing', channels: [] }] }));
+assert.throws(() => planBlueprint(audit, { categories: [{ name: 'Community', channels: [
+  { id: channelId, name: 'a', type: 'text' },
+  { id: channelId, name: 'b', type: 'text' }] }] }));
+assert.throws(() => parseBlueprint({ categories: Array.from({ length: 41 }, (_, i) => ({ name: 'Category ' + i, channels: [] })) }));
+assert.throws(() => parseBlueprint({ categories: [{ name: 'General', channels: [
+  { name: 'chat', type: 'text' }, { name: 'CHAT', type: 'text' }
+] }] }), /Duplicate channel/);
+assert.throws(() => parseBlueprint({ categories: [{ name: 'Oversized', channels:
+  Array.from({ length: 51 }, (_, i) => ({ name: 'channel-' + i, type: 'text' }))
+}] }), /50 planned channels/);
+const crowded = {
+  ...audit,
+  channels: [...audit.channels,
+    ...Array.from({ length: 497 }, (_, i) => ({
+      id: String(500000000000000000n + BigInt(i)), name: 'existing-' + i, type: 0, parentId: null
+    }))]
+};
+assert.throws(() => planBlueprint(crowded, { categories: [{ name: 'Extra', channels: [] }] }),
+  /500-channel guild limit/);
+// A category's real occupancy includes channels omitted from the blueprint.
+const fullCategoryAudit = {
+  ...audit, channels: [...audit.channels, ...Array.from({ length: 49 }, (_, i) => ({
+    id: String(600000000000000000n + BigInt(i)),
+    name: 'untouched-' + i, type: 0, parentId: categoryId
+  }))]
+};
+assert.throws(() => planBlueprint(fullCategoryAudit, {
+  categories: [{ id: categoryId, name: 'Community',
+    channels: [{ name: 'new-channel', type: 'text' }] }]
+}), /50-channel category limit/);
+assert.equal(planBlueprint(fullCategoryAudit, {
+  categories: [{ id: categoryId, name: 'Community', channels: [] }]
+}).operationCount, 0);
+assert.throws(() => planBlueprint({
+  ...audit, channels: audit.channels.map(channel =>
+    channel.id === channelId ? { ...channel, parentId: '999999999999999999' } : channel)
+}, starter), /invalid or missing parent category/);
+assert.throws(() => planBlueprint({
+  ...audit, channels: audit.channels.map(channel =>
+    channel.id === categoryId ? { ...channel, parentId: categoryId } : channel)
+}, starter), /nested category|invalid or missing parent category/);
+// Saved draft contracts use an isolated temporary file, never live runtime data.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const store = require('../src/owner/dev/goliathDraftStore');
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-drafts-'));
+const tempFile = path.join(tempDir, 'drafts.json');
+const oldMode = process.env.BOT_MODE;
+try {
+  process.env.BOT_MODE = 'DEV';
+  const fingerprint = 'a'.repeat(64);
+  const draft = store.saveDraft({
+    environment: 'DEV', guildId, guildName: audit.guild.name,
+    ownerId: guildId, title: 'Initial rebuild', blueprint: changed,
+    auditDigest: fingerprint, basedOnAudit: audit.timestamp
+  }, tempFile);
+  assert.equal(draft.review.status, 'draft');
+  assert.equal(draft.executable, false);
+  assert.equal(store.listDrafts(tempFile).length, 1);
+  assert.equal(store.loadDraft(draft.id, tempFile).blueprint.categories.length, 2);
+  assert.throws(() => store.reviewDraft({
+    id: draft.id, ownerId: guildId, currentAuditDigest: 'b'.repeat(64)
+  }, tempFile), /server changed/i);
+  const reviewed = store.reviewDraft({
+    id: draft.id, ownerId: guildId, currentAuditDigest: fingerprint
+  }, tempFile);
+  assert.equal(reviewed.review.status, 'reviewed');
+  assert.equal(reviewed.review.checkedBy, guildId);
+  assert.match(reviewed.review.checkpointId, /^[0-9a-f-]{36}$/i);
+  const reviewedAgain = store.reviewDraft({
+    id: draft.id, ownerId: guildId, currentAuditDigest: fingerprint
+  }, tempFile);
+  assert.notEqual(reviewedAgain.review.checkpointId, reviewed.review.checkpointId);
+  assert.throws(() => store.reviewDraft({
+    id: draft.id, ownerId: otherId, currentAuditDigest: fingerprint
+  }, tempFile), /Only the draft creator/);
+  assert.equal(reviewed.executable, false);
+  assert.throws(() => store.deleteDraft(draft.id, tempFile, otherId),
+    /Only the draft creator/);
+  assert.equal(store.loadDraft(draft.id, tempFile).id, draft.id);
+  assert.throws(() => store.deleteDraft(draft.id, tempFile),
+    /Draft owner identity is required/);
+  assert.equal(store.deleteDraft(draft.id, tempFile, guildId), true);
+  assert.equal(store.listDrafts(tempFile).length, 0);
+  assert.equal(store.deleteDraft(draft.id, tempFile, guildId), false);
+  process.env.BOT_MODE = 'PRODUCTION';
+  assert.throws(() => store.saveDraft({
+    environment: 'PRODUCTION', guildId, ownerId: guildId,
+    title: 'Must fail', blueprint: changed, auditDigest: fingerprint, basedOnAudit: audit.timestamp
+  }, tempFile), /DEV-only/);
+} finally {
+  if (oldMode === undefined) delete process.env.BOT_MODE; else process.env.BOT_MODE = oldMode;
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
+const { evaluateReadiness } = require('../src/owner/dev/goliathExecutionReadiness');
+const readyAudit = { ...audit, roles: [] };
+const readyDraft = {
+  id: '00000000-0000-4000-8000-000000000001',
+  environment: 'DEV', guildId, guildName: audit.guild.name,
+  auditDigest: 'a'.repeat(64), createdBy: guildId,
+  review: { status: 'reviewed', checkedBy: guildId, checkedAt: '2026-11-15T00:00:00.000Z',
+    checkpointId: '00000000-0000-4000-8000-000000000002' }
+};
+const report = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(report.canExecute, false);
+assert.equal(report.executable, false);
+assert.equal(report.operationCount, preview.operations.length);
+assert.equal(report.checks.find(item => item.key === 'fresh_audit').state, 'passed');
+assert(report.blockers.includes('backup'));
+assert(report.blockers.includes('execution_engine'));
+assert(report.operations.every(item => item.executable === false && item.needsOwnerApproval === true));
+const staleReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview, currentDigest: 'b'.repeat(64)
+});
+assert.equal(staleReadiness.checks.find(item => item.key === 'fresh_audit').state, 'blocked');
+assert.equal(staleReadiness.canExecute, false);
+const wrongGuild = evaluateReadiness({
+  draft: { ...readyDraft, guildId: otherId }, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(wrongGuild.checks.find(item => item.key === 'owner_scope').state, 'blocked');
+assert.equal(wrongGuild.canExecute, false);
+assert.equal(wrongGuild.recoveryPlan.unavailable, true);
+assert.equal(wrongGuild.recoveryPlan.canRollback, false);
+const malformedReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview, currentDigest: 'invalid'
+});
+assert.equal(malformedReadiness.canExecute, false);
+assert.equal(malformedReadiness.recoveryPlan.unavailable, true);
+assert.equal(malformedReadiness.checks.find(item => item.key === 'fresh_audit').state, 'blocked');
+assert.throws(() => evaluateReadiness({ draft: readyDraft, audit: readyAudit, preview: null,
+  currentDigest: 'a'.repeat(64) }), /required/);
+
+const backupCandidate = {
+  status: 'candidate-found', environment: 'DEV', guildId,
+  checkedAt: new Date().toISOString(),
+  verification: 'not-performed',
+  candidates: [{ backupId: 'backup-example', hasIntegrityMetadata: true, validationReportedValid: true }]
+};
+const backupReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64), backupEvidence: backupCandidate
+});
+assert.equal(backupReadiness.canExecute, false);
+assert.equal(backupReadiness.checks.find(item => item.key === 'backup').state, 'pending');
+assert(backupReadiness.blockers.includes('backup'));
+assert.equal(backupReadiness.backupEvidence.verification, 'not-performed');
+const missingBackupReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64),
+  backupEvidence: { status: 'none-found', candidates: [], verification: 'not-performed' }
+});
+assert.equal(missingBackupReadiness.canExecute, false);
+assert(missingBackupReadiness.checks.find(item => item.key === 'backup').detail.includes('No matching backup'));
+
+// Security contract regression: inspect the live router implementation so
+// accidental removal of replay/expiry/revocation guards fails this audit.
+const aiRouterSource = fs.readFileSync(
+  path.join(__dirname, '../src/owner/dev/goliathAI.js'), 'utf8');
+const aiSelfTestSource = aiRouterSource.split(
+  "router.post('/self-test', requirePrivateAI, async (_req, res) => {")[1]?.split(
+  "// Health check never starts a model")[0];
+assert(aiSelfTestSource, 'Developer-only local generation self-test must exist');
+for (const guard of [
+  "if (!isEnabled())", "if (requestInProgress)", "requestInProgress = true",
+  "fetch(LOCAL_AI_URL", "localAIHeaders(true)", "stream: false",
+  "controller.abort()", "clearTimeout(timeout)", "requestInProgress = false",
+  "ready: true", "canExecute: false", "/^READY[.!]?$/i.test(answer.trim())"
+]) assert(aiSelfTestSource.includes(guard), 'Missing local generation probe guard: ' + guard);
+assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTestSource),
+  'Local readiness probe must not access guild data or mutate Discord');
+const aiStatusSource = aiRouterSource.split(
+  "router.get('/status', requirePrivateAI, (_req, res) =>")[1]?.split(
+  "// A developer-only readiness probe")[0];
+assert(aiStatusSource && /verified:\s*false/.test(aiStatusSource) &&
+  aiStatusSource.includes("verificationRequired: 'POST /self-test'") &&
+  !/verified:\s*true/.test(aiStatusSource),
+  'Configuration status must not claim live inference verification');
+const renameApplySource = aiRouterSource.split("router.post('/drafts/:id/apply-category-rename', requirePrivateAI,")[1]?.split("// Owner confirmation is recorded")[0];
+const renameRecoverySource = aiRouterSource.split("router.post('/category-rename-journal/:id/reconcile', requirePrivateAI,")[1]?.split("router.post('/drafts/:id/apply-category-rename'")[0];
+assert(renameApplySource && renameRecoverySource, 'DEV rename and recovery routes must remain private');
+for (const guard of [
+  "localMode() !== 'DEV'", "GOLIATH_AI_DEV_RENAME_ENABLED !== 'true'",
+  "APPLY DEV CATEGORY RENAME", "draft.createdBy !== ownerId",
+  "draft.auditDigest !== currentDigest", "preview.operations.length !== 1",
+  "item.reviewerId === ownerId", "preflight.permissionsVerified",
+  "history.some(entry => entry.status === 'pending')",
+  "status: 'pending'", "categoryRenameInProgress = false"
+]) assert(renameApplySource.includes(guard), 'Missing DEV rename safety guard: ' + guard);
+assert(renameApplySource.indexOf('writeRenameJournal(history)') >= 0 &&
+  renameApplySource.indexOf('writeRenameJournal(history)') < renameApplySource.indexOf('await channel.setName('),
+  'Rename must persist recovery intent before Discord mutation');
+assert.equal((renameApplySource.match(/\{ force: true \}/g) || []).length >= 3, true,
+  'Rename must refresh category and permission state');
+assert(renameApplySource.indexOf('await channel.setName(') < renameApplySource.indexOf("record.status = 'verified'") &&
+  renameApplySource.includes('updated.type !== 4') && renameApplySource.includes('updated.id !== channel.id'),
+  'Rename verification must validate the returned category identity');
+for (const guard of [
+  "localMode() !== 'DEV'", "VERIFY DEV RENAME STATE", "item.ownerId === ownerId",
+  "entry.status !== 'pending'", "guild.channels.fetch(entry.categoryId, { force: true })",
+  "category.name !== entry.proposedName && category.name !== entry.previousName"
+]) assert(renameRecoverySource.includes(guard), 'Missing DEV reconciliation guard: ' + guard);
+assert(!/\.setName\(|\.edit\(|\.delete\(|\.create\(/.test(renameRecoverySource),
+  'Reconciliation must not mutate Discord');
+// Exercise real journal serialization/validation using an isolated in-memory filesystem.
+const journalSource = aiRouterSource.slice(aiRouterSource.indexOf('function readRenameJournal()'), aiRouterSource.indexOf("router.get('/category-rename-journal'"));
+assert(journalSource.startsWith('function readRenameJournal()'), 'Rename journal helpers missing');
+const journalFiles = new Map();
+const journalFs = {
+  existsSync: file => journalFiles.has(file),
+  statSync: file => ({ size: Buffer.byteLength(journalFiles.get(file)) }),
+  readFileSync: file => journalFiles.get(file),
+  mkdirSync() {},
+  writeFileSync(file, raw, options) { assert.equal(options.flag, 'wx'); assert.equal(options.mode, 0o600); journalFiles.set(file, raw); },
+  renameSync(from, to) { journalFiles.set(to, journalFiles.get(from)); journalFiles.delete(from); },
+  chmodSync(file, mode) { assert.equal(mode, 0o600); },
+  unlinkSync: file => journalFiles.delete(file)
+};
+const journal = new Function('fs', 'require', 'Buffer', 'renameJournalPath', 'SNOWFLAKE',
+  journalSource + '\nreturn { readRenameJournal, writeRenameJournal };')(
+  journalFs, id => {
+    if (id === 'node:path') return { dirname: () => '/isolated' };
+    if (id === 'node:crypto') return { randomUUID: () => 'temporary' };
+    throw new Error('Unexpected journal dependency: ' + id);
+  }, Buffer, () => '/isolated/journal.json', /^\d{16,20}$/);
+const journalFile = '/isolated/journal.json';
+const journalEntry = { id: '12345678-1234-1234-1234-123456789012',
+  guildId: '123456789012345678', categoryId: '223456789012345678',
+  ownerId: '323456789012345678', previousName: 'Before', proposedName: 'After', status: 'pending' };
+assert.deepEqual(journal.readRenameJournal(), []);
+journal.writeRenameJournal([journalEntry]);
+assert.deepEqual(journal.readRenameJournal(), [journalEntry]);
+assert.equal(journalFiles.size, 1, 'Temporary journal must be removed');
+journal.writeRenameJournal([{ ...journalEntry, status: 'verified' }]);
+assert.equal(journal.readRenameJournal()[0].status, 'verified');
+journalFiles.set(journalFile, '{broken');
+assert.throws(() => journal.readRenameJournal());
+journalFiles.set(journalFile, JSON.stringify([{ ...journalEntry, status: 'unknown' }]));
+assert.throws(() => journal.readRenameJournal());
+journalFiles.set(journalFile, JSON.stringify([{ ...journalEntry, categoryId: 'invalid' }]));
+assert.throws(() => journal.readRenameJournal());
+assert.throws(() => journal.writeRenameJournal(Array(201).fill(journalEntry)));
+// Run the actual async reconciliation handler with an isolated Discord fixture.
+const recoveryHandlerFactory = new Function('localMode', 'readRenameJournal', 'writeRenameJournal', 'console',
+  'let categoryRenameInProgress = false; return (' + renameRecoverySource.trim().replace(/\);\s*$/, '') + ');');
+let recoveryRecords = [];
+let recoveryWrites = 0;
+let recoveryFetches = 0;
+let recoveryMode = 'DEV';
+const recoveryHandler = recoveryHandlerFactory(() => recoveryMode,
+  () => JSON.parse(JSON.stringify(recoveryRecords)),
+  entries => { recoveryWrites++; recoveryRecords = entries; }, { error() {} });
+async function exerciseRenameRecovery(name, expectedCode, expectedStatus, options = {}) {
+  recoveryRecords = [{ ...journalEntry }];
+  recoveryWrites = 0;
+  recoveryFetches = 0;
+  recoveryMode = options.mode || 'DEV';
+  const req = { session: { user: { id: options.owner || journalEntry.ownerId } },
+    params: { id: journalEntry.id }, body: { confirmation: options.confirmation || 'VERIFY DEV RENAME STATE' },
+    client: { guilds: { cache: { get: () => ({ channels: { fetch: async (id, opts) => {
+      recoveryFetches++;
+      assert.equal(id, journalEntry.categoryId);
+      assert.equal(opts.force, true);
+      if (options.fetchError) throw new Error('Simulated Discord outage');
+      return name === null ? null : { type: options.type ?? 4, name };
+    } } }) } } } };
+  const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await recoveryHandler(req, res);
+  assert.equal(res.code, expectedCode);
+  assert.equal(recoveryRecords[0].status, expectedStatus);
+  assert.equal(recoveryWrites, expectedStatus === 'pending' ? 0 : 1);
+  if (options.mode || options.owner || options.confirmation) assert.equal(recoveryFetches, 0);
+}
+await exerciseRenameRecovery('After', 200, 'verified');
+await exerciseRenameRecovery('Before', 200, 'failed');
+await exerciseRenameRecovery('Unexpected', 409, 'pending');
+await exerciseRenameRecovery(null, 409, 'pending');
+await exerciseRenameRecovery('After', 409, 'pending', { type: 0 });
+await exerciseRenameRecovery('After', 503, 'pending', { fetchError: true });
+await exerciseRenameRecovery('After', 503, 'pending', { mode: 'PRODUCTION' });
+await exerciseRenameRecovery('After', 404, 'pending', { owner: '423456789012345678' });
+await exerciseRenameRecovery('After', 422, 'pending', { confirmation: 'incorrect' });
+const aiHealthSource = aiRouterSource.split(
+  "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
+  "const SNOWFLAKE =")[0];
+const aiChatSource = aiRouterSource.split(
+  "router.post('/chat', requirePrivateAI, async (req, res) => {")[1]?.split(
+  "module.exports = router;")[0];
+assert(aiHealthSource && aiChatSource, 'Local health and private chat routes must exist');
+for (const guard of [
+  "localAIHeaders()", "response.ok", "models.includes(configuredModel)",
+  "ready: enabled", "clearTimeout(timer)", "controller.abort()"
+]) assert(aiHealthSource.includes(guard), 'Missing health check: ' + guard);
+for (const guard of [
+  "if (!isEnabled())", "Array.isArray(incoming)", "MAX_MESSAGES",
+  "MAX_CONTENT", "MAX_TOTAL_CHAT_CHARS", "incoming.reduce(",
+  "res.status(413)", "readAudit(req, guildId)", "requestInProgress",
+  "fetch(LOCAL_AI_URL", "localAIHeaders(true)", "controller.abort()",
+  "clearTimeout(timeout)", "requestInProgress = false",
+  "message.slice(0, 12000)"
+]) assert(aiChatSource.includes(guard), 'Missing private chat guard: ' + guard);
+assert(!/guild\.channels\.create\(|guild\.channels\.edit\(/.test(aiChatSource),
+  'Private AI chat must not directly mutate Discord');
+const rehearsalIssueSource = aiRouterSource.split(
+  "router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req, res) => {")[1]?.split(
+  "router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume'")[0];
+const rehearsalConsumeSource = aiRouterSource.split(
+  "router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume', requirePrivateAI, async (req, res) => {")[1]?.split(
+  "// Intent lifecycle is owner-bound")[0];
+assert(rehearsalIssueSource && rehearsalConsumeSource,
+  'Rehearsal issue and consume endpoints must exist');
+for (const guard of [
+  "draft.createdBy !== ownerId", "intent.ownerId !== ownerId",
+  "Date.parse(intent.expiresAt) <= Date.now()",
+  "currentDigest !== draft.auditDigest",
+  "draft.review.checkpointId", "preflight.permissionsVerified",
+  "review.needsAttention", "executionIntents.get(String(req.body.intentId)) !== intent",
+  "latestDraft.review.checkpointId !== draft.review.checkpointId",
+  "const latestReview = approvalLedger.listReviews(",
+  "latestReview.needsAttention",
+  "executionIntents.delete(String(req.body.intentId))",
+  "revokeRehearsalGrants(draft.id, intent.sequence)",
+  "GRANT_TTL_MS"
+]) assert(rehearsalIssueSource.includes(guard), 'Missing issuance guard: ' + guard);
+for (const guard of [
+  "rehearsalGrants.delete(grantId)", "Date.parse(grant.expiresAt) <= Date.now()",
+  "draft.createdBy !== grant.ownerId", "draft.review.checkpointId !== grant.checkpointId",
+  "currentDigest !== grant.auditDigest", "grant.operationKey",
+  "preflight.permissionsVerified", "review.needsAttention",
+  "canExecute: false", "executable: false"
+]) assert(rehearsalConsumeSource.includes(guard), 'Missing consumption guard: ' + guard);
+assert(rehearsalConsumeSource.indexOf('rehearsalGrants.delete(grantId)') <
+  rehearsalConsumeSource.indexOf('await getVerifiedAudit('),
+  'Token must be consumed synchronously before the first await');
+assert(!/client\.channels\.edit|guild\.channels\.edit|guild\.channels\.create/.test(
+  rehearsalIssueSource + rehearsalConsumeSource), 'Rehearsal must never mutate Discord');
+assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id, record.sequence)'),
+  'Operation re-review must revoke matching rehearsal tokens');
+assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id);'),
+  'Full draft re-review must revoke rehearsal tokens');
+
+// Regression guards for owner isolation on non-executable readiness and intent routes.
+const routeBody = (start, end) => aiRouterSource.split(start)[1]?.split(end)[0];
+const candidateSource = routeBody(
+  "router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, res) => {",
+  "router.post('/drafts/:id/execution-intent'");
+const readinessSource = routeBody(
+  "router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {",
+  "router.get('/drafts/:id/execution-candidates'");
+const cancelIntentSource = routeBody(
+  "router.delete('/drafts/:id/execution-intents/:intentId', requirePrivateAI, (req, res) => {",
+  "// Operation review and audit log");
+const listIntentsSource = routeBody(
+  "router.get('/drafts/:id/execution-intents', requireAIIdentity, async (req, res) => {",
+  "router.delete('/drafts/:id/execution-intents");
+assert(candidateSource?.includes('draft.createdBy !== String(req.session.user.id)'),
+  'Execution candidate preflight must require draft ownership');
+assert(readinessSource?.includes('draft.createdBy !== String(req.session.user.id)'),
+  'Execution readiness must require draft ownership');
+const draftReviewSource = routeBody(
+  "router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {",
+  "router.get('/drafts/:id/readiness'");
+assert(draftReviewSource &&
+  draftReviewSource.includes('draft.createdBy !== String(req.session.user.id)') &&
+  draftReviewSource.indexOf('draft.createdBy !== String(req.session.user.id)') <
+  draftReviewSource.indexOf('await getVerifiedAudit('),
+  'Draft review must verify creator ownership before the guild audit');
+assert(cancelIntentSource &&
+  cancelIntentSource.indexOf('intent.ownerId !== String(req.session.user.id)') <
+  cancelIntentSource.indexOf('Date.parse(intent.expiresAt) <= Date.now()'),
+  'Intent cancellation must verify ownership before expiry cleanup');
+assert(listIntentsSource &&
+  listIntentsSource.includes('intent.ownerId !== ownerId') &&
+  listIntentsSource.includes('Date.parse(intent.expiresAt) <= now') &&
+  listIntentsSource.indexOf('intent.ownerId !== ownerId') <
+  listIntentsSource.indexOf('Date.parse(intent.expiresAt) <= now'),
+  'Intent listing must scope expiry cleanup to the draft owner');
+const privateAccessSource = routeBody(
+  'function requirePrivateAI(req, res, next) {',
+  '// Each route enforces its own identity');
+const createDraftSource = routeBody(
+  "router.post('/drafts', requirePrivateAI, async (req, res) => {",
+  "router.post('/drafts/:id/review'");
+assert(privateAccessSource &&
+  privateAccessSource.includes("fetchSite === 'cross-site'") &&
+  privateAccessSource.includes("new URL(origin).host !== host") &&
+  privateAccessSource.includes("req.is('application/json')"),
+  'Private Goliath AI writes must reject cross-site browser requests and non-JSON bodies');
+assert(createDraftSource &&
+  createDraftSource.includes("if (localMode() !== 'DEV')") &&
+  createDraftSource.indexOf("if (localMode() !== 'DEV')") <
+  createDraftSource.indexOf('parseBlueprint(req.body?.blueprint)'),
+  'Draft creation must reject non-DEV requests before parsing blueprints');
+
+const ledger = require('../src/owner/dev/goliathApprovalLedger');
+const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-reviews-'));
+const ledgerFile = path.join(ledgerDir, 'reviews.json');
+const modeBeforeReviews = process.env.BOT_MODE;
+try {
+  process.env.BOT_MODE = 'DEV';
+  const reviewDraft = { ...readyDraft, blueprint: changed };
+  const record = ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile);
+  assert.equal(record.isExecutionApproval, false);
+  let result = ledger.listReviews({ draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations }, ledgerFile);
+  assert.equal(result[0].reviews[0].decision, 'acknowledged');
+  assert.equal(result[0].executable, false);
+  const reReviewedDraft = {
+    ...reviewDraft, review: { ...reviewDraft.review, checkpointId: '00000000-0000-4000-8000-000000000003' }
+  };
+  assert.equal(ledger.listReviews({
+    draft: reReviewedDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations
+  }, ledgerFile)[0].needsAttention, true);
+  assert.throws(() => ledger.recordReview({
+    draft: { ...reviewDraft, createdBy: otherId },
+    currentDigest: 'a'.repeat(64), operations: preview.operations,
+    reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile), /creator identity/);
+  assert.throws(() => ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'b'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile), /stale/);
+  assert.throws(() => ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 999, decision: 'acknowledged'
+  }, ledgerFile), /Invalid operation/);
+  ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'rejected'
+  }, ledgerFile);
+  result = ledger.listReviews({ draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations }, ledgerFile);
+  assert.equal(result[0].reviews.length, 1);
+  assert.equal(result[0].reviews[0].decision, 'rejected');
+  assert.equal(result[0].needsAttention, true);
+  assert.equal(ledger.recentEvents({ draftId: reviewDraft.id }, ledgerFile).length, 2);
+  const changedOperation = preview.operations.map((item, index) =>
+    index === 0 ? { ...item, target: { id: 'changed-target', name: 'changed' } } : item);
+  const changedResult = ledger.listReviews({ draft: reviewDraft,
+    currentDigest: 'a'.repeat(64), operations: changedOperation }, ledgerFile);
+  assert.equal(changedResult[0].reviews.length, 0);
+  assert.throws(() => ledger.recordReview({
+    draft: { ...reviewDraft, review: { status: 'draft' } }, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile), /Review the complete/);
+} finally {
+  if (modeBeforeReviews === undefined) delete process.env.BOT_MODE;
+  else process.env.BOT_MODE = modeBeforeReviews;
+  fs.rmSync(ledgerDir, { recursive: true, force: true });
+}
+
+const { buildCapabilityPreflight } = require('../src/owner/dev/goliathCapabilityPreflight');
+const capabilityAudit = { ...audit, channels: audit.channels };
+const allowedCapability = {
+  readOnly: true, environment: 'DEV', guildId, botPresent: true,
+  botId: '523456789012345678', guildPermissions: String(1n << 4n),
+  channelPermissions: [{ id: categoryId, permissions: String(1n << 4n) },
+    { id: channelId, permissions: String(1n << 4n) }]
+};
+const permissionPreview = planBlueprint(audit, changed);
+const capabilitiesGood = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations, capability: allowedCapability
+});
+assert.equal(capabilitiesGood.canExecute, false);
+assert.equal(capabilitiesGood.rollbackVerified, false);
+assert.equal(capabilitiesGood.executable, false);
+assert.equal(capabilitiesGood.counts.blocked, 0);
+assert(capabilitiesGood.operations.every(item => item.executable === false));
+const noPermission = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations,
+  capability: { ...allowedCapability, guildPermissions: '0' }
+});
+assert(noPermission.counts.blocked > 0);
+const wrongEnvironment = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations,
+  capability: { ...allowedCapability, environment: 'PRODUCTION' }
+});
+assert.equal(wrongEnvironment.permissionsVerified, false);
+assert(wrongEnvironment.counts.unknown > 0);
+const missingChannelPermissions = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations,
+  capability: { ...allowedCapability, channelPermissions: [] }
+});
+assert(missingChannelPermissions.counts.unknown > 0);
+const prohibited = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'delete_channel', target: { id: channelId },
+    after: null, executable: false }], capability: allowedCapability
+});
+assert.equal(prohibited.operations[0].permission, 'blocked');
+assert.equal(prohibited.canExecute, false);
+const administratorCapability = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'rename_category',
+    target: { id: categoryId }, before: { name: 'Community' },
+    after: { name: 'Social' }, executable: false }],
+  capability: { ...allowedCapability, guildPermissions: String(1n << 3n),
+    channelPermissions: [{ id: categoryId, permissions: String(1n << 3n) }] }
+});
+assert.equal(administratorCapability.operations[0].permission, 'permitted-in-principle');
+const malformedCreate = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'create_category',
+    after: { name: 'Invalid', type: 0 }, executable: false }], capability: allowedCapability
+});
+assert.equal(malformedCreate.operations[0].permission, 'blocked');
+const invalidTargetType = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'rename_category',
+    target: { id: channelId }, after: { name: 'Wrong' }, executable: false }],
+  capability: allowedCapability
+});
+assert.equal(invalidTargetType.operations[0].permission, 'blocked');
+const deniedDestination = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'edit_channel',
+    target: { id: channelId }, before: { parentId: categoryId },
+    after: { parentId: categoryId }, executable: false }],
+  capability: { ...allowedCapability, channelPermissions: [
+    { id: channelId, permissions: '0' }
+  ] }
+});
+assert.equal(deniedDestination.operations[0].permission, 'blocked');
+assert.throws(() => buildCapabilityPreflight({
+  audit: { ...capabilityAudit, readOnly: false }, operations: [],
+  capability: allowedCapability
+}), /read-only guild audit/);
+assert.throws(() => planBlueprint({ ...audit, readOnly: false }, changed), /read-only guild audit/);
+assert.throws(() => planBlueprint({
+  ...audit, channels: [...audit.channels, audit.channels[0]]
+}, changed), /duplicate Discord channel IDs/);
+
+const { buildRecoveryPlan } = require('../src/owner/dev/goliathExecutionReadiness');
+const recovery = buildRecoveryPlan({
+  draft: { ...readyDraft, blueprint: changed }, audit: readyAudit,
+  preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(recovery.canRollback, false);
+assert.equal(recovery.executable, false);
+assert.equal(recovery.rollbackTested, false);
+assert.equal(recovery.operationCount, preview.operations.length);
+assert(recovery.items.every(item => item.automaticRollbackSupported === false && item.executable === false));
+assert.equal(recovery.items[0].recoveryType, 'restore_original_name');
+assert(recovery.items.some(item => item.kind === 'create_channel' &&
+  item.issues.some(issue => issue.includes('not an automatic rollback'))));
+assert.equal(buildRecoveryPlan({
+  draft: { ...readyDraft, blueprint: changed }, audit: readyAudit,
+  preview, currentDigest: 'b'.repeat(64)
+}).stale, true);
+assert.throws(() => buildRecoveryPlan({
+  draft: { ...readyDraft, environment: 'PRODUCTION', blueprint: changed },
+  audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+}), /exact scoped guild/);
+assert.throws(() => buildRecoveryPlan({
+  draft: { ...readyDraft, blueprint: changed },
+  audit: { ...readyAudit, guild: { id: otherId } }, preview, currentDigest: 'a'.repeat(64)
+}), /exact scoped guild/);
+
+const { buildTransactionManifest } = require('../src/owner/dev/goliathExecutionReadiness');
+const manifestDraft = { ...readyDraft, blueprint: changed };
+const manifestOne = buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64)
+});
+const manifestTwo = buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(manifestOne.fingerprint, manifestTwo.fingerprint);
+assert.equal(manifestOne.executable, false);
+assert.equal(manifestOne.canExecute, false);
+assert.equal(manifestOne.unavailable, false);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: { ...readyAudit, readOnly: false },
+  preview, currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft,
+  audit: { ...readyAudit, channels: [...readyAudit.channels, readyAudit.channels[0]] },
+  preview, currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+const invalidDestinationPreview = {
+  ...preview, operations: [{ kind: 'edit_channel', target: { id: channelId },
+    before: { parentId: categoryId }, after: { parentId: otherId },
+    executable: false }]
+};
+assert(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview: invalidDestinationPreview,
+  currentDigest: 'a'.repeat(64)
+}).warnings.some(warning => warning.includes('destination is not an existing category')));
+assert.equal(manifestOne.entries.length, preview.operations.length);
+assert(manifestOne.entries.every(item => item.executable === false && item.authorised === false));
+const createdCategoryEntry = manifestOne.entries.find(item => item.kind === 'create_category');
+const newCategoryChannel = manifestOne.entries.find(item =>
+  item.kind === 'create_channel' && item.proposed?.parentName === 'Voice');
+assert.deepEqual(newCategoryChannel.dependsOn, [createdCategoryEntry.sequence]);
+assert.notEqual(buildTransactionManifest({
+  draft: { ...manifestDraft, blueprint: { categories: [] } },
+  audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+}).fingerprint, manifestOne.fingerprint);
+const manifestWrongGuild = buildTransactionManifest({
+  draft: { ...manifestDraft, guildId: otherId }, audit: readyAudit,
+  preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(manifestWrongGuild.unavailable, true);
+assert.equal(manifestWrongGuild.canExecute, false);
+const wrongPreviewGuild = { ...preview, guild: { ...preview.guild, id: otherId } };
+const wrongPreviewEnvironment = { ...preview, environment: 'PRODUCTION' };
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
+  currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewEnvironment,
+  currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+const wrongPreviewReadiness = evaluateReadiness({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(wrongPreviewReadiness.canExecute, false);
+assert.equal(wrongPreviewReadiness.checks.find(item => item.key === 'owner_scope').state, 'blocked');
+assert.equal(wrongPreviewReadiness.recoveryPlan.unavailable, true);
+assert.equal(wrongPreviewReadiness.transactionManifest.unavailable, true);
+assert.throws(() => buildRecoveryPlan({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
+  currentDigest: 'a'.repeat(64)
+}), /exact scoped guild/);
+const alternateOperation = buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit,
+  preview: { ...preview, operations: preview.operations.map((item, i) =>
+    i === 0 ? { ...item, after: { name: 'different' } } : item) },
+  currentDigest: 'a'.repeat(64)
+});
+assert.notEqual(alternateOperation.fingerprint, manifestOne.fingerprint);
+assert.notEqual(alternateOperation.entries[0].operationFingerprint,
+  manifestOne.entries[0].operationFingerprint);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview,
+  currentDigest: 'b'.repeat(64)
+}).unavailable, true);
+
+const { simulateTransaction } = require('../src/owner/dev/goliathExecutionReadiness');
+const originalSimulationAudit = JSON.stringify(audit);
+const structural = simulateTransaction({
+  draft: manifestDraft, audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(structural.simulated, true);
+assert.equal(structural.safeToApply, false);
+assert.equal(structural.canExecute, false);
+assert.equal(structural.operationsChecked, preview.operations.length);
+assert.equal(JSON.stringify(audit), originalSimulationAudit);
+const rehearsedWrongGuild = simulateTransaction({
+  draft: { ...manifestDraft, guildId: otherId },
+  audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(rehearsedWrongGuild.simulated, false);
+assert.equal(rehearsedWrongGuild.canExecute, false);
+const missingOriginal = simulateTransaction({
+  draft: manifestDraft, audit: readyAudit,
+  preview: { ...preview, operations: preview.operations.map((item, index) =>
+    index === 0 ? { ...item, target: { id: '999999999999999999', name: 'unknown' } } : item) },
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(missingOriginal.simulated, false);
+assert(missingOriginal.problems.some(item => item.includes('original target missing') || item.includes('unresolved manifest issues')));
+assert.equal(missingOriginal.canExecute, false);
+const invalidParent = simulateTransaction({
+  draft: manifestDraft, audit: readyAudit,
+  preview: { ...preview, operations: preview.operations.map(item =>
+    item.kind === 'create_channel' && item.after?.parentId
+      ? { ...item, after: { ...item.after, parentId: '999999999999999999' } } : item) },
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(invalidParent.canExecute, false);
+
+console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight and recovery and transaction-manifest and offline-simulation contracts passed.');
+
+  return true;
+}
+
+function goliathDeploymentRegression(source, assert, vm) {
+  const start=source.indexOf('function aiGoliathChannelRequirements(');
+  const end=source.indexOf('function aiGoliathDeploymentScan(',start);
+  assert(start>=0 && end>start);
+  const helpers=vm.runInNewContext(source.slice(start,end)+'; ({required:aiGoliathChannelRequirements,children:aiGoliathInheritedChildren})',{AI_GOLIATH_TEXT:['ViewChannel','SendMessages','EmbedLinks']});
+  const profile={permissions:['ViewChannel','ManageChannels','Connect','Speak','SendMessages']};
+  const check=(a,b)=>assert.equal(JSON.stringify(a),JSON.stringify(b));
+  check(helpers.required({type:2},profile),['ViewChannel','Connect','Speak']);
+  check(helpers.required({type:13},profile),['ViewChannel','Connect']);
+  check(helpers.required({type:4},profile),['ViewChannel','ManageChannels']);
+  check(helpers.required({type:0},profile),['ViewChannel','SendMessages']);
+  const expanded={permissions:[...profile.permissions,'MoveMembers','CreatePublicThreads','SendMessagesInThreads'],groups:['tempVoice','translation']};
+  check(helpers.required({type:2},expanded),['ViewChannel','Connect','Speak','ManageChannels','MoveMembers']);
+  check(helpers.required({type:0},expanded),['ViewChannel','SendMessages','CreatePublicThreads','SendMessagesInThreads']);
+  check(helpers.required({type:13},expanded),['ViewChannel','Connect']);
+  check(helpers.required({type:0},{...expanded,groups:[]}),['ViewChannel','SendMessages']);
+  check(helpers.required({type:0},{...expanded,groups:['schedule']}),['ViewChannel','SendMessages','CreatePublicThreads','SendMessagesInThreads']);
+  const channels=[{id:'3',parentId:'c',permissionsLocked:true},{id:'2',parentId:'c',permissionsLocked:false},{id:'1',parentId:'c',permissionsLocked:true},{id:'4',parentId:'d',permissionsLocked:true}];
+  const guild={channels:{cache:new Map(channels.map(c=>[c.id,c]))}};
+  check(helpers.children(guild,'c').map(c=>c.id),['1','3']);
+  check(helpers.children(guild,'missing'),[]);
+  // Exercise the production sync planner with isolated Discord-shaped fixtures.
+  const syncStart=source.indexOf('function aiDeployOperationalTarget(');
+  const syncEnd=source.indexOf('async function aiDeployApplySync(',syncStart);
+  assert(syncStart>=0 && syncEnd>syncStart);
+  const bits={ViewChannel:1n,SendMessages:2n,EmbedLinks:4n};
+  class BitField {
+    constructor(value){this.bitfield=value;}
+    add(...names){for(const name of names)this.bitfield|=bits[name];return this;}
+    remove(...names){for(const name of names)this.bitfield&=~bits[name];return this;}
+  }
+  const bot={id:'bot',permissions:{has:name=>name!=='EmbedLinks'}};
+  const fixtures=[
+    {id:'c',category:true,editable:true,missing:['SendMessages']},
+    {id:'1',synced:true,editable:true,missing:['SendMessages']},
+    {id:'2',editable:false,missing:['ViewChannel']},
+    {id:'4',editable:true,missing:['EmbedLinks']}
+  ];
+  guild.members={me:bot};
+  guild.channels.cache.set('c',{id:'c',permissionOverwrites:{cache:new Map([['bot',{allow:{bitfield:1n},deny:{bitfield:6n}}]])}});
+  const fullTargets=[];
+  const operational={id:'bot',managed:false,hoist:false,permissions:{has:()=>false},members:new Map([['bot',bot]])};
+  guild.roles={cache:new Map([['bot',operational]])};
+  bot.roles={cache:new Map([['bot',operational]])};
+  const planSync=vm.runInNewContext(source.slice(syncStart,syncEnd)+'; aiDeploySyncPlan',{
+    aiDeploySavedRoles:()=>({operational:'bot'}),aiGoliathDeploymentScan:()=>({gaps:fixtures,targets:fullTargets,profile}), PermissionsBitField:BitField,
+    aiGoliathChannelRequirements:helpers.required,
+    aiGoliathInheritedChildren:helpers.children
+  });
+  const plan=planSync(guild);
+  check(plan.blocked,['1','2','4']);
+  assert.equal(plan.steps.length,1);
+  check(plan.steps[0].inheritedChildren,['1','3']);
+  assert.equal(plan.steps[0].action,'role-overwrite');
+  assert.equal(plan.steps[0].roleId,'bot');
+  check(plan.steps[0].before,{exists:true,allow:'1',deny:'6'});
+  check(plan.steps[0].after,{allow:'3',deny:'4'});
+  fixtures.length=0;
+  check(planSync(guild),{steps:[],blocked:[]});
+  const makeTarget=(id,locked=false,editable=true,allow=0n,deny=0n)=>({id,type:0,permissionsLocked:locked,permissionsFor:()=>({has:()=>editable}),permissionOverwrites:{cache:new Map([['bot',{allow:{bitfield:allow,has:p=>Boolean(allow&bits[p])},deny:{bitfield:deny,has:p=>Boolean(deny&bits[p])}}]])}});
+  for(const target of [makeTarget('new'),makeTarget('synced',true),makeTarget('blocked',false,false),makeTarget('complete',false,true,3n),makeTarget('partial',false,true,5n,2n)]){fullTargets.push(target);guild.channels.cache.set(target.id,target);}
+  const full=planSync(guild,true);
+  assert.equal(full.full,true);
+  check(full.steps.map(step=>step.channelId),['new','partial']);
+  check(full.blocked,['blocked']);
+  check(full.steps[0].grants,['ViewChannel','SendMessages']);
+  check(full.steps[1].after,{allow:'7',deny:'0'});
+  check(planSync(guild),{steps:[],blocked:[]});
+  operational.members.set('other',{});
+  assert.equal(planSync(guild,true).steps.length,0);
+  operational.members.delete('other');
+  const roleStart=source.indexOf('function aiGoliathRolePlan(');
+  const roleEnd=source.indexOf('const aiDeployApprovals',roleStart);
+  assert(roleStart>=0 && roleEnd>roleStart);
+  const draft={operational:'create',display:'create'};
+  const scan={profile,missing:[]};
+  bot.roles={cache:new Map(),highest:{comparePositionTo:()=>1}};
+  guild.roles={cache:new Map()};
+  const rolePlan=vm.runInNewContext(source.slice(roleStart,roleEnd)+'; aiGoliathRolePlan',{
+    aiGoliathRoleDraft:()=>draft,aiGoliathDeploymentScan:()=>scan
+  });
+  let roles=rolePlan({},guild);
+  check(roles.blockers,[]);
+  assert.equal(roles.steps.length,2);
+  check(roles.steps[0].permissions,profile.permissions);
+  check(roles.steps[1].permissions,[]);
+  assert.equal(roles.steps[1].hoist,true);
+  scan.missing=['ManageRoles'];
+  assert(rolePlan({},guild).blockers.length>0);
+  scan.missing=[];
+  draft.operational='missing';
+  assert(rolePlan({},guild).blockers.length>0);
+  const adminRole={id:'admin',name:'Admin',managed:false,hoist:false,position:1,permissions:{bitfield:8n,has:name=>name==='Administrator'}};
+  guild.roles.cache.set(adminRole.id,adminRole);
+  draft.operational=adminRole.id;
+  assert(rolePlan({},guild).blockers.some(message=>message.includes('Administrator')));
+  bot.roles.cache.set(adminRole.id,adminRole);
+  assert(rolePlan({},guild).blockers.some(message=>message.includes('Administrator')));
+  bot.roles.cache.delete(adminRole.id);
+  const rollbackStart=source.indexOf('function aiDeployRollbackPlan(');
+  const rollbackEnd=source.indexOf('function aiDeployRollbackPreview(',rollbackStart);
+  assert(rollbackStart>=0 && rollbackEnd>rollbackStart);
+  const rollback=vm.runInNewContext(source.slice(rollbackStart,rollbackEnd)+'; aiDeployRollbackPlan',{aiGoliathInheritedChildren:helpers.children});
+  check(rollback(guild,{steps:[{action:'create',name:'New',phase:'creating'}]}).steps,[]);
+  assert(rollback(guild,{steps:[{action:'create',name:'New',phase:'creating'}]}).blockers.length>0);
+  check(rollback(guild,{steps:[{action:'create',name:'New'}]}),{steps:[],blockers:[]});
+  assert(rollback(guild,{steps:[{action:'unknown'}]}).blockers.length>0);
+
+}
+function goliathAiRecoveryAudit() {
+  const assert = require('node:assert/strict');
+  const vm = require('node:vm');
+  const source = fs.readFileSync(absolute('src/owner/command.js'), 'utf8');
+  goliathDeploymentRegression(source, assert, vm);
+  const start = source.indexOf('function aiRecoverySnapshotValid(');
+  const end = source.indexOf('function aiRecoveryGet(', start);
+  assert(start >= 0 && end > start, 'Recovery validator missing');
+  const validate = vm.runInNewContext(source.slice(start, end) + '; aiRecoverySnapshotValid');
+  const ownerId = '123456789012345678';
+  const validRole = { ownerId, guildId: ownerId, roleId: ownerId,
+    kind: 'role', status: 'pending', before: '0', after: '1024',
+    createdAt: new Date().toISOString(), expiresAt: Date.now() + 60000 };
+  assert.equal(validate(validRole), true, 'Valid role journal rejected');
+  assert.equal(validate({ ...validRole, status: 'verified' }), true);
+  assert.equal(validate({ ...validRole, ownerId: 'not-a-discord-id' }), false);
+  assert.equal(validate({ ...validRole, after: 'not-bits' }), false);
+  assert.equal(validate({ ...validRole, status: 'unknown' }), false);
+  const validChannel = { ...validRole, kind: 'channel', channelId: ownerId,
+    before: { exists: false, allow: '0', deny: '0' },
+    after: { exists: true, allow: '1024', deny: '0' } };
+  assert.equal(validate(validChannel), true, 'Valid channel journal rejected');
+  assert.equal(validate({ ...validChannel, after: { ...validChannel.after, deny: 'invalid' } }), false);
+  // Exercise the real recovery-save implementation with a fake in-memory store.
+  // No Discord requests or runtime files are created.
+  const saveStart = source.indexOf('function aiRecoverySave(');
+  const saveEnd = source.indexOf('function aiRecoveryResolvePending(', saveStart);
+  assert(saveStart >= 0 && saveEnd > saveStart, 'Recovery save function missing');
+  const records = [];
+  const sandbox = {
+    Date, JSON, Error,
+    aiRecoveryRead: () => records.map(item => JSON.parse(JSON.stringify(item))),
+    aiRecoveryWrite: items => { records.splice(0, records.length, ...items); },
+    aiRecoveryLocked: fn => fn()
+  };
+  const save = vm.runInNewContext(source.slice(saveStart, saveEnd) + '; aiRecoverySave', sandbox);
+  save(ownerId, 'role', { guildId: ownerId, roleId: ownerId, before: '0',
+    after: '1024', status: 'pending', expiresAt: Date.now() + 60000 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].status, 'pending');
+  assert.throws(() => save('223456789012345678', 'role', {
+    guildId: ownerId, roleId: ownerId, before: '0', after: '2048',
+    status: 'pending', expiresAt: Date.now() + 60000
+  }), /Target already has/);
+  assert.throws(() => save(ownerId, 'role', {
+    guildId: ownerId, roleId: ownerId, before: '0', after: '2048',
+    status: 'verified', expiresAt: Date.now() + 60000
+  }), /Pending transaction cannot be overwritten/);
+  save(ownerId, 'role', { guildId: ownerId, roleId: ownerId, before: '0',
+    after: '1024', status: 'verified', expiresAt: Date.now() + 60000 });
+  assert.equal(records[0].status, 'verified');
+  assert.throws(() => save(ownerId, 'role', {
+    guildId: ownerId, roleId: ownerId, before: '1024', after: '2048',
+    status: 'pending', expiresAt: Date.now() + 60000
+  }), /Active recovery snapshot/);
+  assert.throws(() => save('223456789012345678', 'role', {
+    guildId: ownerId, roleId: ownerId, before: '1024', after: '2048',
+    status: 'pending', expiresAt: Date.now() + 60000
+  }), /Target already has/);
+  const resolveStart = source.indexOf('function aiRecoveryResolvePending(');
+  const resolveEnd = source.indexOf('async function aiReconcilePending(', resolveStart);
+  assert(resolveStart >= 0 && resolveEnd > resolveStart);
+  const resolve = vm.runInNewContext(source.slice(resolveStart, resolveEnd) + '; aiRecoveryResolvePending', sandbox);
+  records[0].status = 'pending';
+  const pending = JSON.parse(JSON.stringify(records[0]));
+  assert.throws(() => resolve(ownerId, 'role', 'applied', {
+    ...pending, after: '2048'
+  }), /Pending transaction changed/);
+  assert.equal(records[0].status, 'pending', 'Stale reconciliation must retain pending journal');
+  resolve(ownerId, 'role', 'applied', pending);
+  assert.equal(records[0].status, 'verified');
+  records[0].status = 'pending';
+  assert.throws(() => resolve(ownerId, 'role', 'unchanged', {
+    ...pending, createdAt: new Date(0).toISOString()
+  }), /Pending transaction changed/);
+  resolve(ownerId, 'role', 'unchanged', pending);
+  assert.equal(records.length, 0);
+  assert(source.includes("return aiRecoveryLocked(() => {"), 'Recovery writes must use cross-process lock');
+  assert(source.includes("status: 'pending'"), 'Missing write-ahead transaction state');
+  assert(source.includes("status: 'verified'"), 'Missing verified transaction state');
+  console.log('✅ Goliath AI recovery validation and transaction guard contracts passed.');
+  return true;
+}
+
 const commands = {
+  'goliath-ai-recovery': goliathAiRecoveryAudit,
+  'goliath-ai-blueprint': goliathAiBlueprintAudit,
+  'emoji-palette': sharedEmojiPaletteAudit,
+  'emoji-inventory': emojiInventoryAudit,
+  'dashboard-routing': dashboardRoutingAudit,
+  'member-intelligence-routing': memberIntelligenceRoutingAudit,
+  'game-updates': gameUpdatesAudit,
+  'game-catalogue-identity': gameCatalogueIdentityAudit,
+  games: freeGamesAudit,
+  'free-games': freeGamesAudit,
+  'quarantine-containment': quarantineContainmentAudit,
+  'legacy-quarantine': legacyQuarantineAudit,
+  'legacy-quarantine-reconcile': legacyQuarantineReconcileCommand,
+  'dependency-runtime': dependencyRuntimeAudit,
   summary: developmentSummaryCommand,
   doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit, 'guild-variable-source': guildVariableSourceAudit, 'internal-version-naming': internalVersionNamingAudit, 'verification-lifecycle': verificationLifecycleAudit, 'embed-studio-preview': embedStudioPreviewAudit, 'embed-media-alignment': embedMediaAlignmentAudit, 'embed-session-persistence': embedSessionPersistenceAudit, 'embed-state-persistence-boundary': embedStatePersistenceBoundaryAudit, 'admin-module-routing': adminModuleRoutingAudit, 'embed-graphic-headers': embedGraphicHeadersAudit, 'embed-template-binding-lifecycle': embedTemplateBindingLifecycleAudit, 'social-live-presentation': socialLivePresentationAudit, 'social-studio-lifecycle': socialStudioLifecycleAudit, 'universal-member-notices': universalMemberNoticesAudit, 'welcome-embed-delivery': welcomeEmbedDeliveryAudit, 'role-pagination': rolePaginationAudit,
   'deploy-plan': () => deployPlan(process.argv[3], process.argv[4], process.argv[5]),
@@ -2578,13 +6415,14 @@ const command = process.argv[2] || 'doctor';
 const handler = commands[command];
 if (!handler) { console.error(`Unknown Goliath command: ${command}`); process.exitCode = 1; }
 else {
-  Promise.resolve()
+  // Let the doctor wrapper wait for every audit before exiting past runtime handles.
+  module.exports = Promise.resolve()
     .then(() => handler())
     .then((result) => {
       if (!result) process.exitCode = 1;
     })
     .catch((error) => {
-      console.error('Goliath command failed:', error.message);
+      console.error('Goliath command failed:', error.stack || error.message);
       process.exitCode = 1;
     });
 }

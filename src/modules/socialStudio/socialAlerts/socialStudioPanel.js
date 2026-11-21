@@ -1,8 +1,9 @@
 'use strict';
-const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { ActionRowBuilder, AttachmentBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
-const { goliathNavigation } = require('../../../components/goliathNavigation');
+const { goliathNavigation, navigationButton: btn, linkButton } = require('../../../core/guild/goliathNavigation');
 const { variablesForModule } = require('../../../core/guild/guildVariables');
 const store = require('./socialStudioStore');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
@@ -17,7 +18,7 @@ const P = 'social:';
 const PAGE_SIZE = 22;
 const PLATFORMS = ['facebook', 'instagram', 'kick', 'tiktok', 'twitch', 'x', 'youtube'];
 const ALERT_LABEL = { live: 'LIVE', ended: 'Stream Ended', vod: 'VOD', clip: 'Clip', upload: 'Upload', short: 'Short', post: 'Social Post' };
-const ALERT_EMOJI = { live: '🔴', ended: '⚫', vod: '🎞️', clip: '🎬', upload: '📺', short: '📱', post: '📝' };
+const ALERT_EMOJI = { live: EMOJIS.OWNER_RED, ended: EMOJIS.RULE_INACTIVE, vod: EMOJIS.SOCIAL_ALERT_VOD, clip: EMOJIS.SOCIAL_ALERT_CLIP, upload: EMOJIS.SOCIAL_ALERT_UPLOAD, short: EMOJIS.SOCIAL_ALERT_SHORT, post: EMOJIS.NOTE };
 const ALERT_HELP = {
   live: 'Controls the stream start alert.',
   ended: 'Controls the stream finished update.',
@@ -28,7 +29,7 @@ const ALERT_HELP = {
   post: 'Controls normal social feed posts, not VOD/replay alerts.',
 };
 const LABEL = { twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok', kick: 'Kick', facebook: 'Facebook', instagram: 'Instagram', x: 'X' };
-const ICON = { twitch: '🟣', youtube: '🔴', tiktok: '⚫', kick: '🟢', facebook: '🔵', instagram: '🟠', x: '⚪' };
+const ICON = { twitch: EMOJIS.SOCIAL_PLATFORM_TWITCH, youtube: EMOJIS.SOCIAL_PLATFORM_YOUTUBE, tiktok: EMOJIS.SOCIAL_PLATFORM_TIKTOK, kick: EMOJIS.ACTIVE, facebook: EMOJIS.SOCIAL_PLATFORM_FACEBOOK, instagram: EMOJIS.SOCIAL_PLATFORM_INSTAGRAM, x: EMOJIS.INACTIVE };
 const PLATFORM_COLOR = { twitch: 0x9146FF, youtube: 0xFF0000, tiktok: 0x2F3136, kick: 0x53FC18, facebook: 0x1877F2, instagram: 0xE1306C, x: 0xFFFFFF };
 const NAV = new Set([
   'creators',
@@ -61,8 +62,8 @@ const creatorSessions = new Map();
 const feedSessions = new Map();
 const roleSessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const btn = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
-const linkBtn = (url, label) => new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(label);
+
+const linkBtn = (url, label) => linkButton(label, url);
 const sessionKey = (i) => `${i.guildId}:${i.user?.id || 'unknown'}`;
 const who = (i) => i.member?.displayName || i.user?.displayName || i.user?.username || 'Unknown User';
 const makeId = (prefix) => `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
@@ -203,12 +204,12 @@ function navigation(active = 'main') {
   return row(
     btn(
       backId,
-      '⬅️ Back',
-      ButtonStyle.Primary,
+      emojiLabel('BACK', 'Back'),
+      ButtonStyle.Secondary,
     ),
     btn(
       `${P}settings`,
-      '⚙️ Settings',
+      emojiLabel('SETTINGS', 'Settings'),
       ButtonStyle.Secondary,
       active === 'settings',
     ),
@@ -224,14 +225,14 @@ function accountSelect(accounts, selected) {
 function platformSelect(selected = []) { return row(new StringSelectMenuBuilder().setCustomId(`${P}account:platforms`).setPlaceholder('Select platform(s) to add an account').setMinValues(1).setMaxValues(Math.min(PLATFORMS.length, 25)).addOptions(PLATFORMS.map((p) => ({ label: LABEL[p], value: p, default: selected.includes(p) })))); }
 function routeTypeSelect(id, selected, types = ALERT_TYPES) {
   const copy = {
-    default: { label: '🏠 Default Channel', description: 'All social posts go here unless you choose a dedicated channel below.' },
-    live: { label: '🔴 LIVE Alerts', description: 'When a creator starts streaming.' },
-    ended: { label: '⚫ Stream Ended', description: 'When a live stream finishes.' },
-    vod: { label: '🎥 VOD Posts', description: 'When a stream replay is available.' },
-    clip: { label: '🎬 Clip Posts', description: 'When a new clip is found.' },
-    upload: { label: '📺 Video Uploads', description: 'When a new video is uploaded.' },
-    short: { label: '📱 Shorts', description: 'When a short-form video is found.' },
-    post: { label: '📝 Social Posts', description: 'When a normal social post is found.' },
+    default: { label: emojiLabel('USER_HOME', 'Default Channel'), description: 'All social posts go here unless you choose a dedicated channel below.' },
+    live: { label: emojiLabel('DISABLED', 'LIVE Alerts'), description: 'When a creator starts streaming.' },
+    ended: { label: emojiLabel('RULE_INACTIVE', 'Stream Ended'), description: 'When a live stream finishes.' },
+    vod: { label: emojiLabel('SOCIAL_VIDEO', 'VOD Posts'), description: 'When a stream replay is available.' },
+    clip: { label: emojiLabel('SOCIAL_CLIP', 'Clip Posts'), description: 'When a new clip is found.' },
+    upload: { label: emojiLabel('SOCIAL_TV', 'Video Uploads'), description: 'When a new video is uploaded.' },
+    short: { label: emojiLabel('SOCIAL_MOBILE', 'Shorts'), description: 'When a short-form video is found.' },
+    post: { label: emojiLabel('NOTE', 'Social Posts'), description: 'When a normal social post is found.' },
   };
   const options = [copy.default, ...types.map((type) => ({ label: copy[type]?.label || ALERT_LABEL[type] || type, value: type, description: copy[type]?.description || ('Choose where ' + (ALERT_LABEL[type] || type) + ' posts go.') }))];
   options[0] = { ...options[0], value: 'default' };
@@ -241,7 +242,7 @@ function platformAvailabilityLines() {
   const available = {};
   for (const type of ALERT_TYPES) available[type] = [];
   for (const platform of PLATFORMS) for (const type of supportedAlerts(platform)) available[type]?.push(LABEL[platform] || platform);
-  return ALERT_TYPES.filter((type) => available[type]?.length).map((type) => `${ALERT_EMOJI[type] || '🔔'} **${ALERT_LABEL[type]}:** ${available[type].join(', ')}`);
+  return ALERT_TYPES.filter((type) => available[type]?.length).map((type) => `${ALERT_EMOJI[type] || EMOJIS.SOCIAL_ALERT_BELL} **${ALERT_LABEL[type]}:** ${available[type].join(', ')}`);
 }
 function platformAvailabilityText(type) {
   const platforms = PLATFORMS.filter((platform) => supportedAlerts(platform).includes(type)).map((platform) => LABEL[platform] || platform);
@@ -384,7 +385,7 @@ function upsertAccount(config, creator, platform, rawValue) {
   config.accounts[accountId] = { ...(primary || {}), accountId, platform, username: n.username, normalizedUsername: n.normalizedUsername, externalId: primary?.externalId || n.externalId || null, inputType: n.inputType, canonicalIdentity: n.canonicalIdentity, profileUrl: n.profileUrl, sourceInput: n.sourceInput, displayName: creator.displayName, enabled: primary?.enabled !== false, alertTypes: Array.isArray(primary?.alertTypes) ? primary.alertTypes : supportedAlerts(platform), alertChannelId: primary?.alertChannelId || null, alertChannels: primary?.alertChannels && typeof primary.alertChannels === 'object' ? primary.alertChannels : {}, mentionMode: primary?.mentionMode || config.notificationMentionMode || 'none', mentionRoleId: primary?.mentionRoleId || (config.notificationMentionMode === 'role' ? config.notificationRoleId || null : null), createdAt: primary?.createdAt || now(), updatedAt: now() };
   creator.accountIds = [...new Set([...(creator.accountIds || []), accountId])]; creator.updatedAt = now(); return { accountId, created: !primary, removedDuplicates: duplicates.length };
 }
-function accountState(a) { const s = a.state || {}; return a.enabled === false ? '⏸️ Paused' : s.isLive === true ? '🔴 LIVE' : s.isLive === false ? '⚫ Offline' : s.lastError ? '🟡 Unavailable' : '🟢 Monitoring'; }
+function accountState(a) { const s = a.state || {}; return a.enabled === false ? emojiLabel('USER_PAUSE', 'Paused') : s.isLive === true ? emojiLabel('DISABLED', 'LIVE') : s.isLive === false ? emojiLabel('RULE_INACTIVE', 'Offline') : s.lastError ? emojiLabel('SEVERITY_MEDIUM', 'Unavailable') : emojiLabel('ENABLED', 'Monitoring'); }
 function ts(value) { const ms = new Date(value || '').getTime(); return Number.isFinite(ms) ? `<t:${Math.floor(ms / 1000)}:R>` : 'Never'; }
 function newestTime(values = []) {
   return values.reduce((latest, value) => {
@@ -433,8 +434,8 @@ function buildMainPanel(guild, requestedBy = 'Unknown User') {
   );
 
   const status = config.enabled
-    ? '🟢 Monitoring Active'
-    : '🔴 Monitoring Disabled';
+    ? emojiLabel('ENABLED', 'Monitoring Active')
+    : emojiLabel('DISABLED', 'Monitoring Disabled');
 
   const description = [
     `**${ready ? 'Social Studio is ready' : 'Setup required'}**`,
@@ -443,22 +444,22 @@ function buildMainPanel(guild, requestedBy = 'Unknown User') {
     '',
     '**Status**',
     status,
-    `👥 Creators: **${creators}**`,
-    `🔗 Accounts: **${accounts}**`,
-    `🔴 LIVE: **${stats.live}**`,
-    `⚠️ Issues: **${stats.unavailable}**`,
+    `${EMOJIS.ROLE_MEMBERS} Creators: **${creators}**`,
+    `${EMOJIS.AUTOMOD_LINKS} Accounts: **${accounts}**`,
+    `${EMOJIS.OWNER_RED} LIVE: **${stats.live}**`,
+    `${EMOJIS.WARNING} Issues: **${stats.unavailable}**`,
     '',
     '**Delivery**',
-    `📡 Monitored Accounts: **${stats.monitored}/${accounts}**`,
-    `📨 Alerts Sent: **${Number(config.analytics?.alertsSent || 0).toLocaleString('en-GB')}**`,
-    `📍 Default Channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : '**Not configured**'}`,
+    `${EMOJIS.SOCIAL_MONITOR} Monitored Accounts: **${stats.monitored}/${accounts}**`,
+    `${EMOJIS.USER_INVITES} Alerts Sent: **${Number(config.analytics?.alertsSent || 0).toLocaleString('en-GB')}**`,
+    `${EMOJIS.SOCIAL_CHANNEL_PIN} Default Channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : '**Not configured**'}`,
   ].join('\n');
 
   return {
     embeds: [
       embed(
         config,
-        '📡 Social Studio',
+        emojiLabel('SOCIAL_BROADCAST', 'Social Studio'),
         description,
         requestedBy,
       ),
@@ -467,12 +468,12 @@ function buildMainPanel(guild, requestedBy = 'Unknown User') {
       row(
         btn(
           `${P}creators`,
-          '👥 Creators',
+          emojiLabel('MOD_STAFF', 'Creators'),
           ButtonStyle.Primary,
         ),
         btn(
           `${P}templates`,
-          '🎨 Templates',
+          emojiLabel('DESIGN', 'Templates'),
           ButtonStyle.Primary,
         ),
       ),
@@ -515,13 +516,13 @@ function buildCreatorPanel(i, config, creators) {
 
   const description = selected
     ? [
-        `## 👤 ${selected.displayName}`,
+        `## ${EMOJIS.USER} ${selected.displayName}`,
         '',
         selected.enabled === false
-          ? '⏸️ **Monitoring Paused**'
-          : '🟢 **Monitoring Enabled**',
-        `🔗 **Connected Accounts:** ${linked.length}`,
-        `🔴 **Currently LIVE:** ${linked.filter(
+          ? emojiLabel('USER_PAUSE', '**Monitoring Paused**')
+          : emojiLabel('ENABLED', '**Monitoring Enabled**'),
+        `${EMOJIS.AUTOMOD_LINKS} **Connected Accounts:** ${linked.length}`,
+        `${EMOJIS.OWNER_RED} **Currently LIVE:** ${linked.filter(
           (account) => account?.state?.isLive === true,
         ).length}`,
         '',
@@ -552,9 +553,9 @@ function buildCreatorPanel(i, config, creators) {
       ? [
           'Select a creator to manage their profile and connected social accounts.',
           '',
-          `👥 **Creators:** ${creators.length}`,
-          `🔗 **Connected Accounts:** ${allAccounts.length}`,
-          `🔴 **Currently LIVE:** ${liveAccounts}`,
+          `${EMOJIS.ROLE_MEMBERS} **Creators:** ${creators.length}`,
+          `${EMOJIS.AUTOMOD_LINKS} **Connected Accounts:** ${allAccounts.length}`,
+          `${EMOJIS.OWNER_RED} **Currently LIVE:** ${liveAccounts}`,
         ].join('\n')
       : [
           '**No creators have been added yet.**',
@@ -563,8 +564,8 @@ function buildCreatorPanel(i, config, creators) {
           '',
           'Create a creator first. You can then open that creator and connect their social accounts.',
           '',
-          '👥 **Creators:** 0',
-          '🔗 **Connected Accounts:** 0',
+          emojiLabel('MOD_STAFF', '**Creators:** 0'),
+          emojiLabel('AUTOMOD_LINKS', '**Connected Accounts:** 0'),
         ].join('\n');
 
   const components = [];
@@ -591,7 +592,7 @@ function buildCreatorPanel(i, config, creators) {
       row(
         btn(
           `${P}creator:new`,
-          '➕ Add Creator',
+          emojiLabel('ADD', 'Add Creator'),
           ButtonStyle.Success,
         ),
       ),
@@ -607,17 +608,17 @@ function buildCreatorPanel(i, config, creators) {
       row(
         btn(
           `${P}creator:profile`,
-          '👤 Creator Details',
+          emojiLabel('USER', 'Creator Details'),
           ButtonStyle.Primary,
         ),
         btn(
           `${P}creator:accounts`,
-          '🔗 Accounts',
+          emojiLabel('AUTOMOD_LINKS', 'Accounts'),
           ButtonStyle.Primary,
         ),
         btn(
           `${P}creator:post`,
-          '🔴 Post LIVE',
+          emojiLabel('DISABLED', 'Post LIVE'),
           ButtonStyle.Secondary,
           false,
         ),
@@ -628,7 +629,7 @@ function buildCreatorPanel(i, config, creators) {
       row(
         btn(
           `${P}creator:new`,
-          '➕ Add Creator',
+          emojiLabel('ADD', 'Add Creator'),
           ButtonStyle.Success,
         ),
       ),
@@ -640,13 +641,13 @@ function buildCreatorPanel(i, config, creators) {
       row(
         btn(
           `${P}creator:page:prev`,
-          '◀ Previous',
+          emojiLabel('ROLE_PREVIOUS', 'Previous'),
           ButtonStyle.Secondary,
           page <= 0,
         ),
         btn(
           `${P}creator:page:next`,
-          'Next ▶',
+          `Next ${EMOJIS.NEXT}`,
           ButtonStyle.Secondary,
           page >= pages - 1,
         ),
@@ -658,7 +659,7 @@ function buildCreatorPanel(i, config, creators) {
     row(
       btn(
         `${P}main`,
-        '⬅️ Back',
+        emojiLabel('BACK', 'Back'),
         ButtonStyle.Secondary,
       ),
     ),
@@ -668,7 +669,7 @@ function buildCreatorPanel(i, config, creators) {
     embeds: [
       embed(
         config,
-        '👥 Creators',
+        emojiLabel('MOD_STAFF', 'Creators'),
         description,
         who(i),
         selected ? creatorAccent(linked) : null,
@@ -680,62 +681,62 @@ function buildCreatorPanel(i, config, creators) {
 
 function buildAccountEditPanel(i, config, creator, account) {
   const supported = supportedAlerts(account.platform), alerts = Array.isArray(account.alertTypes) ? account.alertTypes : supported, s = account.state || {}, components = [];
-  const actions = [btn(`${P}account:check:${account.accountId}`, '🔄 Check Now', ButtonStyle.Secondary), btn(`${P}account:change`, '📝 Edit'), btn(`${P}account:move`, '↪️ Move Account')]; if (account.profileUrl && /^https?:\/\//i.test(account.profileUrl)) actions.push(linkBtn(account.profileUrl, '🔗 Open Profile')); components.push(row(...actions.slice(0, 5))); components.push(row(btn(`${P}account:toggle`, account.enabled === false ? '▶️ Resume' : '⏸️ Pause', account.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger)));
+  const actions = [btn(`${P}account:check:${account.accountId}`, emojiLabel('REFRESH', 'Check Now'), ButtonStyle.Secondary), btn(`${P}account:change`, emojiLabel('NOTE', 'Edit')), btn(`${P}account:move`, emojiLabel('SOCIAL_FORWARD', 'Move Account'))]; if (account.profileUrl && /^https?:\/\//i.test(account.profileUrl)) actions.push(linkBtn(account.profileUrl, emojiLabel('AUTOMOD_LINKS', 'Open Profile'))); components.push(row(...actions.slice(0, 5))); components.push(row(btn(`${P}account:toggle`, account.enabled === false ? emojiLabel('USER_PLAY', 'Resume') : emojiLabel('USER_PAUSE', 'Pause'), account.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}account:delete`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger)));
   components.push(row(
-    btn(`${P}accounts`, '⬅️ Accounts'),
-    btn(`${P}creators`, '👥 Creators'),
-    btn(`${P}settings`, '⚙️ Settings'),
+    btn(`${P}accounts`, emojiLabel('BACK', 'Accounts')),
+    btn(`${P}creators`, emojiLabel('MOD_STAFF', 'Creators')),
+    btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings')),
   ));
   const routes = Object.entries(account.alertChannels || {}).filter(([, channelId]) => channelId).map(([type, channelId]) => `${ALERT_LABEL[type] || type}: <#${channelId}>`).join(' • ');
   const deliveryError = s.lastDeliveryError && /notification channel is configured/i.test(String(s.lastDeliveryError)) ? 'LIVE posts need a channel route. Set this in Social Studio > Channels.' : String(s.lastDeliveryError || '').slice(0, 400);
-  const d = [`${ICON[account.platform]} **${LABEL[account.platform]} Account**`, `${accountState(account)} **${account.username || account.externalId || 'Resolving…'}**`, '', `**Creator:** ${creator.displayName}`, '', '**Status**', `${account.enabled === false ? '⏸️ Monitoring paused' : '🟢 Monitoring enabled'}`, `Last checked: ${ts(s.lastCheckedAt)}`, '', '**Alerts**', alerts.length ? `${alerts.map((t) => ALERT_LABEL[t] || t).join(', ')} enabled` : 'No alert types enabled', '', '**Routing**', `Default channel: ${account.alertChannelId ? `<#${account.alertChannelId}>` : config.alertsChannelId ? `Server default <#${config.alertsChannelId}>` : 'Not configured'}`, `Dedicated channels: ${routes || 'None'}`, ...(deliveryError ? ['', `⚠️ **Last delivery**`, deliveryError] : []), ...(s.lastError ? ['', `⚠️ **Provider**`, String(s.lastError).slice(0, 400)] : [])].join('\n'); return { embeds: [embed(config, '🔗 Manage Social Account', d, who(i), platformColor(account.platform))], components: components.slice(0, 5) };
+  const d = [`${ICON[account.platform]} **${LABEL[account.platform]} Account**`, `${accountState(account)} **${account.username || account.externalId || 'Resolving…'}**`, '', `**Creator:** ${creator.displayName}`, '', '**Status**', `${account.enabled === false ? emojiLabel('USER_PAUSE', 'Monitoring paused') : emojiLabel('ENABLED', 'Monitoring enabled')}`, `Last checked: ${ts(s.lastCheckedAt)}`, '', '**Alerts**', alerts.length ? `${alerts.map((t) => ALERT_LABEL[t] || t).join(', ')} enabled` : 'No alert types enabled', '', '**Routing**', `Default channel: ${account.alertChannelId ? `<#${account.alertChannelId}>` : config.alertsChannelId ? `Server default <#${config.alertsChannelId}>` : 'Not configured'}`, `Dedicated channels: ${routes || 'None'}`, ...(deliveryError ? ['', `${EMOJIS.WARNING} **Last delivery**`, deliveryError] : []), ...(s.lastError ? ['', `${EMOJIS.WARNING} **Provider**`, String(s.lastError).slice(0, 400)] : [])].join('\n'); return { embeds: [embed(config, emojiLabel('AUTOMOD_LINKS', 'Manage Social Account'), d, who(i), platformColor(account.platform))], components: components.slice(0, 5) };
 }
 function buildAccountMovePanel(i, config, creator, account) {
   const creators = Object.values(config.creators).filter((item) => item?.creatorId && item.creatorId !== creator.creatorId).sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || ''), undefined, { sensitivity: 'base' }));
   const d = [`Move **${LABEL[account.platform] || account.platform} — ${account.username || account.externalId || 'Resolving…'}** from **${creator.displayName}** to another creator profile.`, '', creators.length ? 'Choose an existing profile below, or create a new profile for this account.' : 'No other creator profiles exist yet. Create a new profile to move this account.'].join('\n');
   const components = [];
   if (creators.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`${P}account:move:creator`).setPlaceholder('Move to existing creator profile').setMinValues(1).setMaxValues(1).addOptions(creators.slice(0, 25).map((item) => ({ label: String(item.displayName || 'Unnamed creator').slice(0, 100), value: item.creatorId, description: `${(item.accountIds || []).length} linked account(s)`.slice(0, 100) })))));
-  components.push(row(btn(`${P}account:move:new`, '➕ New Profile', ButtonStyle.Success), btn(`${P}account:edit`, '⬅️ Back')));
-  return { embeds: [embed(config, '↪️ Move Social Account', d, who(i), platformColor(account.platform))], components };
+  components.push(row(btn(`${P}account:move:new`, emojiLabel('ADD', 'New Profile'), ButtonStyle.Success), btn(`${P}account:edit`, emojiLabel('BACK', 'Back'))));
+  return { embeds: [embed(config, emojiLabel('SOCIAL_FORWARD', 'Move Social Account'), d, who(i), platformColor(account.platform))], components };
 }
 function buildAccountAddPanel(i, config, creator) {
   const selected = getAccountSession(i).platforms || [];
   const d = [`Add one or more social accounts to **${creator.displayName}**.`, '', 'Select up to 5 platforms, then continue. The next form will ask for a username, channel ID or URL for each selected platform.', '', `**Selected:** ${selected.length ? selected.map((p) => LABEL[p] || p).join(', ') : 'None'}`].join('\n');
-  return { embeds: [embed(config, '➕ Add Accounts', d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components: [platformSelect(selected), row(btn(`${P}creators`, '⬅️ Back'), btn(`${P}account:continue`, '➡️ Continue', ButtonStyle.Success, !selected.length))] };
+  return { embeds: [embed(config, emojiLabel('ADD', 'Add Accounts'), d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components: [platformSelect(selected), row(btn(`${P}creators`, emojiLabel('BACK', 'Back')), btn(`${P}account:continue`, emojiLabel('NEXT_STEP', 'Continue'), ButtonStyle.Success, !selected.length))] };
 }
 function buildProfileManagePanel(i, config, creator) {
-  const d = [`👤 **${creator.displayName}**`, '', '**Profile**', `Status: ${creator.enabled === false ? '⏸️ Paused' : '🟢 Monitoring'}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`,
+  const d = [`${EMOJIS.USER} **${creator.displayName}**`, '', '**Profile**', `Status: ${creator.enabled === false ? emojiLabel('USER_PAUSE', 'Paused') : emojiLabel('ENABLED', 'Monitoring')}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`,
     `\u{1F512} Admin Notes: ${creator.adminNotes || 'None'}`].join('\n');
   const components = [
-    row(btn(`${P}creator:edit`, '📝 Edit Profile'), btn(`${P}creator:clear`, '🔄 Clear'), btn(`${P}creator:profile:toggle`, creator.enabled === false ? '▶️ Resume' : '⏸️ Pause', creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}creator:delete`, '🗑️ Delete', ButtonStyle.Danger)),
+    row(btn(`${P}creator:edit`, emojiLabel('NOTE', 'Edit Profile')), btn(`${P}creator:clear`, emojiLabel('REFRESH', 'Clear')), btn(`${P}creator:profile:toggle`, creator.enabled === false ? emojiLabel('USER_PLAY', 'Resume') : emojiLabel('USER_PAUSE', 'Pause'), creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}creator:delete`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger)),
     goliathNavigation(
       `${P}creators`,
       `${P}settings`,
     ),
   ];
-  return { embeds: [embed(config, '📝 Manage Profile', d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components };
+  return { embeds: [embed(config, emojiLabel('NOTE', 'Manage Profile'), d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components };
 }
 function buildAccountManagePanel(i, config, creator) {
   const linked = (creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean).sort(accountSort);
   const active = config.accounts[getAccountSession(i).accountId] || null;
-  const d = [`👤 **${creator.displayName}**`, '', '**Accounts**', `Linked: ${linked.length}`, `Selected: ${active ? `${LABEL[active.platform]} — ${active.username || active.externalId}` : linked.length ? 'Choose an account below.' : 'None yet.'}`, ...(linked.length ? ['', linked.map((a) => `• ${ICON[a.platform]} **${LABEL[a.platform]}** — ${a.profileUrl ? `[${a.username || a.externalId}](${a.profileUrl})` : a.username || a.externalId} — ${accountState(a)}`).join('\n')] : ['', 'No linked social accounts.'])].join('\n');
+  const d = [`${EMOJIS.USER} **${creator.displayName}**`, '', '**Accounts**', `Linked: ${linked.length}`, `Selected: ${active ? `${LABEL[active.platform]} — ${active.username || active.externalId}` : linked.length ? 'Choose an account below.' : 'None yet.'}`, ...(linked.length ? ['', linked.map((a) => `• ${ICON[a.platform]} **${LABEL[a.platform]}** — ${a.profileUrl ? `[${a.username || a.externalId}](${a.profileUrl})` : a.username || a.externalId} — ${accountState(a)}`).join('\n')] : ['', 'No linked social accounts.'])].join('\n');
   const components = [];
   if (linked.length) components.push(accountSelect(linked, getAccountSession(i).accountId));
   components.push(row(
-    btn(`${P}account:new`, '➕ Add Account', ButtonStyle.Success),
-    btn(`${P}account:change`, '📝 Edit Account', ButtonStyle.Secondary, !active),
-    btn(`${P}account:reset`, '🔄 Clear', ButtonStyle.Secondary, !active),
-    btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger, !active),
+    btn(`${P}account:new`, emojiLabel('ADD', 'Add Account'), ButtonStyle.Success),
+    btn(`${P}account:change`, emojiLabel('NOTE', 'Edit Account'), ButtonStyle.Secondary, !active),
+    btn(`${P}account:reset`, emojiLabel('REFRESH', 'Clear'), ButtonStyle.Secondary, !active),
+    btn(`${P}account:delete`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger, !active),
   ));
   components.push(goliathNavigation(
     `${P}creators`,
     `${P}settings`,
   ));
-  return { embeds: [embed(config, '🛠️ Manage Account', d, who(i), active ? platformColor(active.platform) : creatorAccent(linked))], components };
+  return { embeds: [embed(config, emojiLabel('WELCOME_CUSTOM', 'Manage Account'), d, who(i), active ? platformColor(active.platform) : creatorAccent(linked))], components };
 }
 function variablesDescription() {
   const variables = variablesForModule('socialStudio');
-  const lines = ['**🧩 Available Variables**'];
+  const lines = [`**${EMOJIS.PANELS} Available Variables**`];
   let current = '';
 
   for (const variable of variables) {
@@ -785,9 +786,9 @@ function buildTemplatePanel(i, config, type) {
     'Layout, media, links, colour, footer and previews stay managed by Goliath.'
   ].join('\n');
   return {
-    embeds: [embed(config, `${ALERT_EMOJI[type] || '🔔'} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
+    embeds: [embed(config, `${ALERT_EMOJI[type] || EMOJIS.SOCIAL_ALERT_BELL} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
     components: [
-      row(btn(`${P}template:edit:${type}`, '📝 Edit Template', ButtonStyle.Primary), btn(`${P}template:reset:${type}`, '🔄 Reset to Default', ButtonStyle.Secondary, !changed)),
+      row(btn(`${P}template:edit:${type}`, emojiLabel('NOTE', 'Edit Template'), ButtonStyle.Primary), btn(`${P}template:reset:${type}`, emojiLabel('REFRESH', 'Reset to Default'), ButtonStyle.Secondary, !changed)),
       goliathNavigation(
       `${P}templates`,
       `${P}settings`,
@@ -817,7 +818,7 @@ function buildSectionPanel(i, name) {
   const config = getConfig(i.guildId), accounts = Object.values(config.accounts), creators = Object.values(config.creators).sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || ''), undefined, { sensitivity: 'base' })); if (name === 'creators') return buildCreatorPanel(i, config, creators);
   if (name === 'accounts') {
     const session = getAccountSession(i), creator = session.creatorId ? config.creators[session.creatorId] || null : null; if (session.creatorId && !creator) { accountSessions.delete(sessionKey(i)); return buildSectionPanel(i, 'accounts'); }
-    if (!creator) return { embeds: [embed(config, '🛠️ Manage Account', `Select a creator profile first.\n\n**Profiles:** ${creators.length}`, who(i))], components: [
+    if (!creator) return { embeds: [embed(config, emojiLabel('WELCOME_CUSTOM', 'Manage Account'), `Select a creator profile first.\n\n**Profiles:** ${creators.length}`, who(i))], components: [
       goliathNavigation(
         `${P}creators`,
         `${P}settings`,
@@ -827,24 +828,24 @@ function buildSectionPanel(i, name) {
     return buildAccountManagePanel(i, config, creator);
   }
 if (name === 'templates') {
-    const templateButtons = ALERT_TYPES.map((t) => btn(`${P}template:${t}`, `${ALERT_EMOJI[t] || '🔔'} ${ALERT_LABEL[t]}`, ButtonStyle.Primary));
+    const templateButtons = ALERT_TYPES.map((t) => btn(`${P}template:${t}`, `${ALERT_EMOJI[t] || EMOJIS.SOCIAL_ALERT_BELL} ${ALERT_LABEL[t]}`, ButtonStyle.Primary));
     const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(
-      btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary),
-      btn(`${P}settings`, '⚙️ Settings', ButtonStyle.Secondary),
-      btn(`${P}variables`, '🧩 Variables', ButtonStyle.Secondary),
+      btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+      btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
+      btn(`${P}variables`, emojiLabel('PANELS', 'Variables'), ButtonStyle.Secondary),
     )];
-    return { embeds: [embed(config, '🎨 Alert Templates', 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **🧩 Variables** for the complete helper list.', who(i))], components: c };
+    return { embeds: [embed(config, emojiLabel('DESIGN', 'Alert Templates'), 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **' + EMOJIS.PANELS + ' Variables** for the complete helper list.', who(i))], components: c };
   }
-  if (name === 'variables') return { embeds: [embed(config, '🧩 Template Variables', variablesDescription(), who(i))], components: [
+  if (name === 'variables') return { embeds: [embed(config, emojiLabel('PANELS', 'Template Variables'), variablesDescription(), who(i))], components: [
       row(
         btn(
           `${P}templates`,
-          '⬅️ Back',
+          emojiLabel('BACK', 'Back'),
           ButtonStyle.Secondary,
         ),
         btn(
           `${P}settings`,
-          '⚙️ Settings',
+          emojiLabel('SETTINGS', 'Settings'),
           ButtonStyle.Secondary,
         ),
       ),
@@ -868,22 +869,22 @@ if (name === 'templates') {
       'Manage Social Studio alert delivery from one workspace.',
       '',
       '**Status**',
-      `📡 Monitoring: **${config.enabled ? 'Enabled' : 'Disabled'}**`,
-      `🔗 Monitored Accounts: **${monitored}/${accounts.length}**`,
-      `⚠️ Current Issues: **${failures}**`,
+      `${EMOJIS.SOCIAL_MONITOR} Monitoring: **${config.enabled ? 'Enabled' : 'Disabled'}**`,
+      `${EMOJIS.AUTOMOD_LINKS} Monitored Accounts: **${monitored}/${accounts.length}**`,
+      `${EMOJIS.WARNING} Current Issues: **${failures}**`,
       '',
       '**Alert Controls**',
-      '🧭 **Routing** — where alerts are delivered.',
-      '⚙️ **Automation** — monitoring schedule, duplicate protection, retries and quiet hours.',
-      '🔴 **LIVE Messages** — how active LIVE notifications update and finish.',
-      '🧪 **Test & Diagnose** — test delivery, inspect providers and view recent responses.',
+      emojiLabel('USER_HELP_NAVIGATION', '**Routing** — where alerts are delivered.'),
+      emojiLabel('MODERATION_DASHBOARD', '**Automation** — monitoring schedule, duplicate protection, retries and quiet hours.'),
+      emojiLabel('DISABLED', '**LIVE Messages** — how active LIVE notifications update and finish.'),
+      emojiLabel('TEST_SEND', '**Test & Diagnose** — test delivery, inspect providers and view recent responses.'),
     ].join('\n');
 
     return {
       embeds: [
         embed(
           config,
-          '📡 Alerts',
+          emojiLabel('SOCIAL_BROADCAST', 'Alerts'),
           description,
           who(i),
         ),
@@ -892,31 +893,31 @@ if (name === 'templates') {
         row(
           btn(
             `${P}channels`,
-            '🧭 Routing',
+            emojiLabel('USER_HELP_NAVIGATION', 'Routing'),
             ButtonStyle.Primary,
           ),
           btn(
             `${P}monitoring`,
-            '⚙️ Automation',
+            emojiLabel('SETTINGS', 'Automation'),
             ButtonStyle.Primary,
           ),
         ),
         row(
           btn(
             `${P}liveMessages`,
-            '🔴 LIVE Messages',
+            emojiLabel('DISABLED', 'LIVE Messages'),
             ButtonStyle.Secondary,
           ),
           btn(
             `${P}diagnostics`,
-            '🧪 Test & Diagnose',
+            emojiLabel('TEST_SEND', 'Test & Diagnose'),
             ButtonStyle.Secondary,
           ),
         ),
         row(
           btn(
             `${P}main`,
-            '⬅️ Back',
+            emojiLabel('BACK', 'Back'),
           ),
         ),
       ],
@@ -937,37 +938,37 @@ if (name === 'templates') {
       '',
       `**Default:** ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not configured'}`,
       `**Effective LIVE Route:** ${routeSummary}`,
-      ...ALERT_TYPES.map((alertType) => `${ALERT_EMOJI[alertType] || '🔔'} **${ALERT_LABEL[alertType] || alertType}:** ${config.alertChannels?.[alertType] ? `<#${config.alertChannels[alertType]}>` : 'Uses fallback routing'}`),
+      ...ALERT_TYPES.map((alertType) => `${ALERT_EMOJI[alertType] || EMOJIS.SOCIAL_ALERT_BELL} **${ALERT_LABEL[alertType] || alertType}:** ${config.alertChannels?.[alertType] ? `<#${config.alertChannels[alertType]}>` : 'Uses fallback routing'}`),
       '',
       '**Fallback order:** User → Creator/Account → Platform → Content Type → Default.',
     ].join('\n');
     return {
-      embeds: [embed(config, '🎯 Routing', summary, who(i))],
+      embeds: [embed(config, emojiLabel('RISK', 'Routing'), summary, who(i))],
       components: [
         routeTypeSelect(`${P}feed:type`, type),
         channelSelect(`${P}feed:route`, selected, `Choose destination for ${type === 'default' ? 'default alerts' : ALERT_LABEL[type] || type}`),
-        row(btn('social:userroute:open', '👥 User Routing', ButtonStyle.Secondary)),
-        row(btn(`${P}monitoring`, '⬅️ Back', ButtonStyle.Secondary)),
+        row(btn('social:userroute:open', emojiLabel('MOD_STAFF', 'User Routing'), ButtonStyle.Secondary)),
+        row(btn(`${P}monitoring`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
       ],
     };
   }
 
   if (name === 'settings') return {
-    embeds: [embed(config, '⚙️ Social Studio Settings', [
+    embeds: [embed(config, emojiLabel('SETTINGS', 'Social Studio Settings'), [
       'Configure the parts of Social Studio that server managers actually need.',
       '',
-      '🎭 **Roles & Access** — management access, creator access, temporary LIVE role and the LIVE notification target.',
-      '🔴 **LIVE Messages** — viewer count, duration and silent refresh behaviour for the retained LIVE post.',
-      '⚙️ **Setup & Diagnostics** — provider timing, Quiet Hours, retries, routing, tests and provider health.',
-      '📦 **Data & Export** — export configuration/history and manage stored Social Studio data.',
+      emojiLabel('USER_ROLES', '**Roles & Access** — management access, creator access, temporary LIVE role and the LIVE notification target.'),
+      emojiLabel('DISABLED', '**LIVE Messages** — viewer count, duration and silent refresh behaviour for the retained LIVE post.'),
+      emojiLabel('MODERATION_DASHBOARD', '**Setup & Diagnostics** — provider timing, Quiet Hours, retries, routing, tests and provider health.'),
+      emojiLabel('WELCOME_PRESET', '**Data & Export** — export configuration/history and manage stored Social Studio data.'),
     ].join('\n'), who(i))],
     components: [
       row(
-        btn(`${P}permissions`, '🎭 Roles & Access', ButtonStyle.Primary),
-        btn(`${P}liveMessages`, '🔴 LIVE Messages', ButtonStyle.Primary),
-        btn(`${P}monitoring`, '⚙️ Setup & Diagnostics', ButtonStyle.Primary),
+        btn(`${P}permissions`, emojiLabel('USER_ROLES', 'Roles & Access'), ButtonStyle.Primary),
+        btn(`${P}liveMessages`, emojiLabel('DISABLED', 'LIVE Messages'), ButtonStyle.Primary),
+        btn(`${P}monitoring`, emojiLabel('MODERATION_DASHBOARD', 'Setup & Diagnostics'), ButtonStyle.Primary),
       ),
-      row(btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data`, '📦 Data & Export', ButtonStyle.Secondary)),
+      row(btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary), btn(`${P}data`, emojiLabel('WELCOME_PRESET', 'Data & Export'), ButtonStyle.Secondary)),
     ],
   };
 
@@ -982,23 +983,23 @@ if (name === 'templates') {
     const d = [
       'Configure who can use Social Studio and how LIVE roles and notifications behave.',
       '',
-      '👥 **Manager Roles**', `Current: ${managerRoles}`, '',
-      '👤 **User Access Roles**', `Current: ${userRoles}`, '',
-      '🔴 **Temporary LIVE Creator Role**', `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Assigned while a linked creator is LIVE and removed when all monitored accounts are offline.', '',
-      '📣 **LIVE Notification Target**', `Current: ${pingTarget}`, 'Used only for the first notification of a genuinely new LIVE session.',
+      emojiLabel('MOD_STAFF', '**Manager Roles**'), `Current: ${managerRoles}`, '',
+      emojiLabel('USER', '**User Access Roles**'), `Current: ${userRoles}`, '',
+      emojiLabel('DISABLED', '**Temporary LIVE Creator Role**'), `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Assigned while a linked creator is LIVE and removed when all monitored accounts are offline.', '',
+      emojiLabel('USER_SOCIAL', '**LIVE Notification Target**'), `Current: ${pingTarget}`, 'Used only for the first notification of a genuinely new LIVE session.',
     ].join('\n');
     return {
-      embeds: [embed(config, '🎭 Roles & Access', d, who(i))],
+      embeds: [embed(config, emojiLabel('USER_ROLES', 'Roles & Access'), d, who(i))],
       components: [
         pagedRoleSelect(i, `${P}roles:select`, 'Manager Roles', config.managerRoleIds || [], page),
         pagedRoleSelect(i, `${P}userroles:select`, 'User Access Roles', config.userRoleIds || [], page),
         pagedRoleSelect(i, `${P}liveRole:select`, 'Temporary LIVE Creator Role', config.liveRoleId ? [config.liveRoleId] : [], page, true),
         pagedNotificationSelect(i, config, page),
         row(
-          btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary),
+          btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
           btn(`${P}roles:page:prev`, '◀️', ButtonStyle.Secondary, page <= 0),
-          btn(`${P}roles:page:info`, `📄 Roles ${page + 1}/${count}`, ButtonStyle.Secondary, true),
-          btn(`${P}roles:page:next`, '▶️', ButtonStyle.Secondary, page >= count - 1),
+          btn(`${P}roles:page:info`, `${EMOJIS.DOCUMENT} Roles ${page + 1}/${count}`, ButtonStyle.Secondary, true),
+          btn(`${P}roles:page:next`, EMOJIS.NEXT, ButtonStyle.Secondary, page >= count - 1),
         ),
       ],
     };
@@ -1011,22 +1012,22 @@ if (name === 'templates') {
     const description = [
       'Manage Social Studio configuration and stored activity data.',
       '',
-      `📦 **History Entries:** ${config.history.length}`,
-      `📬 **Queue Items:** ${config.queue.length}`,
+      `${EMOJIS.BULK} **History Entries:** ${config.history.length}`,
+      `${EMOJIS.SUGGESTION_INBOX} **Queue Items:** ${config.queue.length}`,
       '',
       '**Exports**',
-      '📤 **Config Export** — download Social Studio configuration with sensitive values redacted.',
-      '🗂️ **History Export** — download stored Social Studio activity history.',
+      emojiLabel('MOD_EXPORT', '**Config Export** — download Social Studio configuration with sensitive values redacted.'),
+      emojiLabel('WORKSPACE', '**History Export** — download stored Social Studio activity history.'),
       '',
       '**Maintenance**',
-      '🧹 **Clear History** — permanently clear saved Social Studio history for this server.',
+      emojiLabel('ADMIN_PURGE', '**Clear History** — permanently clear saved Social Studio history for this server.'),
     ].join('\n');
 
     return {
       embeds: [
         embed(
           config,
-          '📦 Data & Export',
+          emojiLabel('WELCOME_PRESET', 'Data & Export'),
           description,
           who(i),
         ),
@@ -1035,17 +1036,17 @@ if (name === 'templates') {
         row(
           btn(
             `${P}data:export:config`,
-            '📤 Config Export',
+            emojiLabel('MOD_EXPORT', 'Config Export'),
             ButtonStyle.Primary,
           ),
           btn(
             `${P}data:export`,
-            '🗂️ History Export',
+            emojiLabel('WORKSPACE', 'History Export'),
             ButtonStyle.Secondary,
           ),
           btn(
             `${P}data:clear`,
-            '🧹 Clear History',
+            emojiLabel('ADMIN_PURGE', 'Clear History'),
             ButtonStyle.Danger,
             !config.history.length,
           ),
@@ -1072,13 +1073,13 @@ if (name === 'templates') {
     const pending = pendingRetries + heldItems + queued;
     const lastCheckMs = newestTime(enabledAccounts.map((account) => account.state?.lastCheckedAt));
     const missingRoute = !config.alertsChannelId && !Object.values(config.alertChannels || {}).some(Boolean) && !Object.values(config.platformChannels || {}).some(Boolean) && !Object.values(config.userChannelOverrides || {}).some((routes) => routes && Object.values(routes).some(Boolean));
-    let health = '🟢 Operational';
+    let health = emojiLabel('ENABLED', 'Operational');
     let healthReason = 'Monitoring and delivery configuration are ready.';
-    if (!monitored) { health = '⚪ Not Configured'; healthReason = 'Add a monitored account to begin provider checks.'; }
-    else if (issueAccounts.length) { health = '🔴 Issues Detected'; healthReason = `${issueAccounts.length} monitored account${issueAccounts.length === 1 ? '' : 's'} reported a provider or delivery failure.`; }
-    else if (missingRoute) { health = '🟡 Attention Needed'; healthReason = 'Configure at least one alert destination in Routing.'; }
-    else if (pendingRetries) { health = '🟡 Attention Needed'; healthReason = `${pendingRetries} delivery retr${pendingRetries === 1 ? 'y is' : 'ies are'} pending.`; }
-    else if (heldItems) { health = '🟢 Operational'; healthReason = `${heldItems} notification${heldItems === 1 ? ' is' : 's are'} intentionally held by Quiet Hours.`; }
+    if (!monitored) { health = emojiLabel('INACTIVE', 'Not Configured'); healthReason = 'Add a monitored account to begin provider checks.'; }
+    else if (issueAccounts.length) { health = emojiLabel('DISABLED', 'Issues Detected'); healthReason = `${issueAccounts.length} monitored account${issueAccounts.length === 1 ? '' : 's'} reported a provider or delivery failure.`; }
+    else if (missingRoute) { health = emojiLabel('SEVERITY_MEDIUM', 'Attention Needed'); healthReason = 'Configure at least one alert destination in Routing.'; }
+    else if (pendingRetries) { health = emojiLabel('SEVERITY_MEDIUM', 'Attention Needed'); healthReason = `${pendingRetries} delivery retr${pendingRetries === 1 ? 'y is' : 'ies are'} pending.`; }
+    else if (heldItems) { health = emojiLabel('ENABLED', 'Operational'); healthReason = `${heldItems} notification${heldItems === 1 ? ' is' : 's are'} intentionally held by Quiet Hours.`; }
     const intervalLabel = interval < 60000 ? '30s' : interval % 3600000 === 0 ? `${interval / 3600000}h` : `${interval / 60000}m`;
     const quietLabel = quiet.enabled === true ? `${quiet.start || '23:00'}–${quiet.end || '08:00'} (${quiet.timezone || 'Europe/London'})` : 'Off';
     const d = [
@@ -1090,32 +1091,32 @@ if (name === 'templates') {
       `**Accounts:** ${monitored} monitored`,
       `**Quiet Hours:** ${quietLabel}`,
       `**Failed Delivery Retry:** ${settings.retryDeliveries === false ? 'Off' : 'On'}`,
-      ...(activeLive ? [`🔴 **Active LIVE Sessions:** ${activeLive}`] : []),
-      ...(heldItems ? [`🌙 **Held by Quiet Hours:** ${heldItems}`] : []),
-      ...(pendingRetries ? [`🔄 **Pending Retries:** ${pendingRetries}`] : []),
-      ...(queued ? [`📬 **Queued Work:** ${queued}`] : []),
+      ...(activeLive ? [`${EMOJIS.OWNER_RED} **Active LIVE Sessions:** ${activeLive}`] : []),
+      ...(heldItems ? [`${EMOJIS.SOCIAL_QUIET_HOURS} **Held by Quiet Hours:** ${heldItems}`] : []),
+      ...(pendingRetries ? [`${EMOJIS.REFRESH} **Pending Retries:** ${pendingRetries}`] : []),
+      ...(queued ? [`${EMOJIS.SUGGESTION_INBOX} **Queued Work:** ${queued}`] : []),
       `**Last Provider Check:** ${ts(lastCheckMs ? new Date(lastCheckMs).toISOString() : null)}`,
       '',
       '**Core Protection**',
-      '📡 Monitoring stays active while Social Studio is enabled.',
-      '🛡️ Duplicate protection is always active.',
+      emojiLabel('SOCIAL_BROADCAST', 'Monitoring stays active while Social Studio is enabled.'),
+      emojiLabel('SECURITY', 'Duplicate protection is always active.'),
     ].join('\n');
     return {
-      embeds: [embed(config, '⚙️ Setup & Diagnostics', d, who(i))],
+      embeds: [embed(config, emojiLabel('MODERATION_DASHBOARD', 'Setup & Diagnostics'), d, who(i))],
       components: [
         row(
-          btn(`${P}channels`, '🎯 Routing', ButtonStyle.Secondary),
+          btn(`${P}channels`, emojiLabel('RISK', 'Routing'), ButtonStyle.Secondary),
           btn(`${P}automation:interval`, `⏱️ Interval: ${intervalLabel}`, ButtonStyle.Secondary),
-          btn(`${P}automation:quiet`, `🌙 Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
-          btn(`${P}automation:retry`, `🔄 Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}automation:quiet`, `${EMOJIS.SOCIAL_QUIET_HOURS} Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
+          btn(`${P}automation:retry`, `${EMOJIS.REFRESH} Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
         ),
         row(
-          btn(`${P}account:check`, '🔍 Run Check', ButtonStyle.Primary, !monitored),
-          btn(`${P}test`, '📨 Send Test', ButtonStyle.Primary, missingRoute),
-          btn(`${P}testing:diagnostics`, '🩺 Provider Details', ButtonStyle.Secondary),
-          btn(`${P}testing:last`, '📄 Last Response', ButtonStyle.Secondary),
+          btn(`${P}account:check`, emojiLabel('SEARCH', 'Run Check'), ButtonStyle.Primary, !monitored),
+          btn(`${P}test`, emojiLabel('USER_INVITES', 'Send Test'), ButtonStyle.Primary, missingRoute),
+          btn(`${P}testing:diagnostics`, emojiLabel('WELCOME_DIAGNOSTICS', 'Provider Details'), ButtonStyle.Secondary),
+          btn(`${P}testing:last`, emojiLabel('DOCUMENT', 'Last Response'), ButtonStyle.Secondary),
         ),
-        row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data:refresh`, '🔄 Refresh', ButtonStyle.Secondary)),
+        row(btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary), btn(`${P}data:refresh`, emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary)),
       ],
     };
   }
@@ -1128,24 +1129,24 @@ if (name === 'templates') {
       'Control the optional information shown while a creator is LIVE.',
       '',
       '**Permanent LIVE lifecycle**',
-      '✏️ The original LIVE post is retained and silently updated to ENDED/OFFLINE.',
-      '🔕 Refreshes, recovery and ENDED updates never create another LIVE ping.',
+      emojiLabel('EDIT', 'The original LIVE post is retained and silently updated to ENDED/OFFLINE.'),
+      emojiLabel('WELCOME_MUTED', 'Refreshes, recovery and ENDED updates never create another LIVE ping.'),
       '',
-      `👥 **Viewer Count:** ${settings.includeViewerCount === false ? 'Off' : 'On'}`,
+      `${EMOJIS.ROLE_MEMBERS} **Viewer Count:** ${settings.includeViewerCount === false ? 'Off' : 'On'}`,
       `⏱️ **Live Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'}`,
-      `🔄 **Refresh:** ${refreshLabel}`,
+      `${EMOJIS.REFRESH} **Refresh:** ${refreshLabel}`,
       '',
       'Turning refresh off only stops periodic presentation refreshes. Monitoring and LIVE → ENDED still continue.',
     ].join('\n');
     return {
-      embeds: [embed(config, '🔴 LIVE Messages', d, who(i))],
+      embeds: [embed(config, emojiLabel('DISABLED', 'LIVE Messages'), d, who(i))],
       components: [
         row(
-          btn(`${P}automation:viewers`, settings.includeViewerCount === false ? '👥 Viewers: OFF' : '👥 Viewers: ON', settings.includeViewerCount === false ? ButtonStyle.Secondary : ButtonStyle.Success),
-          btn(`${P}automation:duration`, settings.includeLiveDuration === false ? '⏱️ Duration: OFF' : '⏱️ Duration: ON', settings.includeLiveDuration === false ? ButtonStyle.Secondary : ButtonStyle.Success),
-          btn(`${P}automation:liverefreshrate`, `🔄 Refresh: ${refreshLabel}`, refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+          btn(`${P}automation:viewers`, settings.includeViewerCount === false ? emojiLabel('MOD_STAFF', 'Viewers: OFF') : emojiLabel('MOD_STAFF', 'Viewers: ON'), settings.includeViewerCount === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}automation:duration`, settings.includeLiveDuration === false ? emojiLabel('AUTOMOD_LIMITS', 'Duration: OFF') : emojiLabel('AUTOMOD_LIMITS', 'Duration: ON'), settings.includeLiveDuration === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}automation:liverefreshrate`, `${EMOJIS.REFRESH} Refresh: ${refreshLabel}`, refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
         ),
-        row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary)),
+        row(btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
       ],
     };
   }
@@ -1504,7 +1505,7 @@ async function handleAccountInteraction(i, context) {
     const checkedResults = Array.isArray(result?.results) ? result.results.filter((item) => item?.status !== 'skipped') : [];
     const failures = checkedResults.filter((item) => ['unavailable', 'configuration_required', 'error'].includes(String(item?.status || '').toLowerCase()));
     const live = checkedResults.filter((item) => item?.isLive === true).length;
-    const summary = `🔍 **Provider check complete** — ${checkedResults.length} account${checkedResults.length === 1 ? '' : 's'} checked · ${checkedResults.length - failures.length} successful · ${failures.length} failed${live ? ` · ${live} LIVE` : ''}.`;
+    const summary = `${EMOJIS.SEARCH} **Provider check complete** — ${checkedResults.length} account${checkedResults.length === 1 ? '' : 's'} checked · ${checkedResults.length - failures.length} successful · ${failures.length} failed${live ? ` · ${live} LIVE` : ''}.`;
     await respond(i, buildSectionPanel(i, 'monitoring'));
     await i.followUp({ content: summary, flags: 64 }).catch(() => null);
     return true;
@@ -1712,17 +1713,17 @@ async function handleAccountInteraction(i, context) {
       embeds: [
         embed(
           config,
-          '⚠️ Delete Social Account',
+          emojiLabel('WARNING', 'Delete Social Account'),
           `Delete **${LABEL[a.platform]} · ${a.username || a.externalId}**?`,
           who(i),
         ),
       ],
       components: [
         row(
-          btn(`${P}account:delete:cancel`, '⬅️ Back'),
+          btn(`${P}account:delete:cancel`, emojiLabel('BACK', 'Back')),
           btn(
             `${P}account:delete:confirm`,
-            '🗑️ Delete Account',
+            emojiLabel('DELETE', 'Delete Account'),
             ButtonStyle.Danger,
           ),
         ),
@@ -2156,8 +2157,8 @@ async function handleDiagnosticsInteraction(i, context) {
     const channel = i.guild?.channels?.cache?.get(resolved.channelId) || await i.guild?.channels?.fetch?.(resolved.channelId).catch(() => null);
     if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The resolved Social Studio alert destination is unavailable or not text based.');
     const target = config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'everyone' ? '@everyone' : config.notificationMentionMode === 'here' ? '@here' : 'No notification ping';
-    const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Resolved LIVE route:** <#${channel.id}>\n**Route source:** ${resolved.source || 'Unknown'}\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
-    const notice = `📨 Test delivered to <#${channel.id}> via **${resolved.source || 'resolved route'}** without pinging members. Message ID: ${message.id}.`;
+    const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('TEST_SEND', 'Social Studio Delivery Test')).setDescription(`✅ Test delivery reached this channel successfully.\n\n**Resolved LIVE route:** <#${channel.id}>\n**Route source:** ${resolved.source || 'Unknown'}\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
+    const notice = `${EMOJIS.USER_INVITES} Test delivered to <#${channel.id}> via **${resolved.source || 'resolved route'}** without pinging members. Message ID: ${message.id}.`;
     if (i.deferred || i.replied) await i.followUp({ content: notice, flags: 64 }).catch(() => null);
     else await i.reply({ content: notice, flags: 64 });
     return true;
@@ -2168,14 +2169,14 @@ async function handleDiagnosticsInteraction(i, context) {
   if (id === `${P}testing:last`) {
     const accounts = Object.values(config.accounts || {}).filter((account) => account?.enabled !== false);
     const latest = accounts.map((account) => ({ account, checkedAt: Date.parse(String(account.state?.lastCheckedAt || 0)) || 0 })).sort((x, y) => y.checkedAt - x.checkedAt)[0]?.account || null;
-    let content = '📄 **Latest Provider Response**\n\nNo provider check has been recorded yet.';
+    let content = emojiLabel('DOCUMENT', '**Latest Provider Response**\n\nNo provider check has been recorded yet.');
     if (latest?.state?.lastCheckedAt) {
       const state = latest.state || {};
       const creator = Object.values(config.creators || {}).find((item) => Array.isArray(item?.accountIds) && item.accountIds.map(String).includes(String(latest.accountId || '')));
       const label = creator?.displayName || latest.displayName || latest.username || latest.accountId || 'Unknown account';
       const result = state.lastStatus || (state.isLive === true ? 'live' : state.isLive === false ? 'offline' : 'unknown');
       content = [
-        '📄 **Latest Provider Response**', '',
+        emojiLabel('DOCUMENT', '**Latest Provider Response**'), '',
         `**Provider:** ${LABEL[String(latest.platform || '').toLowerCase()] || latest.platform || 'Unknown'}`,
         `**Account:** ${String(label).slice(0, 120)}`,
         `**Checked:** ${ts(state.lastCheckedAt)}`,
@@ -2198,11 +2199,11 @@ async function handleDiagnosticsInteraction(i, context) {
       const supported = Array.isArray(info.supportedAlertTypes) && info.supportedAlertTypes.length ? info.supportedAlertTypes.map((type) => ALERT_LABEL[type] || type).join('/') : 'No alert types reported';
       const state = account.state || {};
       const failed = Boolean(state.lastError || state.lastDeliveryError);
-      const status = failed ? '🔴 Issue' : state.lastCheckedAt ? '🟢 Checked' : '⚪ Not checked';
+      const status = failed ? emojiLabel('DISABLED', 'Issue') : state.lastCheckedAt ? emojiLabel('ENABLED', 'Checked') : emojiLabel('INACTIVE', 'Not checked');
       const name = account.displayName || account.username || account.accountId || 'Unknown account';
-      return `${status} **${LABEL[platform] || platform || 'Unknown'}** — ${String(name).slice(0, 80)} · ${supported} · Last: ${ts(state.lastCheckedAt)}${state.isLive === true ? ' · 🔴 LIVE' : ''}${state.lastError ? ` · ${String(state.lastError).slice(0, 120)}` : ''}`;
-    }) : ['⚪ No monitored accounts are available to inspect.'];
-    const content = `🩺 **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1850)}`;
+      return `${status} **${LABEL[platform] || platform || 'Unknown'}** — ${String(name).slice(0, 80)} · ${supported} · Last: ${ts(state.lastCheckedAt)}${state.isLive === true ? ` · ${EMOJIS.OWNER_RED} LIVE` : ''}${state.lastError ? ` · ${String(state.lastError).slice(0, 120)}` : ''}`;
+    }) : [emojiLabel('INACTIVE', 'No monitored accounts are available to inspect.')];
+    const content = `${EMOJIS.SOCIAL_HEALTH} **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1850)}`;
     if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
     return true;
   }
@@ -2210,7 +2211,7 @@ async function handleDiagnosticsInteraction(i, context) {
   if (id === `${P}data:export:config`) {
     const safe = redactExportSecrets(config);
     const file = new AttachmentBuilder(Buffer.from(JSON.stringify(safe, null, 2), 'utf8'), { name: `social-studio-config-${i.guildId}.json` });
-    const payload = { content: '📤 Social Studio configuration export. Sensitive values have been redacted.', files: [file], flags: 64 };
+    const payload = { content: emojiLabel('MOD_EXPORT', 'Social Studio configuration export. Sensitive values have been redacted.'), files: [file], flags: 64 };
     if (i.deferred || i.replied) await i.followUp(payload); else await i.reply(payload);
     return true;
   }
@@ -2218,7 +2219,7 @@ async function handleDiagnosticsInteraction(i, context) {
   if (id === `${P}data:export`) {
     const history = Array.isArray(config.history) ? config.history : [];
     const file = new AttachmentBuilder(Buffer.from(JSON.stringify(history, null, 2), 'utf8'), { name: `social-studio-history-${i.guildId}.json` });
-    const payload = { content: '🗂️ Social Studio history export.', files: [file], flags: 64 };
+    const payload = { content: emojiLabel('WORKSPACE', 'Social Studio history export.'), files: [file], flags: 64 };
     if (i.deferred || i.replied) await i.followUp(payload); else await i.reply(payload);
     return true;
   }
@@ -2228,7 +2229,7 @@ async function handleDiagnosticsInteraction(i, context) {
     config.history = [];
     saveConfig(i.guildId, config, i.guild, actorId);
     await respond(i, buildSectionPanel(i, 'data'));
-    await i.followUp({ content: '🧹 Social Studio history cleared.', flags: 64 }).catch(() => null);
+    await i.followUp({ content: emojiLabel('ADMIN_PURGE', 'Social Studio history cleared.'), flags: 64 }).catch(() => null);
     return true;
   }
   return false;
@@ -2457,7 +2458,7 @@ function buildUserAddAccounts(
     embeds: [
       embed(
         store.getConfig(interaction.guildId),
-        '➕ Add Accounts',
+        emojiLabel('ADD', 'Add Accounts'),
         [
           `Add one or more social accounts to **${creator.displayName || creator.creatorId}**.`,
           '',
@@ -2473,12 +2474,12 @@ function buildUserAddAccounts(
       row(
         btn(
           'user:social:open',
-          '⬅️ Back',
+          emojiLabel('BACK', 'Back'),
           ButtonStyle.Secondary,
         ),
         btn(
           'user:social:account:continue',
-          '➡️ Continue',
+          emojiLabel('NEXT_STEP', 'Continue'),
           ButtonStyle.Success,
           !selected.length,
         ),
@@ -2488,11 +2489,11 @@ function buildUserAddAccounts(
 }
 
 function userNavigation(backId = 'user:category:social') {
-  return row(btn(backId, '⬅️ Back', ButtonStyle.Secondary));
+  return row(btn(backId, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
 }
 
 function userSectionNavigation(backId = 'user:social:open') {
-  return row(btn(backId, '⬅️ Back', ButtonStyle.Secondary));
+  return row(btn(backId, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
 }
 
 function userAccountLabel(account) {
@@ -2533,7 +2534,7 @@ function userCreatorActionRows(creator = null, accounts = []) {
       row(
         btn(
           'user:social:create',
-          '➕ New Profile',
+          emojiLabel('ADD', 'New Profile'),
           ButtonStyle.Success,
           completed,
         ),
@@ -2545,20 +2546,20 @@ function userCreatorActionRows(creator = null, accounts = []) {
     row(
       btn(
         'user:social:create',
-        '➕ New Profile',
+        emojiLabel('ADD', 'New Profile'),
         ButtonStyle.Success,
         true,
       ),
       btn(
         'user:social:newAccount',
-        '➕ New Account',
+        emojiLabel('ADD', 'New Account'),
         ButtonStyle.Success,
       ),
       ...(hasAccounts
         ? [
             btn(
               'user:social:alerts',
-              '📣 Post LIVE',
+              emojiLabel('USER_SOCIAL', 'Post LIVE'),
               ButtonStyle.Primary,
             ),
           ]
@@ -2567,14 +2568,14 @@ function userCreatorActionRows(creator = null, accounts = []) {
     row(
       btn(
         'user:social:details',
-        '📝 Manage Profile',
+        emojiLabel('NOTE', 'Manage Profile'),
         ButtonStyle.Primary,
       ),
       ...(hasAccounts
         ? [
             btn(
               'user:social:manageAccount',
-              '🛠️ Manage Account',
+              emojiLabel('WELCOME_CUSTOM', 'Manage Account'),
               ButtonStyle.Primary,
             ),
           ]
@@ -2588,7 +2589,7 @@ function buildUserLanding(interaction) {
     embeds: [
       embed(
         store.getConfig(interaction.guildId),
-        '📣 Social Studio',
+        emojiLabel('USER_SOCIAL', 'Social Studio'),
         [
           'Create and manage your own Social Studio creator profile.',
           '',
@@ -2604,7 +2605,7 @@ function buildUserLanding(interaction) {
           'My Creator Profile',
           ButtonStyle.Primary,
           false,
-        ).setEmoji('👤'),
+        ).setEmoji(EMOJIS.USER),
       ),
       userNavigation('user:home'),
     ],
@@ -2620,7 +2621,7 @@ function buildUserDenied(interaction, roleIds = []) {
     embeds: [
       embed(
         store.getConfig(interaction.guildId),
-        '📣 Social Studio',
+        emojiLabel('USER_SOCIAL', 'Social Studio'),
         [
           'You do not currently have access to Social Studio.',
           '',
@@ -2640,7 +2641,7 @@ function buildUserDenied(interaction, roleIds = []) {
           'Social Studio',
           ButtonStyle.Secondary,
           true,
-        ).setEmoji('👤'),
+        ).setEmoji(EMOJIS.USER),
       ),
       userNavigation(),
     ],
@@ -2652,7 +2653,7 @@ function buildUserCreate(interaction) {
     embeds: [
       embed(
         store.getConfig(interaction.guildId),
-        '👥 Creator Profiles',
+        emojiLabel('MOD_STAFF', 'Creator Profiles'),
         [
           'You do not have a completed Creator Profile yet.',
           '',
@@ -2683,9 +2684,9 @@ function buildUserProfile(
       embeds: [
         embed(
           config,
-          '👥 My Creator Profile',
+          emojiLabel('MOD_STAFF', 'My Creator Profile'),
           [
-            '⚠️ **Profile setup has not been submitted yet.**',
+            emojiLabel('WARNING', '**Profile setup has not been submitted yet.**'),
             '',
             'Select **New Profile** to finish creating your Creator Profile.',
           ].join('\n'),
@@ -2719,9 +2720,9 @@ function buildUserProfile(
     embeds: [
       embed(
         config,
-        '👥 My Creator Profile',
+        emojiLabel('MOD_STAFF', 'My Creator Profile'),
         [
-          created ? '✅ **Creator Profile created.**' : null,
+          created ? emojiLabel('HEALTHY', '**Creator Profile created.**') : null,
                     `**__Creator ID__** \`${creator.creatorId}\``,
           creator.displayName
             ? `**__Creator Name__** ${creator.displayName}`
@@ -2760,7 +2761,7 @@ function buildUserSection(
 ) {
   const sections = {
     details: {
-      title: '📝 Manage Profile',
+      title: emojiLabel('NOTE', 'Manage Profile'),
       description: [
         '**Creator ID**',
         `\`${creator.creatorId}\``,
@@ -2785,7 +2786,7 @@ function buildUserSection(
       ].join('\n'),
     },
     accounts: {
-      title: '🔗 Accounts',
+      title: emojiLabel('AUTOMOD_LINKS', 'Accounts'),
       description: [
         '**Creator ID**',
         `\`${creator.creatorId}\``,
@@ -2796,7 +2797,7 @@ function buildUserSection(
       ].join('\n'),
     },
     alerts: {
-      title: '📣 Post LIVE',
+      title: emojiLabel('USER_SOCIAL', 'Post LIVE'),
       description:
         'Create and send a LIVE post for an account connected to your Creator Profile. Existing Social Studio posting and alert logic remains the source of truth.',
     },
@@ -2817,10 +2818,10 @@ function buildUserSection(
     components: section === 'details'
       ? [
           row(
-            btn('user:social:profile:edit', '✏️ Edit Profile', ButtonStyle.Primary),
+            btn('user:social:profile:edit', emojiLabel('EDIT', 'Edit Profile'), ButtonStyle.Primary),
             btn(
               'user:social:profile:toggleLiveInfo',
-              creator.showProfileInLive === false ? '📣 LIVE Profile Info: OFF' : '📣 LIVE Profile Info: ON',
+              creator.showProfileInLive === false ? emojiLabel('USER_SOCIAL', 'LIVE Profile Info: OFF') : emojiLabel('USER_SOCIAL', 'LIVE Profile Info: ON'),
               creator.showProfileInLive === false ? ButtonStyle.Secondary : ButtonStyle.Success,
             ),
           ),

@@ -3,13 +3,13 @@
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   StringSelectMenuBuilder,
   ChannelType,
   AttachmentBuilder,
 } = require('discord.js');
+const { navigationButton, emojiLabel, EMOJIS } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const goodbye = require('./goodbye');
 const departureDm = require('./goodbyeDeparture');
@@ -17,13 +17,10 @@ const embedTemplateManager = require('../embed/embedTemplates');
 
 const buildGoodbyeDmPanel = (() => {
   const row = (...components) => new ActionRowBuilder().addComponents(...components);
-  const button = (customId, label, style = ButtonStyle.Secondary) => new ButtonBuilder()
-    .setCustomId(customId)
-    .setLabel(label)
-    .setStyle(style);
+  const button = (customId, label, style = ButtonStyle.Secondary) => navigationButton(customId, label, style);
 
   function state(value) {
-    return value ? 'On ✅' : 'Off ❌';
+    return value ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`;
   }
 
   function buildGoodbyeDmPanel(guild, memberDisplayName = 'Unknown User') {
@@ -31,19 +28,19 @@ const buildGoodbyeDmPanel = (() => {
     const analytics = dm.analytics || {};
     const embed = new EmbedBuilder()
       .setColor(dm.enabled ? 0x5865F2 : 0x747F8D)
-      .setTitle('💌 Goodbye · Departure DM')
+      .setTitle(emojiLabel('WELCOME_DM', 'Goodbye · Departure DM'))
       .setDescription([
         'Configure the private message sent to a member after Goliath identifies how their membership ended.',
         '',
         `**Status:** ${state(dm.enabled)}`,
         '',
-        '**📋 Event Delivery**',
+        emojiLabel('REVIEW', '**Event Delivery**'),
         `Voluntary Leave: ${state(dm.sendOnLeave)}`,
         `Kick: ${state(dm.sendOnKick)}`,
         `Ban: ${state(dm.sendOnBan)}`,
         `Prune: ${state(dm.sendOnPrune)}`,
         '',
-        '**📅 Included Information**',
+        emojiLabel('GOODBYE_DATE', '**Included Information**'),
         `Join Date: ${state(dm.includeJoinDate)}`,
         `Membership Duration: ${state(dm.includeMembershipDuration)}`,
         `Reason: ${state(dm.includeReason)}`,
@@ -82,7 +79,7 @@ const buildGoodbyeDmPanel = (() => {
         ),
         row(
           button('admin:goodbye:dm:reset', 'Reset DM', ButtonStyle.Danger),
-          button('admin:goodbye', 'Back to Goodbye'),
+          button('admin:goodbye', emojiLabel('BACK', 'Back to Goodbye')),
         ),
       ],
     };
@@ -93,7 +90,7 @@ const buildGoodbyeDmPanel = (() => {
 
 const selections = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Secondary) => navigationButton(customId, label, style);
 const canonicalConfig = (guildId) => ({
   ...goodbye.getGoodbyeSection(guildId),
   enabled: guildManager.isModuleEnabled(guildId, 'goodbye'),
@@ -162,21 +159,21 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
 
   const embed = new EmbedBuilder()
     .setColor(config.enabled === false ? 0xed4245 : warnings.length ? 0xfaa61a : 0x57f287)
-    .setTitle('👋 Goodbye · Setup')
+    .setTitle(emojiLabel('WELCOME', 'Goodbye · Setup'))
     .setDescription([
-      `**Module:** ${config.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Module:** ${config.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Log Channel:** ${config.channelId ? `<#${config.channelId}>` : '\`Not set\`'}`,
       `**Bots:** ${config.ignoreBots ? 'Excluded' : 'Included'}`,
       '',
-      '**📋 Staff Departure Log**',
+      emojiLabel('REVIEW', '**Staff Departure Log**'),
       `**Template:** ${activeTemplate ? `\`${activeTemplate.name || activeTemplate.templateId}\`` : '\`Not set\`'}`,
       `**Assignment:** ${binding ? 'Assigned ✅' : 'Using configured template'}`,
       '**Source:** Embed Studio',
       stagedTemplate ? `**Selected:** \`${stagedTemplate.name || stagedTemplate.templateId}\`` : null,
       `Sent: \`${analytics.sent || 0}\` | Failed: \`${analytics.failed || 0}\` | Skipped: \`${analytics.skipped || 0}\``,
       '',
-      '**💌 Member Departure DM**',
-      `**Status:** ${dm.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      emojiLabel('GOODBYE_LOVE_LETTER', '**Member Departure DM**'),
+      `**Status:** ${dm.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Events:** Leave ${dm.sendOnLeave ? 'On' : 'Off'} · Kick ${dm.sendOnKick ? 'On' : 'Off'} · Ban ${dm.sendOnBan ? 'On' : 'Off'} · Prune ${dm.sendOnPrune ? 'On' : 'Off'}`,
       `DM Sent: \`${dmAnalytics.sent || 0}\` | Failed: \`${dmAnalytics.failed || 0}\` | Skipped: \`${dmAnalytics.skipped || 0}\``,
       '',
@@ -191,20 +188,20 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
       row(channelMenu(config)),
       row(templateMenu(guild, activeTemplateId, userId)),
       row(
-        button(config.enabled ? 'admin:goodbye:disable' : 'admin:goodbye:enable', config.enabled ? '⏸ Disable Module' : '▶ Enable Module', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:goodbye:toggleBots', config.ignoreBots ? '🤖 Bots Off' : '🤖 Bots On', config.ignoreBots ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:goodbye:dm', '💌 Departure DM', ButtonStyle.Primary),
+        button(config.enabled ? 'admin:goodbye:disable' : 'admin:goodbye:enable', config.enabled ? emojiLabel('PAUSE_PLAIN', 'Disable Module') : emojiLabel('WELCOME_RUN', 'Enable Module'), config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button('admin:goodbye:toggleBots', config.ignoreBots ? emojiLabel('AUTOMOD', 'Bots Off') : emojiLabel('AUTOMOD', 'Bots On'), config.ignoreBots ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button('admin:goodbye:dm', emojiLabel('WELCOME_DM', 'Departure DM'), ButtonStyle.Primary),
       ),
       row(
-        button('admin:goodbye:assign', '✅ Assign Log Template', ButtonStyle.Primary),
-        button('admin:goodbye:test', '🧪 Preview Log', ButtonStyle.Success),
-        button('admin:goodbye:send', '📨 Send Log Test', ButtonStyle.Success),
-        button('admin:goodbye:repair', '🩺 Repair'),
+        button('admin:goodbye:assign', emojiLabel('HEALTHY', 'Assign Log Template'), ButtonStyle.Primary),
+        button('admin:goodbye:test', emojiLabel('TEST_SEND', 'Preview Log'), ButtonStyle.Success),
+        button('admin:goodbye:send', emojiLabel('USER_INVITES', 'Send Log Test'), ButtonStyle.Success),
+        button('admin:goodbye:repair', emojiLabel('WELCOME_DIAGNOSTICS', 'Repair')),
       ),
       row(
-        button('admin:goodbye:reset', '♻ Reset Module', ButtonStyle.Danger),
-        button('admin:goodbye:export', '📤 Export'),
-        button('admin:modules', '⬅ Modules'),
+        button('admin:goodbye:reset', emojiLabel('UPDATE_PLAIN', 'Reset Module'), ButtonStyle.Danger),
+        button('admin:goodbye:export', emojiLabel('MOD_EXPORT', 'Export')),
+        button('admin:modules', emojiLabel('BACK_PLAIN', 'Modules')),
       ),
     ],
   };
@@ -305,7 +302,7 @@ async function handleGoodbyeInteraction(interaction) {
       const latestConfig = goodbye.getGoodbyeSection(interaction.guild.id);
       if (!latestConfig.channelId) throw new Error('Choose a goodbye channel first.');
       const result = await goodbye.sendGoodbye(interaction.member, { silent: false, force: true, previewOnly: true });
-      return interaction.reply({ content: result.sent ? `✅ Goodbye log sent to <#${result.channelId}>.` : `❌ Goodbye log failed: ${result.reason || result.error || 'unknown error'}`, ephemeral: true });
+      return interaction.reply({ content: result.sent ? `${EMOJIS.SUCCESS} Goodbye log sent to <#${result.channelId}>.` : `${EMOJIS.ERROR} Goodbye log failed: ${result.reason || result.error || 'unknown error'}`, ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:dm:preview') {
@@ -315,7 +312,7 @@ async function handleGoodbyeInteraction(interaction) {
 
     if (customId === 'admin:goodbye:dm:test') {
       const result = await departureDm.sendDepartureDm(interaction.member, { key: 'left' }, { force: true });
-      return interaction.reply({ content: result.sent ? '✅ Departure DM sent to you.' : `❌ Departure DM failed: ${result.error || result.reason || 'unknown error'}`, ephemeral: true });
+      return interaction.reply({ content: result.sent ? emojiLabel('HEALTHY', 'Departure DM sent to you.') : `${EMOJIS.ERROR} Departure DM failed: ${result.error || result.reason || 'unknown error'}`, ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:repair') {
@@ -339,13 +336,13 @@ async function handleGoodbyeInteraction(interaction) {
 
     if (customId === 'admin:goodbye:export') {
       const attachment = new AttachmentBuilder(Buffer.from(JSON.stringify(goodbye.exportConfiguration(interaction.guild.id), null, 2), 'utf8'), { name: `goliath-goodbye-${interaction.guild.id}.json` });
-      await interaction.reply({ content: '📤 Goodbye configuration export.', files: [attachment], ephemeral: true });
+      await interaction.reply({ content: emojiLabel('MOD_EXPORT', 'Goodbye configuration export.'), files: [attachment], ephemeral: true });
       return true;
     }
 
     return updatePanel(interaction);
   } catch (error) {
-    const payload = { content: `❌ Goodbye setup failed: ${error.message}`, ephemeral: true };
+    const payload = { content: `${EMOJIS.ERROR} Goodbye setup failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;

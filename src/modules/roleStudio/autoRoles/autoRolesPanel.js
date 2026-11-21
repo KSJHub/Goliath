@@ -1,12 +1,13 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   AttachmentBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const security = require('../../../core/security/protection/core');
 const { validateRoleSelection } = require('../../../core/security/protection/permissions');
 const {
@@ -23,7 +24,7 @@ function row(...components) {
 }
 
 function button(customId, label, style = ButtonStyle.Secondary) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  return navigationButton(customId, label, style);
 }
 
 function formatRoles(ids = []) {
@@ -57,14 +58,14 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User', ro
 
   const embed = new EmbedBuilder()
     .setColor(health.healthy ? 0x57f287 : 0xfaa61a)
-    .setTitle('👥 Auto Roles · Setup')
+    .setTitle(emojiLabel('MOD_STAFF', 'Auto Roles · Setup'))
     .setDescription([
-      `**Status:** ${moduleEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${moduleEnabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Join Roles:** ${formatRoles(config.joinRoles)}`,
       `**Bot Roles:** ${formatRoles(config.botRoles)}`,
-      `**Apply To Bots:** ${config.settings.applyToBots ? 'Yes ✅' : 'No ❌'}`,
-      `**Reapply On Startup:** ${config.settings.reapplyOnStartup ? 'Yes ✅' : 'No ❌'}`,
-      `**Audit Logging:** ${config.settings.auditLog ? 'Yes ✅' : 'No ❌'}`,
+      `**Apply To Bots:** ${config.settings.applyToBots ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Reapply On Startup:** ${config.settings.reapplyOnStartup ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Audit Logging:** ${config.settings.auditLog ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       '',
       `Assigned: \`${config.analytics.assigned || 0}\` | Failed: \`${config.analytics.failed || 0}\` | Skipped: \`${config.analytics.skipped || 0}\``,
       '',
@@ -80,16 +81,16 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User', ro
       botPicker.rows[0],
       ...(pageCount > 1 ? [buildRolePickerPagination('admin:autoRoles:rolePage', safePage, pageCount)] : []),
       row(
-        button(moduleEnabled ? 'admin:autoRoles:disable' : 'admin:autoRoles:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', moduleEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:autoRoles:toggleBots', '🤖 Apply To Bots'),
-        button('admin:autoRoles:toggleReapply', '🔁 Reapply On Startup'),
-        button('admin:autoRoles:repair', '🩺 Repair', ButtonStyle.Primary),
-        button('admin:autoRoles:reapply', '🚀 Reapply Now', ButtonStyle.Success)
+        button(moduleEnabled ? 'admin:autoRoles:disable' : 'admin:autoRoles:enable', moduleEnabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), moduleEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button('admin:autoRoles:toggleBots', emojiLabel('AUTOMOD', 'Apply To Bots')),
+        button('admin:autoRoles:toggleReapply', emojiLabel('REVERSED', 'Reapply On Startup')),
+        button('admin:autoRoles:repair', emojiLabel('WELCOME_DIAGNOSTICS', 'Repair'), ButtonStyle.Primary),
+        button('admin:autoRoles:reapply', emojiLabel('DEPLOY', 'Reapply Now'), ButtonStyle.Success)
       ),
       row(
-        button('admin:autoRoles:export', '📤 Export'),
-        button('admin:autoRoles:reset', '♻️ Reset', ButtonStyle.Danger),
-        button('admin:reactionRoles', '⬅️ Role Studio')
+        button('admin:autoRoles:export', emojiLabel('MOD_EXPORT', 'Export')),
+        button('admin:autoRoles:reset', emojiLabel('AUTOMOD_DUPLICATES', 'Reset'), ButtonStyle.Danger),
+        button('admin:reactionRoles', emojiLabel('BACK', 'Role Studio'))
       ),
     ],
   };
@@ -159,13 +160,13 @@ async function handleAutoRolesInteraction(interaction) {
         Buffer.from(JSON.stringify(autoRoles.exportConfiguration(interaction.guild.id), null, 2), 'utf8'),
         { name: `goliath-auto-roles-${interaction.guild.id}.json` }
       );
-      await interaction.reply({ content: '📤 Auto Roles configuration export.', files: [attachment], ephemeral: true });
+      await interaction.reply({ content: emojiLabel('MOD_EXPORT', 'Auto Roles configuration export.'), files: [attachment], ephemeral: true });
       return true;
     }
 
     return updatePanel(interaction);
   } catch (error) {
-    const payload = { content: `❌ Auto Roles setup failed: ${error.message}`, ephemeral: true };
+    const payload = { content: `${EMOJIS.ERROR} Auto Roles setup failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;

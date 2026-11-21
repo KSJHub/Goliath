@@ -1,6 +1,7 @@
+const { navigationButton } = require('../../guild/goliathNavigation');
+const { EMOJIS } = require('../../ui/emojis');
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
@@ -12,46 +13,46 @@ const ITEMS_PER_ROW = 4;
 const ACCOUNT_RECORD_KEYS = new Set(['warnings', 'cases', 'infractions', 'appeals']);
 
 const CATEGORY_CATALOG = [
-  { key: 'account', label: 'Account', emoji: '👤', summary: 'Review your moderation and appeal information.' },
-  { key: 'community', label: 'Community', emoji: '🏘️', summary: 'Birthdays, giveaways, invites, leveling and polls.' },
-  { key: 'feedback', label: 'Feedback', emoji: '💬', summary: 'Forms, suggestions and tickets.' },
-  { key: 'messages', label: 'Messages', emoji: '✉️', summary: 'Member-visible message tools when approved.' },
-  { key: 'roles', label: 'Roles', emoji: '🎭', summary: 'Self-assignable roles, role history and requests.' },
-  { key: 'security', label: 'Security', emoji: '🛡️', summary: 'Verification status and member security tools.' },
-  { key: 'social', label: 'Social', emoji: '📣', summary: 'Open your own Social Studio Creator Profile.' },
-  { key: 'utility', label: 'Utility', emoji: '🧰', summary: 'Help, ping, server info, translate and future utility tools.' },
+  { key: 'account', label: 'Account', emoji: EMOJIS.USER, summary: 'Review your moderation and appeal information.' },
+  { key: 'community', label: 'Community', emoji: EMOJIS.USER_COMMUNITY, summary: 'Birthdays, giveaways, invites, leveling and polls.' },
+  { key: 'feedback', label: 'Feedback', emoji: EMOJIS.USER_FEEDBACK, summary: 'Forms, suggestions and tickets.' },
+  { key: 'messages', label: 'Messages', emoji: EMOJIS.USER_MESSAGES, summary: 'Member-visible message tools when approved.' },
+  { key: 'roles', label: 'Roles', emoji: EMOJIS.USER_ROLES, summary: 'Self-assignable roles, role history and requests.' },
+  { key: 'security', label: 'Security', emoji: EMOJIS.SECURITY, summary: 'Verification status and member security tools.' },
+  { key: 'social', label: 'Social', emoji: EMOJIS.USER_SOCIAL, summary: 'Open your own Social Studio Creator Profile.' },
+  { key: 'utility', label: 'Utility', emoji: EMOJIS.TOOLS, summary: 'Help, ping, server info, translate and future utility tools.' },
 ];
 
 const MODULE_CATALOG = [
-  { key: 'warnings', category: 'account', label: 'Warnings', emoji: '⚠️', summary: 'Planned personal warning view.', status: 'planned' },
-  { key: 'cases', category: 'account', label: 'Cases', emoji: '📁', summary: 'View official case records published to you by staff.', status: 'live' },
-  { key: 'infractions', category: 'account', label: 'Infractions', emoji: '📋', summary: 'Planned personal infraction history.', status: 'planned' },
-  { key: 'appeals', category: 'account', label: 'Appeals', emoji: '📝', summary: 'Review eligible cases and submit or track your own appeals.', status: 'live' },
-  { key: 'birthdays', category: 'community', label: 'Birthdays', emoji: '🎂', summary: 'Manage your birthday and privacy settings.', status: 'live' },
-  { key: 'giveaways', category: 'community', label: 'Giveaways', emoji: '🎉', summary: 'Member giveaway dashboard plan.', status: 'locked' },
-  { key: 'invites', category: 'community', label: 'Invites', emoji: '📨', summary: 'Planned member invite view.', status: 'planned' },
-  { key: 'leveling', category: 'community', label: 'Leveling', emoji: '🏆', summary: 'View your XP, rank, rewards and earning rules.', status: 'live' },
-  { key: 'polls', category: 'community', label: 'Polls', emoji: '📊', summary: 'Planned member poll view.', status: 'planned' },
-  { key: 'forms', category: 'feedback', label: 'Forms', emoji: '📝', summary: 'Planned member form access.', status: 'planned' },
-  { key: 'suggestions', category: 'feedback', label: 'Suggestions', emoji: '💡', summary: 'Planned member suggestion access.', status: 'planned' },
-  { key: 'tickets', category: 'feedback', label: 'Tickets', emoji: '🎫', summary: 'Planned member ticket access.', status: 'planned' },
-  { key: 'starboard', category: 'messages', label: 'Starboard', emoji: '⭐', summary: 'Planned member starboard view.', status: 'planned' },
-  { key: 'roles', category: 'roles', label: 'Roles', emoji: '🎭', summary: 'Planned self-assignable roles, history and requests.', status: 'planned' },
-  { key: 'security', category: 'security', label: 'Security', emoji: '🛡️', summary: 'Planned verification status and security notifications.', status: 'planned' },
-  { key: 'social', category: 'social', label: 'Social Studio', emoji: '📣', summary: 'Open or create your own Creator Profile.', status: 'live' },
-  { key: 'ping', category: 'utility', label: 'Ping', emoji: '🏓', summary: 'Existing /ping command.', status: 'approved' },
-  { key: 'serverinfo', category: 'utility', label: 'Server Info', emoji: '🏰', summary: 'Existing /serverinfo command.', status: 'approved' },
-  { key: 'translate', category: 'utility', label: 'Translate', emoji: '🌐', summary: 'Existing /translate command.', status: 'approved' },
-  { key: 'schedule', category: 'utility', label: 'Schedule', emoji: '📅', summary: 'Future member schedule tools.', status: 'planned' },
-  { key: 'stats', category: 'utility', label: 'Stats', emoji: '📈', summary: 'Future member statistics view.', status: 'planned' },
-  { key: 'tempvoice', category: 'utility', label: 'Temporary Voice', emoji: '🔊', summary: 'Future temporary voice controls.', status: 'planned' },
+  { key: 'warnings', category: 'account', label: 'Warnings', emoji: EMOJIS.WARNING, summary: 'Planned personal warning view.', status: 'planned' },
+  { key: 'cases', category: 'account', label: 'Cases', emoji: EMOJIS.USER_CASES, summary: 'View official case records published to you by staff.', status: 'live' },
+  { key: 'infractions', category: 'account', label: 'Infractions', emoji: EMOJIS.REVIEW, summary: 'Planned personal infraction history.', status: 'planned' },
+  { key: 'appeals', category: 'account', label: 'Appeals', emoji: EMOJIS.NOTE, summary: 'Review eligible cases and submit or track your own appeals.', status: 'live' },
+  { key: 'birthdays', category: 'community', label: 'Birthdays', emoji: EMOJIS.USER_BIRTHDAYS, summary: 'Manage your birthday and privacy settings.', status: 'live' },
+  { key: 'giveaways', category: 'community', label: 'Giveaways', emoji: EMOJIS.USER_GIVEAWAYS, summary: 'Member giveaway dashboard plan.', status: 'locked' },
+  { key: 'invites', category: 'community', label: 'Invites', emoji: EMOJIS.USER_INVITES, summary: 'Planned member invite view.', status: 'planned' },
+  { key: 'leveling', category: 'community', label: 'Leveling', emoji: EMOJIS.USER_LEVELING, summary: 'View your XP, rank, rewards and earning rules.', status: 'live' },
+  { key: 'polls', category: 'community', label: 'Polls', emoji: EMOJIS.DASHBOARD, summary: 'Planned member poll view.', status: 'planned' },
+  { key: 'forms', category: 'feedback', label: 'Forms', emoji: EMOJIS.NOTE, summary: 'Planned member form access.', status: 'planned' },
+  { key: 'suggestions', category: 'feedback', label: 'Suggestions', emoji: EMOJIS.USER_SUGGESTIONS, summary: 'Planned member suggestion access.', status: 'planned' },
+  { key: 'tickets', category: 'feedback', label: 'Tickets', emoji: EMOJIS.USER_TICKETS, summary: 'Planned member ticket access.', status: 'planned' },
+  { key: 'starboard', category: 'messages', label: 'Starboard', emoji: EMOJIS.USER_STARBOARD, summary: 'Planned member starboard view.', status: 'planned' },
+  { key: 'roles', category: 'roles', label: 'Roles', emoji: EMOJIS.USER_ROLES, summary: 'Planned self-assignable roles, history and requests.', status: 'planned' },
+  { key: 'security', category: 'security', label: 'Security', emoji: EMOJIS.SECURITY, summary: 'Planned verification status and security notifications.', status: 'planned' },
+  { key: 'social', category: 'social', label: 'Social Studio', emoji: EMOJIS.USER_SOCIAL, summary: 'Open or create your own Creator Profile.', status: 'live' },
+  { key: 'ping', category: 'utility', label: 'Ping', emoji: EMOJIS.USER_PING, summary: 'Existing /ping command.', status: 'approved' },
+  { key: 'serverinfo', category: 'utility', label: 'Server Info', emoji: EMOJIS.USER_SERVER_INFO, summary: 'Existing /serverinfo command.', status: 'approved' },
+  { key: 'translate', category: 'utility', label: 'Translate', emoji: EMOJIS.USER_TRANSLATE, summary: 'Existing /translate command.', status: 'approved' },
+  { key: 'schedule', category: 'utility', label: 'Schedule', emoji: EMOJIS.WELCOME_SCHEDULED, summary: 'Future member schedule tools.', status: 'planned' },
+  { key: 'stats', category: 'utility', label: 'Stats', emoji: EMOJIS.USER_STATS, summary: 'Future member statistics view.', status: 'planned' },
+  { key: 'tempvoice', category: 'utility', label: 'Temporary Voice', emoji: EMOJIS.USER_TEMP_VOICE, summary: 'Future temporary voice controls.', status: 'planned' },
 ];
 
 const IN_PROGRESS_PAGES = [
   {
-    title: '🏘️ Community',
+    title: `${EMOJIS.USER_COMMUNITY} Community`,
     lines: [
-      '**🎉 Giveaways — Locked**',
+      `**${EMOJIS.USER_GIVEAWAYS} Giveaways — Locked**`,
       '• View active giveaways',
       '• View giveaway history',
       '• View previous winners',
@@ -61,59 +62,59 @@ const IN_PROGRESS_PAGES = [
       '• Jump to giveaway message',
       '• Notification preferences (future)',
       '',
-      '**📨 Invites — Discussion**',
+      `**${EMOJIS.USER_INVITES} Invites — Discussion**`,
       '• My invite code',
       '• Total and successful invites',
       '• Left-server and fake-invite counts',
       '• Invite leaderboard, rewards and history',
       '',
-      '**📊 Polls — Discussion**',
+      `**${EMOJIS.DASHBOARD} Polls — Discussion**`,
       '• Active polls, my votes, results and history',
     ],
   },
   {
-    title: '💬 Feedback & Messages',
+    title: `${EMOJIS.USER_FEEDBACK} Feedback & Messages`,
     lines: [
-      '**📝 Forms — Discussion**',
+      `**${EMOJIS.NOTE} Forms — Discussion**`,
       '• View available forms',
       '• Track my submissions and status',
       '',
-      '**💡 Suggestions — Discussion**',
+      `**${EMOJIS.USER_SUGGESTIONS} Suggestions — Discussion**`,
       '• Submit and track suggestions',
       '• View voting and decision status',
       '',
-      '**🎫 Tickets — Discussion**',
+      `**${EMOJIS.USER_TICKETS} Tickets — Discussion**`,
       '• Open tickets and view my ticket history',
       '• Jump to active ticket channels',
       '',
-      '**⭐ Starboard — Discussion**',
+      `**${EMOJIS.USER_STARBOARD} Starboard — Discussion**`,
       '• My starred messages',
       '• Top starred posts and jump-to-message access',
     ],
   },
   {
-    title: '🎭 Roles, Security & Social',
+    title: `${EMOJIS.USER_ROLES} Roles, Security & Social`,
     lines: [
-      '**🎭 Roles — Discussion**',
+      `**${EMOJIS.USER_ROLES} Roles — Discussion**`,
       '• Self-assignable roles',
       '• Role history and role requests',
       '',
-      '**🛡️ Security — Discussion**',
+      `**${EMOJIS.SECURITY} Security — Discussion**`,
       '• Verification status',
       '• Member security notifications',
       '',
-      '**📣 Social Studio**',
+      `**${EMOJIS.USER_SOCIAL} Social Studio**`,
       '• Permission-controlled Creator Profile access',
       '• Open or create your own Creator Profile',
     ],
   },
   {
-    title: '👤 Account & Utility',
+    title: `${EMOJIS.USER} Account & Utility`,
     lines: [
-      '**🗂️ Account Record — Planned**',
+      `**${EMOJIS.WORKSPACE} Account Record — Planned**`,
       '• Warnings, cases, infractions and appeals (own only)',
       '',
-      '**🧰 Utility — Approved / Future**',
+      `**${EMOJIS.TOOLS} Utility — Approved / Future**`,
       '• Help, ping, server info and translate',
       '• Schedule, stats and temporary voice (future)',
     ],
@@ -133,7 +134,7 @@ function row(...components) {
 }
 
 function button(customId, label, style = ButtonStyle.Primary, disabled = false, emoji = null) {
-  const component = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+  const component = navigationButton(customId, label, style, disabled);
   if (emoji) component.setEmoji(emoji);
   return component;
 }
@@ -187,16 +188,16 @@ function progressDetails(levelingProfile = {}) {
 
 function navigationRow({ backId = null, home = true, nextId = null } = {}) {
   const components = [];
-  if (backId) components.push(button(backId, 'Back', ButtonStyle.Secondary, false, '⬅️'));
-  if (home) components.push(button('user:home', 'User Panel', ButtonStyle.Secondary, false, '🏠'));
-  if (nextId) components.push(button(nextId, 'Next', ButtonStyle.Primary, false, '➡️'));
+  if (backId) components.push(button(backId, 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK));
+  if (home) components.push(button('user:home', 'User Panel', ButtonStyle.Secondary, false, EMOJIS.USER_HOME));
+  if (nextId) components.push(button(nextId, 'Next', ButtonStyle.Primary, false, EMOJIS.NEXT));
   return row(...components);
 }
 
 function buildSearchRow(selectedModule = null) {
   return row(new StringSelectMenuBuilder()
     .setCustomId('user:search')
-    .setPlaceholder('🔎 Search or jump to a user tool')
+    .setPlaceholder(`${EMOJIS.INVESTIGATE} Search or jump to a user tool`)
     .setMinValues(1)
     .setMaxValues(1)
     .addOptions(MODULE_CATALOG.slice(0, 25).map((module) => ({
@@ -222,7 +223,7 @@ function buildMainPanel(interactionOrName = 'Unknown User') {
     CATEGORY_CATALOG.map((category) => `${category.emoji} **${category.label}** - ${category.summary}`).join('\n'),
   ].join('\n');
   return {
-    embeds: [createEmbed('👤 Goliath User Panel', description, memberDisplayName)],
+    embeds: [createEmbed(`${EMOJIS.USER} Goliath User Panel`, description, memberDisplayName)],
     components: [buildSearchRow(), ...buildCategoryButtons(ButtonStyle.Primary)].slice(0, 5),
   };
 }
@@ -284,16 +285,16 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
   if (Number.isFinite(profile.giveawayWins)) community.push(`Giveaway Wins: **${profile.giveawayWins.toLocaleString()}**`);
 
   const sections = [identity.join('\n')];
-  if (membership.length) sections.push(`📅 **Membership**\n${membership.join('\n')}`);
-  if (progress.length) sections.push(`🏆 **Progress**\n${progress.join('\n')}`);
-  if (community.length) sections.push(`📊 **Community**\n${community.join('\n')}`);
+  if (membership.length) sections.push(`${EMOJIS.WELCOME_SCHEDULED} **Membership**\n${membership.join('\n')}`);
+  if (progress.length) sections.push(`${EMOJIS.USER_LEVELING} **Progress**\n${progress.join('\n')}`);
+  if (community.length) sections.push(`${EMOJIS.DASHBOARD} **Community**\n${community.join('\n')}`);
 
-  const embed = markLiveEmbed(createEmbed('👤 Your Profile', sections.join('\n\n'), memberDisplayName))
+  const embed = markLiveEmbed(createEmbed(`${EMOJIS.USER} Your Profile`, sections.join('\n\n'), memberDisplayName))
     .setThumbnail(user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null);
 
   const actionButtons = [];
-  if (options.rolesEnabled !== false) actionButtons.push(button('user:profile:roles', 'View Roles', ButtonStyle.Primary, false, '🎭'));
-  actionButtons.push(button('user:account:record', 'Account Record', ButtonStyle.Secondary, false, '🗂️'));
+  if (options.rolesEnabled !== false) actionButtons.push(button('user:profile:roles', 'View Roles', ButtonStyle.Primary, false, EMOJIS.USER_ROLES));
+  actionButtons.push(button('user:account:record', 'Account Record', ButtonStyle.Secondary, false, EMOJIS.WORKSPACE));
 
   return {
     embeds: [embed],
@@ -302,9 +303,9 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
       row(...actionButtons),
       ...buildCategoryButtons(),
       row(
-        button('user:close', 'Back', ButtonStyle.Secondary, false, '⬅️'),
-        button('user:profile:refresh', 'Refresh', ButtonStyle.Success, false, '🔄'),
-        button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, false, '🚧'),
+        button('user:close', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
+        button('user:profile:refresh', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
+        button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, false, EMOJIS.QUARANTINE),
       ),
     ],
   };
@@ -320,7 +321,7 @@ function buildAccountRecordPanel(interactionOrName = 'Unknown User') {
   ].join('\n');
 
   return {
-    embeds: [createEmbed('🗂️ Your Account Record', description, memberDisplayName)],
+    embeds: [createEmbed(`${EMOJIS.WORKSPACE} Your Account Record`, description, memberDisplayName)],
     components: [
       row(...modules.map((module) => button(
         `user:module:${module.key}`,
@@ -341,7 +342,7 @@ function formatXpSource(id, source) {
     : id === 'voice'
       ? ` · every ${source.intervalMinutes} minutes`
       : '';
-  return `${source.enabled ? '✅' : '❌'} **${source.label}** — ${amount}${timing}\n${source.description}`;
+  return `${source.enabled ? EMOJIS.SUCCESS : EMOJIS.ERROR} **${source.label}** — ${amount}${timing}\n${source.description}`;
 }
 
 function buildRewardProgressLines(section, currentLevel = 0) {
@@ -351,13 +352,13 @@ function buildRewardProgressLines(section, currentLevel = 0) {
   const nextReward = rewards.find((reward) => Number(reward.level) > level) || null;
   const lines = rewards.slice(0, 15).map((reward) => {
     const unlocked = level >= Number(reward.level);
-    return `${unlocked ? '✅' : '⬜'} Level **${reward.level}** → <@&${reward.roleId}>`;
+    return `${unlocked ? EMOJIS.SUCCESS : EMOJIS.USER_LOCKED} Level **${reward.level}** → <@&${reward.roleId}>`;
   });
   if (nextReward) {
     lines.push('', `**Next Reward:** Level ${nextReward.level} → <@&${nextReward.roleId}>`);
     lines.push(`**Levels Remaining:** ${Math.max(0, Number(nextReward.level) - level)}`);
   } else {
-    lines.push('', '🏁 **All configured level rewards unlocked.**');
+    lines.push('', `${EMOJIS.USER_FINISH} **All configured level rewards unlocked.**`);
   }
   return lines;
 }
@@ -411,14 +412,14 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
 
   const multiplierLines = activeMultiplier
     ? [
-      `🟢 **${activeMultiplier.name || 'Active XP Multiplier'}**`,
+      `${EMOJIS.ENABLED} **${activeMultiplier.name || 'Active XP Multiplier'}**`,
       `Multiplier: **${activeMultiplier.value}×**`,
       `Applies to: ${activeMultiplier.sourceIds?.length ? activeMultiplier.sourceIds.map((id) => `\`${id}\``).join(', ') : 'All enabled XP sources'}`,
       activeMultiplier.endsAt ? `Ends: <t:${Math.floor(new Date(activeMultiplier.endsAt).getTime() / 1000)}:R>` : 'Ends: No scheduled end',
     ]
     : scheduledMultiplier
       ? [
-        `🟡 **${configuredMultiplier.name || 'Scheduled XP Event'}**`,
+        `${EMOJIS.SEVERITY_MEDIUM} **${configuredMultiplier.name || 'Scheduled XP Event'}**`,
         `Multiplier: **${configuredMultiplier.value}×**`,
         `Applies to: ${configuredMultiplier.sourceIds?.length ? configuredMultiplier.sourceIds.map((id) => `\`${id}\``).join(', ') : 'All enabled XP sources'}`,
         `Starts: <t:${Math.floor(configuredStartsAt / 1000)}:R>`,
@@ -428,7 +429,7 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
       : ['No XP multiplier is currently active or scheduled.'];
 
   return {
-    embeds: [markLiveEmbed(createEmbed('🏆 Your Leveling', [
+    embeds: [markLiveEmbed(createEmbed(`${EMOJIS.USER_LEVELING} Your Leveling`, [
       '**Your Progress**',
       ...progressLines,
       '',
@@ -443,12 +444,12 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
     ].join('\n'), memberDisplayName, participating ? PANEL_COLOR : DEV_COLOR))],
     components: [
       row(
-        button('user:module:leveling', 'Refresh', ButtonStyle.Success, false, '🔄'),
-        button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, false, '🏆'),
-        button('user:leveling:history', 'XP History', ButtonStyle.Primary, false, '📈'),
-        button('user:leveling:toggle', participating ? 'Disable Leveling' : 'Enable Leveling', participating ? ButtonStyle.Secondary : ButtonStyle.Success, false, participating ? '⏸️' : '▶️'),
+        button('user:module:leveling', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
+        button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, false, EMOJIS.USER_LEVELING),
+        button('user:leveling:history', 'XP History', ButtonStyle.Primary, false, EMOJIS.USER_STATS),
+        button('user:leveling:toggle', participating ? 'Disable Leveling' : 'Enable Leveling', participating ? ButtonStyle.Secondary : ButtonStyle.Success, false, participating ? EMOJIS.USER_PAUSE : EMOJIS.USER_PLAY),
       ),
-      row(button('user:preferences', 'Preferences', ButtonStyle.Secondary, false, '⚙️')),
+      row(button('user:preferences', 'Preferences', ButtonStyle.Secondary, false, EMOJIS.SETTINGS)),
       navigationRow({ backId: 'user:category:community' }),
     ],
   };
@@ -457,7 +458,7 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
 function buildLevelingHistoryPanel(interaction, user = {}) {
   const memberDisplayName = getMemberDisplayName(interaction);
   return {
-    embeds: [markLiveEmbed(createEmbed('📈 Your XP History', [
+    embeds: [markLiveEmbed(createEmbed(`${EMOJIS.USER_STATS} Your XP History`, [
       `Current XP: **${Number(user.xp || 0).toLocaleString()}**`,
       `Current Level: **${Number(user.level || 0)}**`,
       '',
@@ -465,8 +466,8 @@ function buildLevelingHistoryPanel(interaction, user = {}) {
     ].join('\n'), memberDisplayName))],
     components: [
       row(
-        button('user:leveling:history', 'Refresh', ButtonStyle.Success, false, '🔄'),
-        button('user:module:leveling', 'Back', ButtonStyle.Secondary, false, '⬅️'),
+        button('user:leveling:history', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
+        button('user:module:leveling', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
       ),
     ],
   };
@@ -486,14 +487,14 @@ function buildInProgressPanel(interactionOrName = 'Unknown User', pageIndex = 0)
   ].join('\n');
 
   const controls = [
-    button('user:home', 'Back', ButtonStyle.Secondary, false, '⬅️'),
-    button(`user:in-progress:${safeIndex}`, 'Refresh', ButtonStyle.Success, false, '🔄'),
+    button('user:home', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
+    button(`user:in-progress:${safeIndex}`, 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
   ];
-  if (safeIndex < IN_PROGRESS_PAGES.length - 1) controls.push(button(`user:in-progress:${safeIndex + 1}`, 'Next', ButtonStyle.Primary, false, '➡️'));
-  if (safeIndex > 0) controls.unshift(button(`user:in-progress:${safeIndex - 1}`, 'Previous', ButtonStyle.Secondary, false, '⬅️'));
+  if (safeIndex < IN_PROGRESS_PAGES.length - 1) controls.push(button(`user:in-progress:${safeIndex + 1}`, 'Next', ButtonStyle.Primary, false, EMOJIS.NEXT));
+  if (safeIndex > 0) controls.unshift(button(`user:in-progress:${safeIndex - 1}`, 'Previous', ButtonStyle.Secondary, false, EMOJIS.BACK));
 
   return {
-    embeds: [createEmbed(`🚧 User Panel Development — ${page.title}`, description, memberDisplayName, DEV_COLOR)],
+    embeds: [createEmbed(`${EMOJIS.QUARANTINE} User Panel Development — ${page.title}`, description, memberDisplayName, DEV_COLOR)],
     components: [row(...controls)],
   };
 }
@@ -503,25 +504,25 @@ function buildHelpPanel(interactionOrName = 'Unknown User') {
   const description = [
     'Welcome to your personal Goliath User Panel.',
     '',
-    '**🧭 Navigation**',
-    '⬅️ **Back** — Return to the previous page.',
-    '🏠 **User Panel** — Return to your live profile home.',
-    '➡️ **Next** — Open the next page when one is available.',
+    `**${EMOJIS.USER_HELP_NAVIGATION} Navigation**`,
+    `${EMOJIS.BACK} **Back** — Return to the previous page.`,
+    `${EMOJIS.USER_HOME} **User Panel** — Return to your live profile home.`,
+    `${EMOJIS.NEXT} **Next** — Open the next page when one is available.`,
     '',
-    '**📂 Categories**',
+    `**${EMOJIS.USER_HELP_CATEGORIES} Categories**`,
     ...CATEGORY_CATALOG.map((category) => `${category.emoji} **${category.label}** — ${category.summary}`),
     '',
-    '**🔎 Search**',
+    `**${EMOJIS.INVESTIGATE} Search**`,
     'Use the search menu at the top of your profile to jump directly to any available user tool.',
     '',
-    '**💡 Tips**',
+    `**${EMOJIS.USER_SUGGESTIONS} Tips**`,
     '• Your panel is private and only visible to you.',
     '• Some tools may require a server role or permission.',
     '• Use Refresh on live pages to load the latest information.',
   ].join('\n');
 
   return {
-    embeds: [createEmbed('❓ Goliath User Panel Help', description, memberDisplayName)],
+    embeds: [createEmbed(`${EMOJIS.USER_HELP} Goliath User Panel Help`, description, memberDisplayName)],
     components: [navigationRow({ backId: 'user:home', home: false })],
   };
 }
@@ -540,9 +541,9 @@ function buildProgressPanel(interaction, levelingProfile = {}) {
     Number.isFinite(levelingProfile.voiceMinutes) ? `Voice Activity: **${levelingProfile.voiceMinutes.toLocaleString()} minutes**` : null,
   ].filter((line) => line !== null);
   return {
-    embeds: [markLiveEmbed(createEmbed('🏆 Your Progress', lines.join('\n'), memberDisplayName))],
+    embeds: [markLiveEmbed(createEmbed(`${EMOJIS.USER_LEVELING} Your Progress`, lines.join('\n'), memberDisplayName))],
     components: [
-      row(button('user:profile:progress', 'Refresh', ButtonStyle.Success, false, '🔄')),
+      row(button('user:profile:progress', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH)),
       navigationRow({ backId: 'user:home', home: false }),
     ],
   };
@@ -563,9 +564,9 @@ function buildRolesPanel(interaction, options = {}) {
     options.showRoleList === false ? null : `**Current Roles**\n${visible.length ? visible.join('\n') : 'No roles assigned.'}${remaining ? `\n\n+${remaining} more` : ''}`,
   ].filter(Boolean).join('\n\n');
   return {
-    embeds: [markLiveEmbed(createEmbed('🎭 Your Roles', description || 'Role visibility is disabled for this server.', memberDisplayName))],
+    embeds: [markLiveEmbed(createEmbed(`${EMOJIS.USER_ROLES} Your Roles`, description || 'Role visibility is disabled for this server.', memberDisplayName))],
     components: [
-      row(button('user:profile:roles', 'Refresh', ButtonStyle.Success, false, '🔄')),
+      row(button('user:profile:roles', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH)),
       navigationRow({ backId: 'user:home', home: false }),
     ],
   };
@@ -580,7 +581,7 @@ function buildGiveawaysMemoPanel(interactionOrName = 'Unknown User') {
     '**Admin giveaway creation and management remain separate and are not exposed here.**',
   ].join('\n');
   return {
-    embeds: [createEmbed('🎉 Giveaways - User Panel Plan', description, memberDisplayName, DEV_COLOR)],
+    embeds: [createEmbed(`${EMOJIS.USER_GIVEAWAYS} Giveaways - User Panel Plan`, description, memberDisplayName, DEV_COLOR)],
     components: [navigationRow({ backId: 'user:category:community' })],
   };
 }
@@ -611,7 +612,7 @@ function buildUserAppealsPanel(interaction, cases = [], getAppealEligibility = n
     lines.push(`**Case #${modCase.caseId}** • ${action} • ${status}`);
     if (latest?.submittedAt) lines.push(`↳ Appeal submitted <t:${Math.floor(new Date(latest.submittedAt).getTime() / 1000)}:R>`);
     else if (!eligibility.ok && eligibility.error) lines.push(`↳ ${eligibility.error}`);
-    if (eligibility.ok && buttons.length < 5) buttons.push(button(`user:appeal:${modCase.caseId}`, `Appeal #${modCase.caseId}`, ButtonStyle.Primary, false, '📝'));
+    if (eligibility.ok && buttons.length < 5) buttons.push(button(`user:appeal:${modCase.caseId}`, `Appeal #${modCase.caseId}`, ButtonStyle.Primary, false, EMOJIS.NOTE));
   }
   if (!mine.length) lines.push('You do not currently have any moderation cases on this server.');
   const description = [
@@ -624,7 +625,7 @@ function buildUserAppealsPanel(interaction, cases = [], getAppealEligibility = n
   const components = [];
   if (buttons.length) components.push(row(...buttons));
   components.push(navigationRow({ backId: 'user:account:record' }));
-  return { embeds: [markLiveEmbed(createEmbed('📝 Your Appeals', description, memberDisplayName))], components };
+  return { embeds: [markLiveEmbed(createEmbed(`${EMOJIS.NOTE} Your Appeals`, description, memberDisplayName))], components };
 }
 
 function buildPlannedModulePanel(moduleKey, interactionOrName = 'Unknown User') {

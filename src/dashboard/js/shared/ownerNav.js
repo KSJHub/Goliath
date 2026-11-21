@@ -1,5 +1,6 @@
 export const OWNER_NAV_ITEMS = [
   { key: 'ownerOverview', label: 'Owner Overview', icon: 'overview', path: '/owner' },
+  { key: 'goliathAI', label: 'Goliath AI', icon: 'admin', path: '/owner/ai' },
   { key: 'ownerServers', label: 'Global Servers', icon: 'modules', path: '/owner/servers' },
   { key: 'ownerRuntime', label: 'Runtime Monitor', icon: 'admin', path: '/owner/runtime' },
   { key: 'ownerBilling', label: 'Billing Admin', icon: 'admin', path: '/owner/billing' },
@@ -15,7 +16,7 @@ export const OWNER_NAV_ITEMS = [
 export const OWNER_NAV_GROUPS = [
   {
     title: 'Control Centre',
-    items: ['ownerOverview', 'ownerServers', 'ownerRuntime', 'ownerBilling'],
+    items: ['ownerOverview', 'goliathAI', 'ownerServers', 'ownerRuntime', 'ownerBilling'],
   },
   {
     title: 'Operations',

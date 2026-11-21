@@ -166,7 +166,36 @@ const DEFAULT_TICKETS = Object.freeze({
   analytics: {},
 });
 
+const DEFAULT_CASINO = Object.freeze({
+  enabled: false,
+  currency: {
+    name: 'Coins',
+    symbol: '🪙',
+    startingBalance: 0,
+    maxBalance: 1000000000,
+  },
+  wallet: {
+    balances: {},
+    transactions: {},
+    processedKeys: {},
+  },
+  settings: {
+    transfersEnabled: false,
+    dailyRewardsEnabled: false,
+    gamesEnabled: false,
+  },
+  games: {
+    slots: { enabled: false },
+    roulette: { enabled: false },
+    dice: { enabled: false },
+  },
+  analytics: {
+    transactions: 0,
+  },
+});
+
 const DEFAULT_MODULES = Object.freeze({
+  casino: DEFAULT_CASINO,
   sticky: {
     enabled: true,
     channels: {},
@@ -363,4 +392,5 @@ module.exports = {
   DEFAULT_EMBED_DEFAULTS,
   DEFAULT_TICKETS,
   DEFAULT_MODULES,
+  DEFAULT_CASINO,
 };

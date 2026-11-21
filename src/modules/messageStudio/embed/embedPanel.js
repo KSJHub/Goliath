@@ -1,7 +1,8 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
+const { actionButton, paginationButtons, emojiButton, navigationButton, linkButton, EMOJIS } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
@@ -219,15 +220,15 @@ function embedOperationError(error, channelId, operation = "send") {
   const code = discordErrorCode(error);
   const detail = discordErrorDetail(error);
   if (code === 50001 || code === 50013) {
-    return `❌ Discord denied access to <#${channelId}>. Recheck Goliath's effective channel and category permissions.`;
+    return `${EMOJIS.ERROR} Discord denied access to <#${channelId}>. Recheck Goliath's effective channel and category permissions.`;
   }
   if (code === 50035) {
-    return `❌ Discord rejected part of the embed or its buttons: ${detail}`;
+    return `${EMOJIS.ERROR} Discord rejected part of the embed or its buttons: ${detail}`;
   }
   if (code === 10008 && operation === "update") {
-    return "⚠️ The original embed message no longer exists.";
+    return `${EMOJIS.WARNING} The original embed message no longer exists.`;
   }
-  return `❌ Discord could not ${operation} the embed${code ? ` (error ${code})` : ""}: ${detail}`;
+  return `${EMOJIS.ERROR} Discord could not ${operation} the embed${code ? ` (error ${code})` : ""}: ${detail}`;
 }
 function safeUrl(v) {
   try {
@@ -548,11 +549,12 @@ function buildButtonRows(state, interaction = null, preview = false) {
     for (const { button, index } of entries) {
       const label = buttonShort(buttonResolved(button?.label || "Button", interaction), 80) || "Button";
       const url = resolveButtonUrl(button?.url, interaction);
-      const builder = new ButtonBuilder().setLabel(label);
+      const builder = url
+        ? linkButton(label, url, { disabled: preview })
+        : navigationButton(buttonActionId(button, index), label, buttonStyleValue(button?.style), preview);
+      // Embed Studio stores an explicit emoji field; preserve its native
+      // Discord rendering rather than converting it into label text.
       if (button?.emoji) builder.setEmoji(button.emoji);
-      if (url) builder.setStyle(ButtonStyle.Link).setURL(url);
-      else builder.setStyle(buttonStyleValue(button?.style)).setCustomId(buttonActionId(button, index));
-      if (preview) builder.setDisabled(true);
       row.addComponents(builder);
     }
     output.push(row);
@@ -672,32 +674,32 @@ function mainEmbed(s, who, dashboard = {}) {
 
   const presetLine =
     s.selectedPreset
-      ? `**Preset**　💾 ${s.selectedPreset}`
+      ? `**Preset**　${EMOJIS.PRESETS} ${s.selectedPreset}`
       : null;
 
   const destination =
     s.channelId
       ? `<#${s.channelId}>`
-      : "⚪ Choose below";
+      : `${EMOJIS.INACTIVE} Choose below`;
 
   const saveState =
     s.hasUnsavedChanges
-      ? "🟠 Unsaved changes"
+      ? `${EMOJIS.SETUP_REQUIRED} Unsaved changes`
       : s.selectedPreset
-        ? "🟢 Saved"
-        : "⚪ New workspace";
+        ? `${EMOJIS.ACTIVE} Saved`
+        : `${EMOJIS.INACTIVE} New workspace`;
 
   const readinessState =
     report.ready
       ? warnings.length
-        ? `🟡 Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
-        : "🟢 Ready"
-      : `🔴 ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"} to resolve`;
+        ? `${EMOJIS.SEVERITY_MEDIUM} Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : `${EMOJIS.ACTIVE} Ready`
+      : `${EMOJIS.DISABLED} ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"} to resolve`;
 
   const deploymentState =
     deployment?.messageId && deployment?.channelId
-      ? `🟢 Live • <#${deployment.channelId}>`
-      : "⚪ Not deployed";
+      ? `${EMOJIS.ACTIVE} Live • <#${deployment.channelId}>`
+      : `${EMOJIS.INACTIVE} Not deployed`;
 
   const timestamp =
     s.showTimestamp !== false
@@ -721,16 +723,16 @@ function mainEmbed(s, who, dashboard = {}) {
 
   if (!s.channelId) {
     nextAction =
-      "📍 Select the channel where this embed will be published.";
+      `${EMOJIS.WELCOME_LOCATION} Select the channel where this embed will be published.`;
   } else if (!report.ready) {
     nextAction =
-      `⚠️ Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
+      `${EMOJIS.WARNING} Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
   } else if (deployment) {
     nextAction =
-      "🚀 Ready to deploy a new message, or ♻️ update the existing live message.";
+      `${EMOJIS.DEPLOY} Ready to deploy a new message, or ${EMOJIS.UPDATE} update the existing live message.`;
   } else {
     nextAction =
-      "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
+      `${EMOJIS.DEPLOY} Everything is ready. Test the embed or deploy it to the selected channel.`;
   }
 
   return new EmbedBuilder()
@@ -743,21 +745,21 @@ function mainEmbed(s, who, dashboard = {}) {
           s.color ||
           PANEL_COLOR
     )
-    .setTitle("💎 Embed Studio")
+    .setTitle(emojiLabel('WELCOME_EMBED', "Embed Studio"))
     .setDescription([
       "Build, test and publish your Discord embed from one workspace.",
       "",
-      "### 🗂️ Workspace",
+      `### ${EMOJIS.WORKSPACE} Workspace`,
       `**Template**　${template.emoji} ${template.label}`,
       ...(presetLine ? [presetLine] : []),
       `**Destination**　${destination}`,
       `**Workspace**　${saveState}`,
       "",
-      "### 🧩 Content",
+      `### ${EMOJIS.PANELS} Content`,
       `**Panels**　${panels.length}/${MAX_PANELS}　•　**Editing**　${panelName}`,
       `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
       "",
-      "### 🚦 Status",
+      `### ${EMOJIS.STATUS} Status`,
       `**Readiness**　${readinessState}`,
       `**Deployment**　${deploymentState}`,
       "",
@@ -805,7 +807,7 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:template")
-          .setPlaceholder("🎨 Choose template")
+          .setPlaceholder(emojiLabel('DESIGN', "Choose template"))
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(
@@ -836,8 +838,8 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setCustomId("embed:channel")
           .setPlaceholder(
             s.channelId
-              ? "📢 Change destination"
-              : "📢 Choose destination"
+              ? emojiLabel('WELCOME_CHANNEL', "Change destination")
+              : emojiLabel('WELCOME_CHANNEL', "Choose destination")
           )
           .setMinValues(1)
           .setMaxValues(1)
@@ -883,7 +885,7 @@ function buildEditorPanel(i, who = "Unknown User") {
               value: "__channel_id__",
               description:
                 "Use a Discord channel ID instead",
-              emoji: "🔢",
+              emoji: EMOJIS.COUNTING_NUMBERS,
             }
           )
       ),
@@ -892,87 +894,31 @@ function buildEditorPanel(i, who = "Unknown User") {
        * BUILD WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Builder")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:panels")
-          .setLabel(`Panels (${panels.length})`)
-          .setEmoji("🧩")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:presets")
-          .setLabel("Presets")
-          .setEmoji("💾")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:edit-images")
-          .setLabel("Media")
-          .setEmoji("🖼️")
-          .setStyle(ButtonStyle.Primary)
+        actionButton("embed:builder", "builder"),
+        actionButton("embed:panels", "panels", { suffix: ` (${panels.length})` }),
+        actionButton("embed:presets", "presets"),
+        actionButton("embed:edit-images", "media"),
       ),
 
       /*
        * CHECK / PUBLISH WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:test-send")
-          .setLabel("Test Send")
-          .setEmoji("🧪")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:use")
-          .setLabel("Deploy")
-          .setEmoji("🚀")
-          .setStyle(ButtonStyle.Success)
-          .setDisabled(!canDeploy),
-
+        actionButton("embed:test-send", "testSend"),
+        actionButton("embed:use", "deploy", { disabled: !canDeploy }),
         ...(deployment
-          ? [
-              new ButtonBuilder()
-                .setCustomId("embed:update-existing")
-                .setLabel("Update")
-                .setEmoji("♻️")
-                .setStyle(ButtonStyle.Success)
-                .setDisabled(!canDeploy),
-            ]
+          ? [actionButton("embed:update-existing", "update", { disabled: !canDeploy })]
           : []),
-
-        new ButtonBuilder()
-          .setCustomId("embed:readiness")
-          .setLabel("Review")
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:readiness", "review"),
       ),
 
       /*
        * NAVIGATION
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("admin:modules")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-
-        new ButtonBuilder()
-          .setCustomId("embed:channel-prev")
-          .setLabel("◀ Chan")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:channel-next")
-          .setLabel("Chan ▶")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("admin:modules", "back"),
+        actionButton("embed:settings", "settings"),
+        ...paginationButtons("channel", "embed:channel-prev", "embed:channel-next"),
       ),
     ],
   };
@@ -1007,7 +953,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
   );
 
   const description = [
-    "### ⚠️ Reset Embed Studio?",
+    `### ${EMOJIS.WARNING} Reset Embed Studio?`,
     "This will clear the current working workspace and restore Embed Studio to its default state.",
     "",
     `**Current panel**　${panelName}`,
@@ -1022,7 +968,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
   return {
     embeds: [
       simplePanel(
-        "♻️ Reset Workspace",
+        emojiLabel('AUTOMOD_DUPLICATES', "Reset Workspace"),
         description,
         s,
         who
@@ -1034,11 +980,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
        * DESTRUCTIVE ACTION
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:reset-confirm")
-          .setLabel("Confirm Reset")
-          .setEmoji("🗑️")
-          .setStyle(ButtonStyle.Danger)
+        emojiButton("embed:reset-confirm", "Confirm Reset", EMOJIS.DELETE, ButtonStyle.Danger)
       ),
 
       /*
@@ -1046,11 +988,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
        * Persistent rule: Back is always alone on the final row.
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:builder", "back")
       ),
     ],
   };
@@ -1097,13 +1035,13 @@ function buildBuilderPanel(i, who = "Unknown User") {
 
   const saveState =
     s.hasUnsavedChanges
-      ? "🟠 Unsaved changes"
-      : "🟢 Saved";
+      ? emojiLabel('SEVERITY_HIGH', "Unsaved changes")
+      : emojiLabel('ENABLED', "Saved");
 
   const timestamp =
     s.showTimestamp
-      ? "🟢 On"
-      : "⚪ Off";
+      ? emojiLabel('ENABLED', "On")
+      : emojiLabel('INACTIVE', "Off");
 
   const dashboard =
     getFrontDashboardState(i, s);
@@ -1113,30 +1051,30 @@ function buildBuilderPanel(i, who = "Unknown User") {
 
   const readiness =
     report.ready
-      ? "🟢 Ready"
-      : "🟠 Review required";
+      ? emojiLabel('ENABLED', "Ready")
+      : emojiLabel('SEVERITY_HIGH', "Review required");
 
   const summary = [
     "Build and refine the selected content panel.",
     "",
-    "### 🧩 Current Panel",
+    `### ${EMOJIS.PANELS} Current Panel`,
     `**Panel**　${selectedIndex + 1}/${panels.length}　•　${panelName}`,
     `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
     `**Status**　${saveState}`,
     "",
-    "### ⚙️ Panel Status",
+    `### ${EMOJIS.SETTINGS} Panel Status`,
     `**Timestamp**　${timestamp}　•　**Readiness**　${readiness}`,
     "",
     "### ➜ Next Step",
     report.ready
-      ? "✅ This panel is ready. Review the preview below or continue refining it."
-      : "⚠️ Continue editing this panel, then run Review Readiness before publishing.",
+      ? emojiLabel('HEALTHY', "This panel is ready. Review the preview below or continue refining it.")
+      : emojiLabel('WARNING', "Continue editing this panel, then run Review Readiness before publishing."),
   ].join("\n");
 
   return {
     embeds: [
       simplePanel(
-        "🛠️ Embed Builder",
+        emojiLabel('WELCOME_CUSTOM', "Embed Builder"),
         summary,
         s,
         who
@@ -1151,7 +1089,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:builder-panel-select")
-          .setPlaceholder("🧩 Select content panel")
+          .setPlaceholder(emojiLabel('DELIVERY', "Select content panel"))
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(
@@ -1208,7 +1146,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
             new ActionRowBuilder().addComponents(
               new StringSelectMenuBuilder()
                 .setCustomId("embed:builder-media-select")
-                .setPlaceholder("🖼️ Select media to preview")
+                .setPlaceholder(emojiLabel('MEDIA', "Select media to preview"))
                 .setMinValues(1)
                 .setMaxValues(1)
                 .addOptions(
@@ -1248,79 +1186,28 @@ function buildBuilderPanel(i, who = "Unknown User") {
        * CONTENT / MEDIA
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:edit-content")
-          .setLabel("Content")
-          .setEmoji("✏️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:edit-images")
-          .setLabel("Media")
-          .setEmoji("🖼️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:panels")
-          .setLabel(`Panels (${panels.length})`)
-          .setEmoji("🧩")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:fields")
-          .setLabel(`Fields (${fields.length})`)
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Primary)
+        emojiButton("embed:edit-content", "Content", EMOJIS.EDIT, ButtonStyle.Primary),
+        actionButton("embed:edit-images", "media"),
+        actionButton("embed:panels", "panels", { suffix: ` (${panels.length})` }),
+        emojiButton("embed:fields", `Fields (${fields.length})`, EMOJIS.EMBED_FIELDS, ButtonStyle.Primary),
       ),
 
       /*
        * DESIGN / OPTIONS
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:panel-colour")
-          .setLabel("Panel Colour")
-          .setEmoji("🎨")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:toggle-timestamp")
-          .setLabel("Timestamp")
-          .setEmoji("🕒")
-          .setStyle(
-            s.showTimestamp
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          ),
-
-        new ButtonBuilder()
-          .setCustomId("embed:buttons")
-          .setLabel(`Buttons (${buttons.length})`)
-          .setEmoji("🔘")
-          .setStyle(ButtonStyle.Secondary)
+        emojiButton("embed:panel-colour", "Panel Colour", EMOJIS.EMBED_COLOUR),
+        emojiButton("embed:toggle-timestamp", "Timestamp", EMOJIS.ROLE_CLOCK, s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
+        emojiButton("embed:buttons", `Buttons (${buttons.length})`, EMOJIS.EMBED_BUTTONS),
       ),
 
       /*
        * NAVIGATION / HELP
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:back")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("Variables")
-          .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:reset")
-          .setLabel("Reset")
-          .setEmoji("♻️")
-          .setStyle(ButtonStyle.Danger)
+        actionButton("embed:back", "back"),
+        emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
+        emojiButton("embed:reset", "Reset", EMOJIS.REFRESH, ButtonStyle.Danger),
       ),
     ],
   };
@@ -1360,14 +1247,14 @@ function buildPanelColourPanel(i, who = "Unknown User") {
   colourOptions.push({
     label: "Custom HEX",
     value: CUSTOM_HEX_VALUE,
-    emoji: "🎨",
+    emoji: EMOJIS.EMBED_COLOUR,
   });
 
   return {
     embeds: [
       new EmbedBuilder()
         .setColor(currentColour)
-        .setTitle("🎨 Panel Colour")
+        .setTitle(emojiLabel('DESIGN', "Panel Colour"))
         .setDescription([
           "Choose the accent colour for the currently selected embed panel.",
           "",
@@ -1386,7 +1273,7 @@ function buildPanelColourPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:builder-color")
-          .setPlaceholder("🎨 Choose panel colour")
+          .setPlaceholder(emojiLabel('DESIGN', "Choose panel colour"))
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(colourOptions.slice(0, 25))
@@ -1396,11 +1283,7 @@ function buildPanelColourPanel(i, who = "Unknown User") {
        * Persistent navigation row.
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:builder", "back")
       ),
     ],
   };
@@ -1409,10 +1292,10 @@ function buildPanelColourPanel(i, who = "Unknown User") {
 function buildPanelsPanel(i, who) {
   const s = getSession(i);
   return {
-    embeds: [simplePanel("🧩 Content Panels", `Selected **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
+    embeds: [simplePanel(emojiLabel('DELIVERY', "Content Panels"), `Selected **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
     components: [
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:panel-select").setPlaceholder("🧩 Select panel").addOptions(s.panels.map((p, n) => ({
+        new StringSelectMenuBuilder().setCustomId("embed:panel-select").setPlaceholder(emojiLabel('DELIVERY', "Select panel")).addOptions(s.panels.map((p, n) => ({
           label: `${n + 1}. ${trim(p.title || "Content Panel", 80)}`,
           value: String(n),
           description: trim(p.description || p.color, 100),
@@ -1420,24 +1303,18 @@ function buildPanelsPanel(i, who) {
         }))),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:panel-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled(s.panels.length >= MAX_PANELS),
-        new ButtonBuilder().setCustomId("embed:panel-duplicate").setLabel("📋 Duplicate").setStyle(ButtonStyle.Secondary).setDisabled(s.panels.length >= MAX_PANELS),
-        new ButtonBuilder().setCustomId("embed:panel-remove").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(s.panels.length <= 1),
+        navigationButton("embed:panel-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, s.panels.length >= MAX_PANELS),
+        navigationButton("embed:panel-duplicate", emojiLabel('INCIDENT_AUDIT', "Duplicate"), ButtonStyle.Secondary, s.panels.length >= MAX_PANELS),
+        navigationButton("embed:panel-remove", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, s.panels.length <= 1),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:panel-up").setLabel("⬆️ Up").setStyle(ButtonStyle.Secondary).setDisabled(s.selectedPanelIndex <= 0),
-        new ButtonBuilder().setCustomId("embed:panel-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(s.selectedPanelIndex >= s.panels.length - 1),
+        navigationButton("embed:panel-up", emojiLabel('ROLE_UP', "Up"), ButtonStyle.Secondary, s.selectedPanelIndex <= 0),
+        navigationButton("embed:panel-down", emojiLabel('ROLE_DOWN', "Down"), ButtonStyle.Secondary, s.selectedPanelIndex >= s.panels.length - 1),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("📖 Variables")
-          .setStyle(ButtonStyle.Secondary),
+        actionButton("embed:builder", "back"),
+        actionButton("embed:settings", "settings"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -1453,7 +1330,7 @@ function buildFieldsPanel(i, who) {
     ]),
   ));
   if ((s.fields || []).length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId("embed:field-select").setPlaceholder("📋 Select field").addOptions(s.fields.map((f, n) => ({
+    new StringSelectMenuBuilder().setCustomId("embed:field-select").setPlaceholder(emojiLabel('INCIDENT_AUDIT', "Select field")).addOptions(s.fields.map((f, n) => ({
       label: `${n + 1}. ${trim(f.name || "Field", 80)}`,
       value: String(n),
       description: trim(f.value || "Value", 100),
@@ -1461,27 +1338,21 @@ function buildFieldsPanel(i, who) {
     }))),
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:field-add").setLabel("➕ Add").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("embed:field-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
-    new ButtonBuilder().setCustomId("embed:field-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
+    navigationButton("embed:field-add", emojiLabel('ADD', "Add"), ButtonStyle.Success),
+    navigationButton("embed:field-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, !Number.isInteger(s.selectedFieldIndex)),
+    navigationButton("embed:field-remove-selected", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, !Number.isInteger(s.selectedFieldIndex)),
   ));
 
   // Persistent navigation row.
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-      new ButtonBuilder()
-        .setCustomId("embed:helpers")
-        .setLabel("📖 Variables")
-        .setStyle(ButtonStyle.Secondary),
+      actionButton("embed:builder", "back"),
+      actionButton("embed:settings", "settings"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     )
   );
   return {
-    embeds: [simplePanel("📋 Field Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
+    embeds: [simplePanel(emojiLabel('INCIDENT_AUDIT', "Field Management"), `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
     components: rows,
   };
 }
@@ -1541,14 +1412,14 @@ function buildFieldsManagerPanel(interaction) {
   const embeds = [
     new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle("📋 Fields")
+      .setTitle(emojiLabel('INCIDENT_AUDIT', "Fields"))
       .setDescription(lines.join("\n").slice(0, 4096)),
   ];
   if (item) {
     embeds.push(
       new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle("👁️ Selected Field Preview")
+        .setTitle(emojiLabel('WELCOME_PREVIEW', "Selected Field Preview"))
         .addFields({
           name: trim(replaceVars(item.name || "Field", interaction), 256) || "Field",
           value: trim(replaceVars(item.value || "", interaction), 1024) || "No content",
@@ -1593,25 +1464,19 @@ function buildFieldsManagerPanel(interaction) {
 
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:field-manager-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled(fields.length >= MAX_EMBED_FIELDS),
-      new ButtonBuilder().setCustomId("embed:field-manager-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(index == null),
-      new ButtonBuilder().setCustomId("embed:field-manager-inline").setLabel(item?.inline ? "↔️ Inline ON" : "↔️ Inline OFF").setStyle(item?.inline ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(index == null),
-      new ButtonBuilder().setCustomId("embed:field-manager-remove").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(index == null),
+      navigationButton("embed:field-manager-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, fields.length >= MAX_EMBED_FIELDS),
+      navigationButton("embed:field-manager-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, index == null),
+      navigationButton("embed:field-manager-inline", item?.inline ? emojiLabel('PERMISSION_HORIZONTAL', "Inline ON") : emojiLabel('PERMISSION_HORIZONTAL', "Inline OFF"), item?.inline ? ButtonStyle.Success : ButtonStyle.Secondary, index == null),
+      navigationButton("embed:field-manager-remove", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, index == null),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:field-manager-up").setLabel("⬆️ Up").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index <= 0),
-      new ButtonBuilder().setCustomId("embed:field-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= fields.length - 1),
+      navigationButton("embed:field-manager-up", emojiLabel('ROLE_UP', "Up"), ButtonStyle.Secondary, index == null || index <= 0),
+      navigationButton("embed:field-manager-down", emojiLabel('ROLE_DOWN', "Down"), ButtonStyle.Secondary, index == null || index >= fields.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-      new ButtonBuilder()
-        .setCustomId("embed:helpers")
-        .setLabel("📖 Variables")
-        .setStyle(ButtonStyle.Secondary),
+      actionButton("embed:builder", "back"),
+      actionButton("embed:settings", "settings"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     ),
   );
 
@@ -1628,7 +1493,7 @@ function buildFieldsManagerPanel(interaction) {
 function buildButtonsPanel(i, who) {
   const s = getSession(i), rows = [];
   if ((s.buttons || []).length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId("embed:button-select").setPlaceholder("🔘 Select button").addOptions(s.buttons.map((b, n) => ({
+    new StringSelectMenuBuilder().setCustomId("embed:button-select").setPlaceholder(emojiLabel('SECURITY_RADIO', "Select button")).addOptions(s.buttons.map((b, n) => ({
       label: `${n + 1}. ${trim(b.label || "Button", 80)}`,
       value: String(n),
       description: trim(b.url || b.style || "Button", 100),
@@ -1636,26 +1501,20 @@ function buildButtonsPanel(i, who) {
     }))),
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:button-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled((s.buttons || []).length >= MAX_BUTTONS),
-    new ButtonBuilder().setCustomId("embed:button-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(!Number.isInteger(s.selectedButtonIndex)),
-    new ButtonBuilder().setCustomId("embed:button-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedButtonIndex)),
+    navigationButton("embed:button-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, (s.buttons || []).length >= MAX_BUTTONS),
+    navigationButton("embed:button-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, !Number.isInteger(s.selectedButtonIndex)),
+    navigationButton("embed:button-remove-selected", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, !Number.isInteger(s.selectedButtonIndex)),
   ));
 
   // Persistent navigation row.
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-      new ButtonBuilder()
-        .setCustomId("embed:helpers")
-        .setLabel("📖 Variables")
-        .setStyle(ButtonStyle.Secondary),
+      actionButton("embed:builder", "back"),
+      actionButton("embed:settings", "settings"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     )
   );
-  return { embeds: [simplePanel("🔘 Button Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
+  return { embeds: [simplePanel(emojiLabel('SECURITY_RADIO', "Button Management"), `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
 }
 function selectedButtonManagerIndex(state) {
   const buttons = Array.isArray(state.buttons) ? state.buttons : [];
@@ -1715,12 +1574,12 @@ function buildButtonsManagerPanel(interaction) {
   }
   lines.push("", "Buttons support automatic or explicit row placement. Discord limits are enforced: up to 5 buttons per row and up to 20 buttons across 4 button rows.");
 
-  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle("🔘 Buttons").setDescription(lines.join("\n").slice(0, 4096))];
+  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('SECURITY_RADIO', "Buttons")).setDescription(lines.join("\n").slice(0, 4096))];
   if (item) {
     const previewLabel = trim(buttonResolved(item.label || "Button", interaction), 80) || "Button";
     const previewUrl = safeUrl(buttonResolved(item.url, interaction)) || "";
     const actualRow = buttonManagerDeployedRowFor(buttons, index);
-    embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle("👁️ Selected Button Preview").setDescription([
+    embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('WELCOME_PREVIEW', "Selected Button Preview")).setDescription([
       `**Label:** ${item.emoji ? `${item.emoji} ` : ""}${previewLabel}`,
       `**Style:** ${previewUrl ? "Link" : buttonManagerStyleLabel(item.style)}`,
       `**Destination:** ${previewUrl ? previewUrl : item.action ? `Action: ${buttonManagerActionLabel(item.action)}` : "Not configured"}`,
@@ -1746,25 +1605,19 @@ function buildButtonsManagerPanel(interaction) {
   }
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-manager-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled(buttons.length >= MAX_BUTTONS),
-      new ButtonBuilder().setCustomId("embed:button-manager-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(index == null),
-      new ButtonBuilder().setCustomId("embed:button-manager-options").setLabel("⚙️ Options").setStyle(ButtonStyle.Secondary).setDisabled(index == null),
-      new ButtonBuilder().setCustomId("embed:button-manager-remove").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(index == null),
+      navigationButton("embed:button-manager-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, buttons.length >= MAX_BUTTONS),
+      navigationButton("embed:button-manager-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, index == null),
+      navigationButton("embed:button-manager-options", emojiLabel('MODERATION_DASHBOARD', "Options"), ButtonStyle.Secondary, index == null),
+      navigationButton("embed:button-manager-remove", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, index == null),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-manager-up").setLabel("⬆️ Up").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index <= 0),
-      new ButtonBuilder().setCustomId("embed:button-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= buttons.length - 1),
+      navigationButton("embed:button-manager-up", emojiLabel('ROLE_UP', "Up"), ButtonStyle.Secondary, index == null || index <= 0),
+      navigationButton("embed:button-manager-down", emojiLabel('ROLE_DOWN', "Down"), ButtonStyle.Secondary, index == null || index >= buttons.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-      new ButtonBuilder()
-        .setCustomId("embed:helpers")
-        .setLabel("📖 Variables")
-        .setStyle(ButtonStyle.Secondary),
+      actionButton("embed:builder", "back"),
+      actionButton("embed:settings", "settings"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     ),
   );
   // Reserve Discord's final action row for navigation.
@@ -1810,10 +1663,10 @@ function buildButtonOptionsPanel(interaction) {
 
   const rows = [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-style:primary").setLabel("🔵 Primary").setStyle(style === "primary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:button-style:secondary").setLabel("⚪ Secondary").setStyle(style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:button-style:success").setLabel("🟢 Success").setStyle(style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:button-style:danger").setLabel("🔴 Danger").setStyle(style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:primary", emojiLabel('SEVERITY_LOW', "Primary"), style === "primary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:secondary", emojiLabel('INACTIVE', "Secondary"), style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:success", emojiLabel('ENABLED', "Success"), style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:danger", emojiLabel('DISABLED', "Danger"), style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId("embed:button-action-select").setPlaceholder("Choose button action").setMinValues(1).setMaxValues(1).addOptions([
@@ -1844,11 +1697,11 @@ function buildButtonOptionsPanel(interaction) {
     ));
   } else if (action === "reply") {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-reply-edit").setLabel("✏️ Reply Text").setStyle(ButtonStyle.Primary),
+      navigationButton("embed:button-reply-edit", emojiLabel('EDIT', "Reply Text"), ButtonStyle.Primary),
     ));
   }
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:button-options-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+    actionButton("embed:button-options-back", "back"),
   ));
 
   // Back navigation is structural and must never be removed by
@@ -1859,7 +1712,7 @@ function buildButtonOptionsPanel(interaction) {
     .slice(0, EMBED_COMPONENT_LIMITS.maxActionRows - 1);
 
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle("⚙️ Button Options").setDescription(details.join("\n").slice(0, 4096))],
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('MODERATION_DASHBOARD', "Button Options")).setDescription(details.join("\n").slice(0, 4096))],
     components: [...controlRows, navigationRow].filter(Boolean),
   };
 }
@@ -2077,7 +1930,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
           .setPlaceholder(
             selectedName
               ? `Selected: ${cleanPresetName(selectedName)}`
-              : "💾 Select a saved preset"
+              : emojiLabel('PRESETS', "Select a saved preset")
           )
           .setMinValues(1)
           .setMaxValues(1)
@@ -2116,25 +1969,9 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
    */
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:preset-load")
-        .setLabel("📂 Load into Editor")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-save")
-        .setLabel(
-          selectedName
-            ? "💾 Update / Save"
-            : "💾 Save Current"
-        )
-        .setStyle(ButtonStyle.Success),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-new")
-        .setLabel("➕ New Embed")
-        .setStyle(ButtonStyle.Secondary)
+      navigationButton("embed:preset-load", emojiLabel('MOD_CASE_OPEN', "Load into Editor"), ButtonStyle.Primary, !selectedName),
+      navigationButton("embed:preset-save", selectedName ? emojiLabel('PRESETS', "Update / Save") : emojiLabel('PRESETS', "Save Current"), ButtonStyle.Success),
+      navigationButton("embed:preset-new", emojiLabel('ADD', "New Embed")),
     )
   );
 
@@ -2143,52 +1980,19 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
    */
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:preset-rename")
-        .setLabel("✏️ Rename")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-duplicate")
-        .setLabel("📄 Duplicate")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-delete")
-        .setLabel("🗑️ Delete")
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId(
-          isDefault
-            ? "embed:preset-clear-default"
-            : "embed:preset-default"
-        )
-        .setLabel(
-          isDefault
-            ? "☆ Clear Default"
-            : "⭐ Set Default"
-        )
-        .setStyle(
-          isDefault
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary
-        )
-        .setDisabled(!selectedName)
+      navigationButton("embed:preset-rename", emojiLabel('EDIT', "Rename"), ButtonStyle.Secondary, !selectedName),
+      navigationButton("embed:preset-duplicate", emojiLabel('DOCUMENT', "Duplicate"), ButtonStyle.Secondary, !selectedName),
+      navigationButton("embed:preset-delete", emojiLabel('DELETE', "Delete"), ButtonStyle.Danger, !selectedName),
+      navigationButton(
+        isDefault ? "embed:preset-clear-default" : "embed:preset-default",
+        isDefault ? "☆ Clear Default" : emojiLabel('USER_STARBOARD', "Set Default"),
+        isDefault ? ButtonStyle.Success : ButtonStyle.Secondary,
+        !selectedName,
+      ),
     )
   );
 
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:back")
-        .setLabel("⬅️ Back")
-        .setStyle(ButtonStyle.Secondary)
-    )
-  );
+  rows.push(new ActionRowBuilder().addComponents(actionButton("embed:back", "back")));
 
   /*
    * Build real management information.
@@ -2196,7 +2000,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
   let description = "";
 
   description +=
-    `### 💾 Preset Library\n` +
+    `### ${EMOJIS.PRESETS} Preset Library\n` +
     `**Saved presets:** ${visibleEntries.length}\n`;
 
   if (!selectedPreset) {
@@ -2227,7 +2031,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
 
     const status =
       summary.isDefault
-        ? "⭐ Default preset"
+        ? emojiLabel('USER_STARBOARD', "Default preset")
         : "Saved preset";
 
     description +=
@@ -2255,12 +2059,12 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
 
     description +=
       `### Management\n` +
-      `📂 **Load into Editor** — open this preset for editing.\n` +
-      `💾 **Update / Save** — save the current editor state.\n` +
-      `✏️ **Rename** — change this preset's name.\n` +
-      `📄 **Duplicate** — create an independent copy.\n` +
-      `🗑️ **Delete** — remove this saved preset.\n` +
-      `${isDefault ? "☆ **Clear Default**" : "⭐ **Set Default**"} — ` +
+      `${EMOJIS.EMBED_OPEN_FOLDER} **Load into Editor** — open this preset for editing.\n` +
+      `${EMOJIS.EMBED_SAVE} **Update / Save** — save the current editor state.\n` +
+      `${EMOJIS.EDIT} **Rename** — change this preset's name.\n` +
+      `${EMOJIS.DOCUMENT} **Duplicate** — create an independent copy.\n` +
+      `${EMOJIS.DELETE} **Delete** — remove this saved preset.\n` +
+      `${isDefault ? "☆ **Clear Default**" : emojiLabel('USER_STARBOARD', "**Set Default**")} — ` +
       `${
         isDefault
           ? "stop using this as the template default."
@@ -2278,8 +2082,8 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     )
     .setTitle(
       selectedPreset
-        ? `💾 Preset Manager • ${cleanPresetName(selectedName)}`
-        : "💾 Embed Preset Manager"
+        ? `${EMOJIS.EMBED_SAVE} Preset Manager • ${cleanPresetName(selectedName)}`
+        : emojiLabel('PRESETS', "Embed Preset Manager")
     )
     .setDescription(description.slice(0, 4096))
     .setFooter({
@@ -2340,10 +2144,10 @@ function buildSettingsPanel(interaction) {
   const description = [
     "Move saved Embed Builder presets between Goliath servers.",
     "",
-    "**📥 Upload File** — upload a saved preset `.json` file.",
-    "**📤 Export File** — download the selected preset as a `.json` file.",
-    "**📋 Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.",
-    "**📋 Export JSON** — copy portable preset JSON to move it into another Embed Builder.",
+    `**${EMOJIS.EMBED_IMPORT} Upload File** — upload a saved preset \`.json\` file.`,
+    `**${EMOJIS.MOD_EXPORT} Export File** — download the selected preset as a \`.json\` file.`,
+    `**${EMOJIS.EMBED_FIELDS} Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.`,
+    `**${EMOJIS.EMBED_FIELDS} Export JSON** — copy portable preset JSON to move it into another Embed Builder.`,
     "",
     "Select the preset you want to export in **Preset Manager** first.",
   ].join("\n");
@@ -2351,7 +2155,7 @@ function buildSettingsPanel(interaction) {
   return {
     embeds: [
       simplePanel(
-        "⚙️ Embed Settings",
+        emojiLabel('MODERATION_DASHBOARD', "Embed Settings"),
         description,
         state,
         memberName(interaction)
@@ -2359,43 +2163,15 @@ function buildSettingsPanel(interaction) {
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:settings-import")
-          .setLabel("Upload File")
-          .setEmoji("📥")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:settings-export")
-          .setLabel("Export File")
-          .setEmoji("📤")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:settings-paste")
-          .setLabel("Paste JSON")
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:settings-export-code")
-          .setLabel("Export JSON")
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Secondary)
+        emojiButton("embed:settings-import", "Upload File", EMOJIS.EMBED_IMPORT, ButtonStyle.Primary),
+        emojiButton("embed:settings-export", "Export File", EMOJIS.MOD_EXPORT),
+        emojiButton("embed:settings-paste", "Paste JSON", EMOJIS.EMBED_FIELDS, ButtonStyle.Primary),
+        emojiButton("embed:settings-export-code", "Export JSON", EMOJIS.EMBED_FIELDS),
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:settings-back")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("Variables")
-          .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:settings-back", "back"),
+        emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
       )
     ]
   };
@@ -2407,7 +2183,7 @@ function buildHelpersPanel(i) {
   return {
     embeds: [
       simplePanel(
-        "📖 Embed Variables",
+        emojiLabel('VARIABLES', 'Embed Variables'),
         HELPERS.map((h) => `\`${h}\``).join("\n"),
         s,
         memberName(i)
@@ -2415,11 +2191,8 @@ function buildHelpersPanel(i) {
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        actionButton("embed:builder", "back"),
+        actionButton("embed:settings", "settings"),
       )
     ],
   };
@@ -2464,32 +2237,32 @@ function buildReadinessPanel(interaction, options = {}) {
   const destination =
     state.channelId
       ? `<#${state.channelId}>`
-      : "⚪ Not selected";
+      : emojiLabel('INACTIVE', "Not selected");
 
   const status =
     report.ready
       ? (
           report.warnings.length
-            ? "🟡 Ready with warnings"
-            : "🟢 Ready to publish"
+            ? emojiLabel('SEVERITY_MEDIUM', "Ready with warnings")
+            : emojiLabel('ENABLED', "Ready to publish")
         )
-      : "🔴 Action required";
+      : emojiLabel('DISABLED', "Action required");
 
   const description = [
     ...(options.deliveryBlocked
       ? [
-          "❌ This embed is not ready to send. Fix the issues below first.",
+          emojiLabel('ERROR', "This embed is not ready to send. Fix the issues below first."),
           "",
         ]
       : []),
     "Final validation before returning to Embed Studio for publishing.",
     "",
-    "### 🚦 Publish Status",
+    `### ${EMOJIS.STATUS} Publish Status`,
     `**Status**　${status}`,
     `**Destination**　${destination}`,
     `**Panels**　${panels.length}/${MAX_PANELS}`,
     "",
-    "### 🔎 Validation",
+    `### ${EMOJIS.EMBED_VALIDATION} Validation`,
     ...lines,
     "",
     "### ➜ Next",
@@ -2498,17 +2271,9 @@ function buildReadinessPanel(interaction, options = {}) {
       : "Resolve the highlighted requirement, then recheck readiness.",
   ].join("\n").slice(0, 4096);
 
-  const primary =
-    report.ready
-      ? new ButtonBuilder()
-          .setCustomId("embed:readiness-refresh")
-          .setLabel("Recheck")
-          .setEmoji("🔄")
-          .setStyle(ButtonStyle.Secondary)
-      : new ButtonBuilder()
-          .setCustomId("embed:readiness-fix")
-          .setLabel(fix.label)
-          .setStyle(ButtonStyle.Primary);
+  const primary = report.ready
+    ? emojiButton("embed:readiness-refresh", "Recheck", EMOJIS.REFRESH)
+    : navigationButton("embed:readiness-fix", fix.label, ButtonStyle.Primary);
 
   return {
     embeds: [
@@ -2522,7 +2287,7 @@ function buildReadinessPanel(interaction, options = {}) {
               )
             : 0xED4245
         )
-        .setTitle("✅ Embed Readiness")
+        .setTitle(emojiLabel('HEALTHY', "Embed Readiness"))
         .setDescription(description)
         .setFooter({
           text: `Requested by ${memberName(interaction)}`
@@ -2533,21 +2298,12 @@ function buildReadinessPanel(interaction, options = {}) {
     components: [
       new ActionRowBuilder().addComponents(
         primary,
-
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Builder")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Secondary)
+        emojiButton("embed:builder", "Builder", EMOJIS.BUILDER),
       ),
 
       // Navigation is always isolated on the final row.
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:back")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:back", "back"),
       ),
     ],
   };
@@ -2690,7 +2446,7 @@ function buildContentManagerPanel(interaction) {
     embeds: [
       new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle("📝 Content")
+        .setTitle(emojiLabel('NOTE', "Content"))
         .setDescription(
           lines.join("\n").slice(0, 4096)
         ),
@@ -2698,41 +2454,23 @@ function buildContentManagerPanel(interaction) {
 
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:content-edit-text")
-          .setLabel("✏️ Edit Text")
-          .setStyle(ButtonStyle.Primary),
+        navigationButton("embed:content-edit-text", emojiLabel('EDIT', "Edit Text"), ButtonStyle.Primary),
 
-        new ButtonBuilder()
-          .setCustomId("embed:content-details")
-          .setLabel("👤 Author & Footer")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:content-details", emojiLabel('USER', "Author & Footer")),
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:content-author-icon")
-          .setLabel("👤 Author Icon")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:content-author-icon", emojiLabel('USER', "Author Icon")),
 
-        new ButtonBuilder()
-          .setCustomId("embed:content-footer-icon")
-          .setLabel("🏷️ Footer Icon")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:content-footer-icon", emojiLabel('ROLE_TAG', "Footer Icon")),
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
-          .setStyle(ButtonStyle.Secondary),
+        actionButton("embed:builder", "back"),
 
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        actionButton("embed:settings", "settings"),
 
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("📖 Variables")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -2752,27 +2490,21 @@ function buildAppearancePanel(interaction) {
     "",
     "Icon sources can use direct HTTPS image links, Embed Studio variables, or direct uploads.",
   ];
-  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle("🎨 Appearance").setDescription(lines.join("\n").slice(0, 4096))];
-  if (authorIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle("👤 Author Icon Preview").setThumbnail(authorIcon));
-  if (footerIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle("🏷️ Footer Icon Preview").setThumbnail(footerIcon));
+  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('DESIGN', "Appearance")).setDescription(lines.join("\n").slice(0, 4096))];
+  if (authorIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('USER', "Author Icon Preview")).setThumbnail(authorIcon));
+  if (footerIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', "Footer Icon Preview")).setThumbnail(footerIcon));
   return {
     embeds,
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:appearance-details").setLabel("✏️ Edit Details").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:appearance-author-icon").setLabel("👤 Author Icon").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:appearance-footer-icon").setLabel("🏷️ Footer Icon").setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:appearance-details", emojiLabel('EDIT', "Edit Details"), ButtonStyle.Primary),
+        navigationButton("embed:appearance-author-icon", emojiLabel('USER', "Author Icon")),
+        navigationButton("embed:appearance-footer-icon", emojiLabel('ROLE_TAG', "Footer Icon")),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("📖 Variables")
-          .setStyle(ButtonStyle.Secondary),
+        actionButton("embed:builder", "back"),
+        actionButton("embed:settings", "settings"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -2784,7 +2516,7 @@ function buildAppearanceIconPanel(interaction, kind) {
   const resolved = resolveAppearanceSource(raw, interaction);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(isAuthor ? "👤 Author Icon" : "🏷️ Footer Icon")
+    .setTitle(isAuthor ? emojiLabel('USER', "Author Icon") : emojiLabel('ROLE_TAG', "Footer Icon"))
     .setDescription([
       `**Source:** ${raw ? trim(raw, 1000) : "Not set"}`,
       "",
@@ -2795,13 +2527,13 @@ function buildAppearanceIconPanel(interaction, kind) {
     embeds: [embed],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`embed:appearance-icon-url:${kind}`).setLabel("✏️ Edit URL").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`embed:appearance-icon-upload:${kind}`).setLabel("📤 Upload").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`embed:appearance-icon-clear:${kind}`).setLabel("🗑️ Clear").setStyle(ButtonStyle.Danger).setDisabled(!raw),
+        navigationButton(`embed:appearance-icon-url:${kind}`, emojiLabel('EDIT', "Edit URL"), ButtonStyle.Primary),
+        navigationButton(`embed:appearance-icon-upload:${kind}`, emojiLabel('MOD_EXPORT', "Upload"), ButtonStyle.Success),
+        navigationButton(`embed:appearance-icon-clear:${kind}`, emojiLabel('DELETE', "Clear"), ButtonStyle.Danger, !raw),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:content-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
+        actionButton("embed:content-back", "back"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -3117,22 +2849,12 @@ function buildMediaManagerPanel(
 
   const alignmentLabel =
     selectedAlignment === "center"
-      ? "↔️ Centre"
+      ? emojiLabel('PERMISSION_HORIZONTAL', "Centre")
       : selectedAlignment === "right"
-        ? "➡️ Right"
-        : "⬅️ Left";
+        ? emojiLabel('NEXT_STEP', "Right")
+        : emojiLabel('BACK', "Left");
 
-  const mediaButton = (
-    id,
-    label,
-    style = ButtonStyle.Secondary,
-    disabled = false
-  ) =>
-    new ButtonBuilder()
-      .setCustomId(id)
-      .setLabel(label)
-      .setStyle(style)
-      .setDisabled(Boolean(disabled));
+  const mediaButton = navigationButton;
 
   const rows = [];
 
@@ -3141,7 +2863,7 @@ function buildMediaManagerPanel(
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:media-gallery-select")
-          .setPlaceholder("🎞️ Select media item")
+          .setPlaceholder(emojiLabel('UTILITY_ANIMATION', "Select media item"))
           .addOptions(
             panelMedia.gallery
               .slice(0, 25)
@@ -3179,7 +2901,7 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:media-add",
-        "➕ Add Media / File",
+        emojiLabel('ADD', "Add Media / File"),
         ButtonStyle.Success,
         panelMedia.gallery.length >=
           mediaModel.MAX_GALLERY_ITEMS &&
@@ -3188,20 +2910,20 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-gallery-edit",
-        "✏️ Edit",
+        emojiLabel('EDIT', "Edit"),
         ButtonStyle.Primary,
         galleryIndex == null
       ),
       mediaButton(
         "embed:media-gallery-up",
-        "⬆️ Up",
+        emojiLabel('ROLE_UP', "Up"),
         ButtonStyle.Secondary,
         galleryIndex == null ||
         galleryIndex <= 0
       ),
       mediaButton(
         "embed:media-gallery-down",
-        "⬇️ Down",
+        emojiLabel('ROLE_DOWN', "Down"),
         ButtonStyle.Secondary,
         galleryIndex == null ||
         galleryIndex >=
@@ -3214,7 +2936,7 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:media-type:cycle",
-        `🏷️ Type: ${
+        `${EMOJIS.ROLE_TAG} Type: ${
           {
             auto: "Auto",
             text: "Text",
@@ -3232,7 +2954,7 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-spoiler:off",
-        "👁️ Normal",
+        emojiLabel('WELCOME_PREVIEW', "Normal"),
         selectedMedia?.spoiler
           ? ButtonStyle.Secondary
           : ButtonStyle.Primary,
@@ -3240,7 +2962,7 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-spoiler:on",
-        "🙈 Spoiler",
+        emojiLabel("EMBED_SPOILER", "Spoiler"),
         selectedMedia?.spoiler
           ? ButtonStyle.Primary
           : ButtonStyle.Secondary,
@@ -3248,7 +2970,7 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-duplicate",
-        "📑 Duplicate",
+        emojiLabel("EMBED_DUPLICATE", "Duplicate"),
         ButtonStyle.Success,
         galleryIndex == null ||
         panelMedia.gallery.length >=
@@ -3261,20 +2983,20 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:media-alignments",
-        "↔️ Alignments",
+        emojiLabel('PERMISSION_HORIZONTAL', "Alignments"),
         ButtonStyle.Primary,
         galleryIndex == null
       ),
       mediaButton(
         "embed:media-thumbnail",
         panelMedia.thumbnail?.source
-          ? "🖼️ Thumbnail ✓"
-          : "🖼️ Thumbnail",
+          ? emojiLabel('MEDIA', "Thumbnail ✓")
+          : emojiLabel('MEDIA', "Thumbnail"),
         ButtonStyle.Primary
       ),
       mediaButton(
         "embed:media-gallery-remove",
-        "🗑️ Remove",
+        emojiLabel('DELETE', "Remove"),
         ButtonStyle.Danger,
         galleryIndex == null
       )
@@ -3283,10 +3005,7 @@ function buildMediaManagerPanel(
 
   rows.push(
     new ActionRowBuilder().addComponents(
-      mediaButton(
-        "embed:builder",
-        "⬅️ Back"
-      ),
+      actionButton("embed:builder", "back"),
     )
   );
 
@@ -3303,11 +3022,11 @@ function buildMediaManagerPanel(
     }**`,
     "",
     `⬆️ **Above Content** — ${aboveCount} • ⬇️ **Below Content** — ${belowCount}`,
-    `🖼️ **Thumbnail** — ${
+    `${EMOJIS.MEDIA} **Thumbnail** — ${
       panelMedia.thumbnail?.source
         ? "Configured"
         : "Not set"
-    } • 📎 **Files** — ${
+    } • ${EMOJIS.AUTOMOD_ATTACHMENTS} **Files** — ${
       panelMedia.files.length
     }/${mediaModel.MAX_FILES}`,
     "",
@@ -3316,20 +3035,20 @@ function buildMediaManagerPanel(
   if (selectedMedia) {
     summary.push(
       "**Selected Media**",
-      `🔗 **File:** ${
+      `${EMOJIS.AUTOMOD_LINKS} **File:** ${
         String(
           selectedMedia.alt ||
           selectedMedia.source ||
           `Item ${galleryIndex + 1}`
         ).slice(0, 300)
       }`,
-      `📍 **Placement:** ${
+      `${EMOJIS.WELCOME_LOCATION} **Placement:** ${
         selectedMedia.placement === "above"
-          ? "⬆️ Above Content"
-          : "⬇️ Below Content"
+          ? emojiLabel('ROLE_UP', "Above Content")
+          : emojiLabel('ROLE_DOWN', "Below Content")
       }`,
       `↔️ **Alignment:** ${alignmentLabel}`,
-      `🏷️ **Type:** ${
+      `${EMOJIS.ROLE_TAG} **Type:** ${
         {
           auto: "Auto",
           text: "Text",
@@ -3342,7 +3061,7 @@ function buildMediaManagerPanel(
           ).toLowerCase()
         ] || "Auto"
       }`,
-      `👁️ **Spoiler:** ${
+      `${EMOJIS.WELCOME_PREVIEW} **Spoiler:** ${
         selectedMedia.spoiler
           ? "On"
           : "Off"
@@ -3352,24 +3071,24 @@ function buildMediaManagerPanel(
   } else {
     summary.push(
       "**Selected Media**",
-      "None selected — use ➕ Add Media / File or select an existing item.",
+      `None selected — use ${EMOJIS.ADD} Add Media / File or select an existing item.`,
       ""
     );
   }
 
   summary.push(
     "**Controls**",
-    "**✏️ Edit** — Edit the selected media item.",
-    "**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.",
-    "**👁️ Normal** — Show the selected media normally.",
-    "**🙈 Spoiler** — Hide the selected media behind Discord’s spoiler treatment.",
+    `**${EMOJIS.EDIT} Edit** — Edit the selected media item.`,
+    `**${EMOJIS.ROLE_TAG} Type** — Choose Auto, Text, GIF or Image for the selected media.`,
+    `**${EMOJIS.WELCOME_PREVIEW} Normal** — Show the selected media normally.`,
+    `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.`,
     "**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.",
-    "**🖼️ Thumbnail** — Add or manage the panel thumbnail."
+    `**${EMOJIS.MEDIA} Thumbnail** — Add or manage the panel thumbnail.`
   );
 
   const embeds = [
     simplePanel(
-      "🖼️ Media Manager",
+      emojiLabel('MEDIA', "Media Manager"),
       summary.join("\n"),
       state,
       who
@@ -3397,7 +3116,7 @@ function buildMediaManagerPanel(
         new EmbedBuilder()
           .setColor(0x5865F2)
           .setTitle(
-            `🖼️ Selected Media Preview • ${
+            `${EMOJIS.MEDIA} Selected Media Preview • ${
               galleryIndex + 1
             }/${panelMedia.gallery.length}`
           )
@@ -3462,7 +3181,7 @@ function buildThumbnailOptionsPanel(
   const embed =
     new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle("🖼️ Thumbnail")
+      .setTitle(emojiLabel('MEDIA', "Thumbnail"))
       .setDescription(
         [
           "**Thumbnail settings**",
@@ -3495,51 +3214,14 @@ function buildThumbnailOptionsPanel(
       enforceMediaUiLimits([
         new ActionRowBuilder()
           .addComponents(
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-edit"
-              )
-              .setLabel(
-                "✏️ Edit URL / Alt"
-              )
-              .setStyle(
-                ButtonStyle.Primary
-              ),
-
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-upload"
-              )
-              .setLabel(
-                "📤 Upload Thumbnail"
-              )
-              .setStyle(
-                ButtonStyle.Success
-              ),
-
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-clear"
-              )
-              .setLabel("🗑️ Clear")
-              .setStyle(
-                ButtonStyle.Danger
-              )
-              .setDisabled(
-                !thumbnail.source
-              )
+            navigationButton("embed:thumbnail-edit", emojiLabel('EDIT', "Edit URL / Alt"), ButtonStyle.Primary),
+            navigationButton("embed:thumbnail-upload", emojiLabel('MOD_EXPORT', "Upload Thumbnail"), ButtonStyle.Success),
+            navigationButton("embed:thumbnail-clear", emojiLabel('DELETE', "Clear"), ButtonStyle.Danger, !thumbnail.source)
           ),
 
         new ActionRowBuilder()
           .addComponents(
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-back"
-              )
-              .setLabel("⬅️ Back")
-              .setStyle(
-                ButtonStyle.Secondary
-              )
+            actionButton("embed:thumbnail-back", "back")
           ),
       ]),
   };
@@ -3612,7 +3294,7 @@ function applyMediaPreviewPresentation(
           + rawAlignment.slice(1);
 
     preview.setTitle(
-      `🖼️ Selected Media Preview • ${placement} • ${alignment}`
+      `${EMOJIS.MEDIA} Selected Media Preview • ${placement} • ${alignment}`
     );
   }
 
@@ -3730,8 +3412,8 @@ function buildMediaAlignmentPanel(ctx) {
     `**Type:** ${typeLabel}`,
     `**Placement:** ${
       placement === "above"
-        ? "⬆️ Above Content"
-        : "⬇️ Below Content"
+        ? emojiLabel('ROLE_UP', "Above Content")
+        : emojiLabel('ROLE_DOWN', "Below Content")
     }`,
     `**Alignment:** ${alignmentLabel}`,
     `**Size:** ${size.toUpperCase()}`,
@@ -3741,12 +3423,12 @@ function buildMediaAlignmentPanel(ctx) {
     "**Panel media sync**",
     `⬆️ **Above Content** — ${aboveCount}`,
     `⬇️ **Below Content** — ${belowCount}`,
-    `🖼️ **Thumbnail** — ${
+    `${EMOJIS.MEDIA} **Thumbnail** — ${
       thumbnailConfigured
         ? "Configured"
         : "Not set"
     }`,
-    `📎 **Files** — ${files.length}/10`,
+    `${EMOJIS.AUTOMOD_ATTACHMENTS} **Files** — ${files.length}/10`,
     "",
     "Changes made here update the same selected media item shown in Media Manager. Placement, alignment and size are saved immediately.",
   ].join("\n");
@@ -3766,108 +3448,29 @@ function buildMediaAlignmentPanel(ctx) {
 
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-placement:above"
-          )
-          .setLabel("⬆️ Above Content")
-          .setStyle(
-            placement === "above"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-placement:above", emojiLabel('ROLE_UP', "Above Content"), placement === "above" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-placement:below"
-          )
-          .setLabel("⬇️ Below Content")
-          .setStyle(
-            placement === "below"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          )
+        navigationButton("embed:media-placement:below", emojiLabel('ROLE_DOWN', "Below Content"), placement === "below" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-align:left"
-          )
-          .setLabel("⬅️ Left")
-          .setStyle(
-            ctx.alignment === "left"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-align:left", emojiLabel('BACK', "Left"), ctx.alignment === "left" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-align:center"
-          )
-          .setLabel("↔️ Centre")
-          .setStyle(
-            ctx.alignment === "center"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-align:center", emojiLabel('PERMISSION_HORIZONTAL', "Centre"), ctx.alignment === "center" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-align:right"
-          )
-          .setLabel("➡️ Right")
-          .setStyle(
-            ctx.alignment === "right"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          )
+        navigationButton("embed:media-align:right", emojiLabel('NEXT_STEP', "Right"), ctx.alignment === "right" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-size:small"
-          )
-          .setLabel("🔹 Small")
-          .setStyle(
-            size === "small"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-size:small", emojiLabel("EMBED_MEDIA_SMALL", "Small"), size === "small" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-size:medium"
-          )
-          .setLabel("🔷 Medium")
-          .setStyle(
-            size === "medium"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-size:medium", emojiLabel("EMBED_MEDIA_MEDIUM", "Medium"), size === "medium" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-size:large"
-          )
-          .setLabel("🔶 Large")
-          .setStyle(
-            size === "large"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          )
+        navigationButton("embed:media-size:large", emojiLabel("EMBED_MEDIA_LARGE", "Large"), size === "large" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-alignments-back"
-          )
-          .setLabel("⬅️ Back")
-          .setStyle(
-            ButtonStyle.Secondary
-          )
+        actionButton("embed:media-alignments-back", "back")
       ),
     ],
   };
@@ -3886,7 +3489,7 @@ function buildUserInfoPayload(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle("👤 Your Server Info")
+    .setTitle(emojiLabel('USER', "Your Server Info"))
     .setDescription(
       [
         `**User:** <@${interaction.user.id}>`,
@@ -3914,7 +3517,7 @@ function buildServerInfoPayload(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`🏠 ${guild?.name || "Server"}`)
+    .setTitle(`${EMOJIS.USER_HOME} ${guild?.name || "Server"}`)
     .setDescription(
       [
         `**Members:** ${guild?.memberCount ?? "Unknown"}`,

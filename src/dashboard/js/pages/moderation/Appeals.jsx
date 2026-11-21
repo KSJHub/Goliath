@@ -1,6 +1,10 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
+import { goDashboard } from '../../services/dashboardPath.js';
+import { dashboardPath, localDashboardPath } from '../../services/dashboardPath.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../services/apiClient';
+import MemberCommunityProfile from './MemberCommunityProfile.jsx';
 
 const MAX_GROUNDS = 1500;
 const MAX_RESOLUTION = 500;
@@ -9,6 +13,22 @@ function formatDate(value) {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
+
+function caseStatus(status) {
+  const value = String(status || 'active').toLowerCase();
+  if (value === 'reversed') return { label: `${E.SUCCESS} Case Resolved`, color: '#67e8f9' };
+  if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
+  if (value === 'active') return { label: `${E.WARNING} Case Active`, color: '#fbbf24' };
+  return { label: E.FOLDER + ' ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
+}
+
+function discordAvatar(user) {
+  const id = String(user?.id || '');
+  const hash = String(user?.avatar || '');
+  return /^\d{16,20}$/.test(id) && /^[a-zA-Z0-9_]+$/.test(hash)
+    ? `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=128`
+    : null;
 }
 
 function statusTone(status) {
@@ -41,6 +61,7 @@ function getDeepLink() {
 }
 
 function currentReturnPath() {
+  if (localDashboardPath(window.location.pathname).replace(/\/+$/, '') === '/portal') return '/portal';
   const deepLink = getDeepLink();
   const params = new URLSearchParams();
   if (deepLink.guildId) params.set('guild', deepLink.guildId);
@@ -54,6 +75,8 @@ export default function Appeals() {
   const [authenticated, setAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [cases, setCases] = useState([]);
+  const [restrictions, setRestrictions] = useState([]);
+  const [portalTab, setPortalTab] = useState(localDashboardPath(window.location.pathname).replace(/\/+$/, '') === '/appeals' ? 'cases' : 'overview');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [grounds, setGrounds] = useState('');
@@ -61,6 +84,8 @@ export default function Appeals() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
   const [deepLinkNotice, setDeepLinkNotice] = useState('');
+  const [caseFilter, setCaseFilter] = useState('all');
+  const [expandedCases, setExpandedCases] = useState({});
   const appealFormRef = useRef(null);
 
   async function load({ preserveSuccess = true } = {}) {
@@ -72,7 +97,8 @@ export default function Appeals() {
       if (!auth?.authenticated || !auth?.user) throw Object.assign(new Error('Authentication required.'), { status: 401 });
       setAuthenticated(true);
       setUser(auth.user);
-      const payload = await api.request('/api/cases/appeals/me');
+      const payload = await api.request('/api/cases/member/me');
+      setRestrictions(Array.isArray(payload?.restrictions) ? payload.restrictions : []);
       const nextCases = Array.isArray(payload?.cases) ? payload.cases : [];
       setCases(nextCases);
 
@@ -95,6 +121,7 @@ export default function Appeals() {
         setAuthenticated(false);
         setUser(null);
         setCases([]);
+        setRestrictions([]);
       } else {
         setError(loadError?.message || 'We could not load your appeals right now. Please try again.');
       }
@@ -113,11 +140,26 @@ export default function Appeals() {
     }
   }, [selected?.guildId, selected?.caseId]);
 
+  const timeline = useMemo(() => [...cases.flatMap(item => [
+    ...(item.createdAt ? [{ date: item.createdAt, label: `${item.actionLabel} recorded`, guild: item.guildName, key: `case-${item.guildId}-${item.caseId}` }] : []),
+    ...item.appeals.flatMap(appeal => [
+      ...(appeal.submittedAt ? [{ date: appeal.submittedAt, label: 'Appeal submitted', guild: item.guildName, key: `submitted-${appeal.id}` }] : []),
+      ...(appeal.reviewedAt ? [{ date: appeal.reviewedAt, label: `Appeal ${appeal.status}`, guild: item.guildName, key: `reviewed-${appeal.id}` }] : []),
+    ]),
+  ]), ...restrictions.filter(item => item.startedAt).map(item => ({ date: item.startedAt, label: 'Account restriction applied', guild: item.guildName, key: `restriction-${item.guildId}` }))].sort((a, b) => (new Date(b.date).getTime() || 0) - (new Date(a.date).getTime() || 0)), [cases, restrictions]);
+
   const pendingCount = useMemo(
     () => cases.reduce((total, item) => total + item.appeals.filter((appeal) => appeal.status === 'pending').length, 0),
     [cases]
   );
 
+  const resolvedCount = useMemo(() => cases.reduce((sum, item) => sum + item.appeals.filter(a => a.status === 'approved' || a.status === 'denied').length, 0), [cases]);
+  const visibleCases = useMemo(() => cases.filter(item => {
+    if (caseFilter === 'eligible') return item.eligible;
+    if (caseFilter === 'pending') return item.appeals.some(a => a.status === 'pending');
+    if (caseFilter === 'resolved') return item.appeals.some(a => a.status === 'approved' || a.status === 'denied');
+    return true;
+  }), [cases, caseFilter]);
   const appealableCount = useMemo(() => cases.filter((item) => item.eligible).length, [cases]);
 
   async function submitAppeal(event) {
@@ -154,6 +196,7 @@ export default function Appeals() {
 
   function chooseCase(item) {
     if (!item?.eligible || submitting) return;
+    setPortalTab('cases');
     setSelected(item);
     setGrounds('');
     setResolution('');
@@ -163,14 +206,14 @@ export default function Appeals() {
     const params = new URLSearchParams();
     params.set('guild', item.guildId);
     params.set('case', String(item.caseId));
-    window.history.replaceState({}, '', `/appeals?${params.toString()}`);
+    window.history.replaceState({}, '', dashboardPath(`/appeals?${params.toString()}`));
   }
 
   function cancelSelection() {
     setSelected(null);
     setGrounds('');
     setResolution('');
-    window.history.replaceState({}, '', '/appeals');
+    window.history.replaceState({}, '', dashboardPath('/appeals'));
   }
 
   const page = {
@@ -228,7 +271,7 @@ export default function Appeals() {
     return (
       <main aria-busy="true" style={{ ...page, display: 'grid', placeItems: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 38, marginBottom: 10 }}>⚖️</div>
+          <div style={{ fontSize: 38, marginBottom: 10 }}>{E.JUSTICE}</div>
           <strong>Loading your appeals…</strong>
         </div>
       </main>
@@ -239,11 +282,11 @@ export default function Appeals() {
     return (
       <main style={{ ...page, display: 'grid', placeItems: 'center' }}>
         <section style={{ ...card, width: 'min(560px, 100%)', textAlign: 'center', padding: '30px 24px' }}>
-          <div style={{ fontSize: 44 }}>⚖️</div>
-          <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', marginTop: 10 }}>Goliath Member Portal</div>
+          <div style={{ fontSize: 44 }}>{E.JUSTICE}</div>
+          <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', marginTop: 10 }}>Member Portal</div>
           <h1 style={{ margin: '8px 0 10px', fontSize: 'clamp(30px, 8vw, 46px)' }}>Appeal a moderation decision</h1>
           <p style={{ ...muted, margin: '0 auto 22px', maxWidth: 470 }}>Sign in with Discord to see decisions linked to your account, submit an appeal when one is available, and check the outcome of appeals you have already sent.</p>
-          <button style={button} onClick={() => { window.location.href = `/api/auth/login?next=${encodeURIComponent(currentReturnPath())}`; }}>Continue with Discord</button>
+          <button style={button} onClick={() => { goDashboard(`/api/auth/login?next=${encodeURIComponent(currentReturnPath())}`); }}>Continue with Discord</button>
           <p style={{ ...muted, fontSize: 13, margin: '18px 0 0' }}>You can still use this page if you are no longer a member of the server.</p>
         </section>
       </main>
@@ -251,49 +294,88 @@ export default function Appeals() {
   }
 
   const displayName = user?.global_name || user?.globalName || user?.username || 'Discord user';
+  const avatarUrl = discordAvatar(user);
 
   return (
     <main style={page}>
       <div style={{ width: 'min(1040px, 100%)', margin: '0 auto', display: 'grid', gap: 18 }}>
         <header style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Goliath Member Portal</div>
-            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>⚖️ Appeals</h1>
-            <p style={{ ...muted, margin: 0 }}>Signed in as <strong style={{ color: '#e5edf8' }}>{displayName}</strong></p>
+            <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Member Portal</div>
+            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>{E.DIAMOND} Member Portal</h1>
+            <p style={{ ...muted, margin: 0 }}>Your account, community history and appeals.</p>
           </div>
           <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={pill}>{pendingCount ? `⏳ ${pendingCount} under review` : '✓ No appeals under review'}</span>
+            {avatarUrl ? <img src={avatarUrl} alt="" width="36" height="36" style={{ borderRadius: '50%' }} referrerPolicy="no-referrer" /> : null}
+            <strong style={{ fontSize: 14 }}>{displayName}</strong>
             <button style={secondaryButton} onClick={async () => { await api.logout().catch(() => null); window.location.reload(); }}>Sign out</button>
           </div>
         </header>
 
-        <section style={{ ...card, borderColor: 'rgba(59,130,246,.38)', background: 'linear-gradient(135deg, rgba(24,49,95,.9), rgba(7,18,35,.96))' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 10 }}>
-            <div style={{ color: '#93c5fd', fontWeight: 900, fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase' }}>Fair review. Clear outcome.</div>
-            <h2 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 34px)' }}>Welcome to Goliath Appeals</h2>
-            <p style={{ ...muted, margin: 0, maxWidth: 760 }}>If a moderation decision affected your account and is eligible for appeal, you can ask for it to be reviewed here. Explain what you believe should be reconsidered, send your appeal, then return here to follow its progress.</p>
+        <section style={{ ...card, borderColor: 'rgba(59,130,246,.38)' }}>
+          <h2 style={{ margin: '0 0 5px', fontSize: 'clamp(22px, 4vw, 30px)' }}>Welcome back, {displayName}</h2>
+          <p style={{ ...muted, margin: '0 0 18px' }}>Your personal space for community activity, account restrictions, case history and appeals.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {[[`${E.FOLDER} Cases`, cases.length], [`${E.LOCK} Active Restrictions`, restrictions.length], [`${E.TIMER} Under Review`, pendingCount], [`${E.SUCCESS} Resolved Appeals`, resolvedCount]].map(([label, count]) => (
+              <div key={label} style={{ padding: 14, borderRadius: 13, background: 'rgba(2,6,23,.35)', border: '1px solid rgba(148,163,184,.15)' }}>
+                <div style={{ ...muted, fontSize: 13 }}>{label}</div><strong style={{ fontSize: 25 }}>{count}</strong>
+              </div>
+            ))}
           </div>
         </section>
 
-        <section aria-label="How appeals work" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-          {[
-            ['1', 'Check your cases', 'We show decisions linked to this Discord account and clearly mark the ones you can appeal.'],
-            ['2', 'Tell us your side', 'Choose an eligible case and explain, in your own words, why you believe the decision should be reviewed.'],
-            ['3', 'Track the result', 'Once submitted, your appeal stays on this page so you can see when it is under review and when a decision is made.'],
-          ].map(([number, title, copy]) => (
-            <div key={number} style={{ ...card, padding: 18 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', background: '#1d4ed8', fontWeight: 900, marginBottom: 12 }}>{number}</div>
-              <strong style={{ fontSize: 17 }}>{title}</strong>
-              <p style={{ ...muted, margin: '7px 0 0', fontSize: 14 }}>{copy}</p>
-            </div>
+        <nav aria-label="Member portal sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {[['overview', `${E.HOME} Overview`], ['cases', `${E.JUSTICE} Cases & Appeals`], ['restrictions', `${E.LOCK} Restrictions`], ['timeline', `${E.DATE} Timeline`], ['profile', `${E.USER} Profile`]].map(([id, label]) => (
+            <button key={id} type="button" aria-current={portalTab === id ? 'page' : undefined} style={{ ...secondaryButton, background: portalTab === id ? '#2563eb' : '#18273c' }} onClick={() => { if (id === 'cases') { goDashboard('/appeals'); return; } if (localDashboardPath(window.location.pathname).replace(/\/+$/, '') === '/appeals') window.history.replaceState({}, '', dashboardPath('/portal')); setPortalTab(id); }}>{label}</button>
           ))}
-        </section>
+        </nav>
+        {(portalTab === 'overview' || portalTab === 'restrictions') ? (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>{E.LOCK} Account Restrictions</h2>
+            {restrictions.length ? restrictions.map(item => (
+              <div key={item.guildId} style={{ border: '1px solid rgba(245,158,11,.3)', borderRadius: 12, padding: 14, marginTop: 10 }}>
+                <strong>{item.guildName} · {item.mode === 'investigation' ? 'Investigation hold' : 'Security restriction'}</strong>
+                <p style={{ ...muted, margin: '6px 0' }}>Status: Active{item.caseId ? ` · Case #${item.caseId}` : ''}</p>
+                <small style={muted}>Started: {formatDate(item.startedAt)}. Contact the community's management team for further information.</small>
+              </div>
+            )) : <p style={muted}>No active restrictions are currently recorded for your account.</p>}
+          </section>
+        ) : null}
+        {(portalTab === 'overview' || portalTab === 'timeline') ? (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>{E.DATE} Personal Timeline</h2>
+            {timeline.length ? <ol style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 10 }}>
+              {timeline.slice(0, portalTab === 'overview' ? 6 : 100).map(item => (
+                <li key={item.key} style={{ borderLeft: '3px solid #60a5fa', padding: '4px 0 4px 13px' }}>
+                  <strong>{item.label}</strong><div style={muted}>{item.guild || 'Community'} · {formatDate(item.date)}</div>
+                </li>
+              ))}
+            </ol> : <p style={muted}>No activity is available to display yet.</p>}
+          </section>
+        ) : null}
+        {portalTab === 'profile' ? (
+          <section style={{ ...card, padding: 'clamp(20px, 4vw, 32px)' }}>
+            <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 900, letterSpacing: '.1em', textTransform: 'uppercase' }}>Your account</div>
+            <h2 style={{ margin: '8px 0 6px', fontSize: 'clamp(24px, 4vw, 30px)' }}>{E.USER} My Profile</h2>
+            <p style={{ ...muted, margin: '0 0 22px' }}>The account connected to your member portal.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: 20, borderRadius: 16, background: 'rgba(2,6,23,.36)', border: '1px solid rgba(148,163,184,.16)' }}>
+              {avatarUrl ? <img src={avatarUrl} alt="" width="64" height="64" style={{ borderRadius: '50%', border: '2px solid rgba(96,165,250,.4)' }} referrerPolicy="no-referrer" /> : <div aria-hidden="true" style={{ width: 64, height: 64, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#18273c', fontSize: 28 }}>{E.USER}</div>}
+              <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>Signed in as</div>
+                <strong style={{ display: 'block', marginTop: 4, fontSize: 20 }}>{displayName}</strong>
+                {user?.username && user.username !== displayName ? <div style={{ ...muted, fontSize: 14 }}>@{user.username}</div> : null}
+              </div>
+              <span style={{ ...pill, marginLeft: 'auto', color: '#bbf7d0' }}>✓ Connected</span>
+            </div>
+            <MemberCommunityProfile />
+          </section>
+        ) : null}
 
-        {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>⚠️ {error}</div> : null}
+        {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>{E.WARNING} {error}</div> : null}
         {success ? <div role="status" style={{ ...card, borderColor: 'rgba(34,197,94,.48)', color: '#bbf7d0' }}>✓ {success}</div> : null}
-        {deepLinkNotice ? <div role="status" style={{ ...card, borderColor: 'rgba(245,158,11,.45)', color: '#fde68a' }}>ℹ️ {deepLinkNotice}</div> : null}
+        {deepLinkNotice ? <div role="status" style={{ ...card, borderColor: 'rgba(245,158,11,.45)', color: '#fde68a' }}>{E.INFO} {deepLinkNotice}</div> : null}
 
-        <section style={card}>
+        {(portalTab === 'overview' || portalTab === 'cases') ? <section style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'start', flexWrap: 'wrap' }}>
             <div>
               <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase' }}>Your account</div>
@@ -301,6 +383,12 @@ export default function Appeals() {
               <p style={{ ...muted, margin: 0 }}>Only cases connected to this Discord account appear here.</p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select aria-label="Filter cases" value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} style={{ ...input, width: 'auto', maxWidth: '100%', padding: '10px 12px' }}>
+                <option value="all">All Cases</option>
+                <option value="eligible">Eligible for Appeal</option>
+                <option value="pending">Under Review</option>
+                <option value="resolved">Resolved</option>
+              </select>
               <span style={pill}>{appealableCount} available to appeal</span>
               <button style={secondaryButton} onClick={() => load({ preserveSuccess: true })}>Refresh</button>
             </div>
@@ -308,30 +396,44 @@ export default function Appeals() {
 
           {!cases.length ? (
             <div style={{ marginTop: 20, border: '1px dashed rgba(148,163,184,.25)', borderRadius: 16, padding: '34px 20px', textAlign: 'center', background: 'rgba(2,6,23,.28)' }}>
-              <div style={{ fontSize: 38, marginBottom: 8 }}>📄</div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 20 }}>Nothing to appeal right now</h3>
-              <p style={{ ...muted, maxWidth: 590, margin: '0 auto' }}>There are no decisions currently available to appeal on this Discord account, and you do not have any previous appeals to show.</p>
+              <div style={{ fontSize: 38, marginBottom: 8 }}>{E.DOCUMENT}</div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 20 }}>No cases to display</h3>
+              <p style={{ ...muted, maxWidth: 590, margin: '0 auto' }}>There are no member-visible cases or previous appeals to show for this Discord account.</p>
               <p style={{ ...muted, maxWidth: 590, margin: '10px auto 0', fontSize: 14 }}>If you expected to see a case here, check that you signed in with the same Discord account that received the moderation action.</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
-              {cases.map((item) => (
+              {!visibleCases.length ? <p role="status" style={muted}>No cases match this filter.</p> : null}
+              {visibleCases.map((item) => (
                 <article key={`${item.guildId}:${item.caseId}`} style={{ border: selected?.guildId === item.guildId && selected?.caseId === item.caseId ? '1px solid rgba(96,165,250,.8)' : '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 17, background: 'rgba(2,6,23,.42)', overflowWrap: 'anywhere' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'start' }}>
                     <div>
-                      <div style={{ color: '#93c5fd', fontSize: 13, fontWeight: 800 }}>{item.guildName || 'Discord Server'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#93c5fd', fontSize: 13, fontWeight: 800 }}>
+                        {item.guildIconUrl ? <img src={item.guildIconUrl} alt="" width="28" height="28" style={{ borderRadius: 9 }} loading="lazy" /> : null}
+                        <span>{item.guildName || 'Discord Server'}</span>
+                      </div>
                       <strong style={{ display: 'block', marginTop: 3, fontSize: 18 }}>Case #{item.caseId} · {item.actionLabel}</strong>
                       <div style={{ marginTop: 5, color: '#94a3b8', fontSize: 13 }}>Decision recorded {formatDate(item.decisionAt || item.createdAt)}</div>
                     </div>
-                    <span style={{ ...pill, background: item.eligible ? 'rgba(34,197,94,.1)' : 'rgba(148,163,184,.08)', borderColor: item.eligible ? 'rgba(34,197,94,.25)' : 'rgba(148,163,184,.18)', color: item.eligible ? '#bbf7d0' : '#cbd5e1' }}>{item.eligible ? '✓ Appeal available' : 'Appeal unavailable'}</span>
+                    {item.eligible ? <span style={{ ...pill, color: '#bbf7d0' }}>✓ Eligible to Appeal</span> : null}
                   </div>
 
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    <span style={{ ...pill, color: caseStatus(item.status).color }}>{caseStatus(item.status).label}</span>
+                    {item.appeals.some(a => a.status === 'approved') ? <span style={{ ...pill, color: '#bbf7d0' }}>{E.SUCCESS} Appeal Approved</span> : null}
+                    {item.appeals.some(a => a.status === 'pending') ? <span style={{ ...pill, color: '#fde68a' }}>{E.TIMER} Under Review</span> : null}
+                    {item.appeals.some(a => a.status === 'denied') ? <span style={{ ...pill, color: '#fca5a5' }}>{E.ERROR} Appeal Denied</span> : null}
+                  </div>
+                  <button type="button" style={{ ...secondaryButton, marginTop: 12 }} aria-expanded={Boolean(expandedCases[`${item.guildId}:${item.caseId}`])} onClick={() => setExpandedCases(prev => ({ ...prev, [`${item.guildId}:${item.caseId}`]: !prev[`${item.guildId}:${item.caseId}`] }))}>
+                    {expandedCases[`${item.guildId}:${item.caseId}`] ? 'Hide Details ▲' : 'View Case Details ▼'}
+                  </button>
+                  {expandedCases[`${item.guildId}:${item.caseId}`] ? (<>
                   <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: 'rgba(15,23,42,.65)' }}>
                     <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>What this case is about</div>
                     <p style={{ lineHeight: 1.6, margin: '6px 0 0' }}>{item.publicSummary || 'No additional public summary is available for this case.'}</p>
                   </div>
 
-                  {!item.eligible && item.eligibilityMessage ? <p style={{ color: '#a7b4c8', fontSize: 13, lineHeight: 1.55, margin: '12px 0 0' }}>{cleanEligibilityMessage(item.eligibilityMessage)}</p> : null}
+                  {!item.eligible && !item.appeals.length && item.eligibilityMessage ? <p style={{ color: '#a7b4c8', fontSize: 13, lineHeight: 1.55, margin: '12px 0 0' }}>{cleanEligibilityMessage(item.eligibilityMessage)}</p> : null}
 
                   {item.appeals.length ? (
                     <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
@@ -339,8 +441,9 @@ export default function Appeals() {
                       {item.appeals.map((appeal) => (
                         <div key={appeal.id} style={{ borderLeft: `3px solid ${statusTone(appeal.status)}`, padding: '5px 0 5px 11px', lineHeight: 1.5 }}>
                           <strong style={{ color: statusTone(appeal.status) }}>{statusLabel(appeal.status)}</strong>
-                          <div style={{ color: '#a7b4c8', fontSize: 13 }}>Submitted {formatDate(appeal.submittedAt)}</div>
-                          {appeal.reviewedAt ? <div style={{ color: '#a7b4c8', fontSize: 13 }}>Reviewed {formatDate(appeal.reviewedAt)}</div> : null}
+                          <div style={{ color: '#a7b4c8', fontSize: 13, marginTop: 5 }} >{E.NOTE} Submitted: {formatDate(appeal.submittedAt)}</div>
+
+                          {appeal.reviewedAt ? <div style={{ color: '#a7b4c8', fontSize: 13 }}>{appeal.status === 'approved' ? E.SUCCESS : appeal.status === 'denied' ? E.ERROR : E.CLIPBOARD} Reviewed: {formatDate(appeal.reviewedAt)}</div> : null}
                           {appeal.reviewNote ? <div style={{ color: '#d7e0ec', marginTop: 5 }}><strong>Review note:</strong> {appeal.reviewNote}</div> : null}
                           {appeal.remedyDetail ? <div style={{ color: '#d7e0ec', marginTop: 4 }}><strong>Outcome:</strong> {appeal.remedyDetail}</div> : null}
                         </div>
@@ -348,12 +451,13 @@ export default function Appeals() {
                     </div>
                   ) : null}
 
+                  </>) : null}
                   {item.eligible ? <button style={{ ...button, marginTop: 15 }} onClick={() => chooseCase(item)} disabled={submitting}>Start appeal</button> : null}
                 </article>
               ))}
             </div>
           )}
-        </section>
+        </section> : null}
 
         {selected ? (
           <section ref={appealFormRef} style={{ ...card, borderColor: 'rgba(59,130,246,.4)' }}>
@@ -389,9 +493,9 @@ export default function Appeals() {
           </section>
         ) : null}
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        {portalTab !== 'profile' ? <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 12 }}>
           <div style={card}>
-            <h3 style={{ marginTop: 0 }}>Common questions</h3>
+            <h3 style={{ marginTop: 0 }}>❓ Appeals Help</h3>
             <details style={{ marginBottom: 10 }}>
               <summary style={{ cursor: 'pointer', fontWeight: 800 }}>What can I appeal?</summary>
               <p style={{ ...muted, fontSize: 14 }}>Any case available for appeal will be clearly marked above. Some decisions may need to reach a particular stage before an appeal can be submitted.</p>
@@ -407,11 +511,28 @@ export default function Appeals() {
           </div>
 
           <div style={card}>
-            <h3 style={{ marginTop: 0 }}>Your privacy</h3>
+            <h3 style={{ marginTop: 0 }}>{E.LOCK} Privacy & Security</h3>
             <p style={{ ...muted, marginBottom: 0 }}>This page only shows information that is appropriate for you to see about your own cases and appeals. Private moderator notes and internal review material remain private.</p>
-            <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>🔒 Your appeal is tied to the Discord account you are currently signed in with.</div>
+            <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>{E.LOCK} Your appeal is tied to the Discord account you are currently signed in with.</div>
           </div>
-        </section>
+        </section> : null}
+
+        <footer aria-label="Portal information" style={{ borderTop: '1px solid rgba(148,163,184,.18)', padding: '22px 4px 4px', color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+            <div><strong style={{ color: '#cbd5e1' }}>{E.DIAMOND} Member Portal</strong><div>Your account and community information, in one place.</div></div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+              <details style={{ maxWidth: 330 }}>
+                <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Privacy &amp; security</summary>
+                <p style={{ margin: '8px 0 0' }}>Your portal shows information linked to your account. Private staff notes and internal reviews remain private.</p>
+              </details>
+              <details style={{ maxWidth: 330 }}>
+                <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Switch account</summary>
+                <p style={{ margin: '8px 0 0' }}>Sign out, then sign in with the account you want to use.</p>
+                <button type="button" style={{ ...secondaryButton, marginTop: 10 }} onClick={async () => { await api.logout().catch(() => null); window.location.reload(); }}>Sign out</button>
+              </details>
+            </div>
+          </div>
+        </footer>
       </div>
     </main>
   );

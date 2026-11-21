@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const { MessageFlags } = require('discord.js');
 const giveawaysStore = require('./giveawaysStore');
@@ -119,12 +120,12 @@ async function handleGiveawayInteraction(interaction) {
   if (!interaction?.guildId || !isGiveawayInteraction(interaction)) return false;
   try {
     if (!guildManager.isModuleEnabled(interaction.guildId, 'giveaways')) {
-      await safeReply(interaction, '❌ Giveaways are disabled in this server.');
+      await safeReply(interaction, emojiLabel('ERROR', 'Giveaways are disabled in this server.'));
       return true;
     }
     const [, action, giveawayId] = String(interaction.customId || '').split(':');
-    if (interaction.isButton?.() && action === 'enter') { await interaction.deferUpdate().catch(() => null); await giveawaysManager.enterGiveaway(interaction, giveawayId); await safeReply(interaction, '✅ You entered the giveaway.'); return true; }
-    if (interaction.isButton?.() && action === 'end') { await interaction.deferUpdate().catch(() => null); await giveawaysManager.endGiveaway(interaction, giveawayId); await safeReply(interaction, '✅ Giveaway ended.'); return true; }
+    if (interaction.isButton?.() && action === 'enter') { await interaction.deferUpdate().catch(() => null); await giveawaysManager.enterGiveaway(interaction, giveawayId); await safeReply(interaction, emojiLabel('HEALTHY', 'You entered the giveaway.')); return true; }
+    if (interaction.isButton?.() && action === 'end') { await interaction.deferUpdate().catch(() => null); await giveawaysManager.endGiveaway(interaction, giveawayId); await safeReply(interaction, emojiLabel('HEALTHY', 'Giveaway ended.')); return true; }
     return false;
   } catch (error) { await safeReply(interaction, `❌ Giveaway action failed: ${error.message}`); return true; }
 }

@@ -1,11 +1,13 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { navigationButton } = require('../../guild/goliathNavigation');
 const intelligence = require('./intelligence');
 const decisioning = require('./memberDecisioning');
 const { db } = require('./storage');
 const { recordModerationSystemEvent } = require('./permissions');
-const verificationStore = require('../../../modules/securityStudio/verificationStore');
+const verificationStore = require('../../../modules/securityStudio/verification/verificationStore');
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: false,
@@ -92,18 +94,30 @@ function suspectedAccounts(member) {
   return rows.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
-function buildActionRows(member) {
+function investigationWatchEnabled(guildId, userId) {
+  try {
+    const rows = db.prepare("SELECT after_value, metadata FROM case_audit WHERE guild_id = ? AND event = 'moderation.member_scan.watch_updated' ORDER BY created_at DESC LIMIT 250").all(String(guildId));
+    for (const row of rows) {
+      let metadata = {}, after = {};
+      try { metadata = JSON.parse(row.metadata || '{}'); after = JSON.parse(row.after_value || '{}'); } catch { continue; }
+      if (String(metadata.targetId || '') === String(userId)) return after.enabled === true;
+    }
+  } catch {}
+  return false;
+}
+
+function buildActionRows(member, watched = false) {
   if (member.user.bot) return [];
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`joinintel:view:${member.guild.id}:${member.id}`).setLabel('Open Intelligence').setEmoji('🧠').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`mod_open_quarantine:${member.id}`).setLabel('Investigate').setEmoji('🔎').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`joinintel:watch:${member.guild.id}:${member.id}`).setLabel('Watch Member').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`joinintel:clear:${member.guild.id}:${member.id}`).setLabel('Mark Clear').setEmoji('✅').setStyle(ButtonStyle.Success),
+    navigationButton(`joinintel:view:${member.guild.id}:${member.id}`, 'Open Intelligence', ButtonStyle.Primary).setEmoji(EMOJIS.MOD_INTELLIGENCE),
+    navigationButton(`mod_open_quarantine:${member.id}`, 'Investigate', ButtonStyle.Danger).setEmoji(EMOJIS.INVESTIGATE),
+    navigationButton(`joinintel:watch:${member.guild.id}:${member.id}`, watched ? 'Remove Watch' : 'Watch Member', watched ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji(EMOJIS.WELCOME_PREVIEW),
+    navigationButton(`joinintel:clear:${member.guild.id}:${member.id}`, 'Mark Clear', ButtonStyle.Success).setEmoji(EMOJIS.SUCCESS),
   )];
 }
 
-function buildEmbed(member, context, local, suspects, scanId, assessment) {
-  const risk = context.risk || { score: 0, label: '🟢 Low', reasons: [] };
+function buildEmbed(member, context, local, suspects, scanId, assessment, investigationWatched = false) {
+  const risk = context.risk || { score: 0, label: `${EMOJIS.ACTIVE} Low`, reasons: [] };
   const watch = context.watch || { state: 'clear' };
   const reputation = context.reputation || {};
   const history = context.guildHistory || [];
@@ -119,23 +133,23 @@ function buildEmbed(member, context, local, suspects, scanId, assessment) {
 
   const embed = new EmbedBuilder()
     .setColor(decision.color)
-    .setTitle(`🧠 Join Intelligence • ${member.user.tag || member.user.username}`)
+    .setTitle(`${EMOJIS.BRAIN} Join Intelligence • ${member.user.tag || member.user.username}`)
     .setDescription([
-      `**Automatic join scan** • \`${scanId}\``,
       `**Member:** ${member.user} • \`${member.id}\``,
+      `**Scan:** \`${scanId}\``, 
       '',
       `${decision.emoji} **Decision: ${decision.label}**`,
       assessment.reasons.length ? assessment.reasons.slice(0, 4).map((reason) => `• ${reason}`).join('\n') : '• No attention threshold reached.',
       '',
-      'Decisioning is an intelligence aid only. It does not automatically punish, isolate or blacklist the member.',
+      'Assessment only • No automatic moderation action taken.',
     ].join('\n'))
     .addFields(
-      { name: '👤 Account', value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays}d old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Screening: **${member.pending ? 'Pending' : 'Complete'}** • Bot: **${member.user.bot ? 'Yes' : 'No'}**`].join('\n'), inline: false },
-      { name: '🚦 Risk', value: [`**${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Watchlist: **${String(watch.state || 'clear').toUpperCase()}** • Local cases: **${local.caseCount}** • Active: **${local.activeCases}** • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
-      { name: '🌐 Network Intelligence', value: [`Observed guilds: **${history.length}** • Cross-guild cases: **${context.network?.caseCount || 0}** • Cross-guild bans: **${context.network?.banCount || 0}**`, `External records: **${externalCount}** • Verified: **${reputation.verifiedExternal || 0}** • Submitted: **${reputation.submitted || 0}** • Unverified: **${reputation.unverified || 0}**`].join('\n'), inline: false },
-      { name: '🔗 Account Correlation', value: `${suspectText.slice(0, 900)}\n\n*Heuristic correlation is an investigation aid, not proof of shared ownership.*`, inline: false },
+      { name: `${EMOJIS.USER} Account`, value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays} days old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Verification: **${member.pending ? 'Pending' : 'Complete'}** • Account type: **${member.user.bot ? 'Bot' : 'Member'}**`].join('\n'), inline: false },
+      { name: `${EMOJIS.RISK} Risk & Moderation`, value: [`Risk: **${risk.score || 0}/100 • ${risk.label || `${EMOJIS.ACTIVE} Low`}**`, `Investigation Watch: **${investigationWatched ? 'ON' : 'OFF'}** • Watchlist: **${String(watch.state || 'clear').toUpperCase()}**`, `Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
+      { name: `${EMOJIS.FEED} Network Intelligence`, value: [`Observed servers: **${history.length}** • Cases: **${context.network?.caseCount || 0}** • Bans: **${context.network?.banCount || 0}**`, `External reports: **${externalCount}** (Verified: ${reputation.verifiedExternal || 0} • Submitted: ${reputation.submitted || 0} • Unverified: ${reputation.unverified || 0})`].join('\n'), inline: false },
+      { name: `${EMOJIS.LINK} Account Correlation`, value: suspects.length ? `${suspectText.slice(0, 850)}\n\n*Possible matches require staff verification.*` : suspectText, inline: false },
     )
-    .setFooter({ text: 'Automatic Join Intelligence • report remains in-channel; staff actions open privately where appropriate' })
+    .setFooter({ text: 'Goliath • Join Intelligence' })
     .setTimestamp();
   const avatar = member.user.displayAvatarURL?.({ size: 256 });
   if (avatar) embed.setThumbnail(avatar);
@@ -161,6 +175,7 @@ async function scanMemberOnJoin(member) {
   const assessment = decisioning.classify({ ...context, guild: member.guild }, suspects);
   decisioning.saveDecision(member.guild.id, member.id, assessment, { trigger: 'guild_member_add', scanId });
   const channel = await resolveOutputChannel(member);
+  const watched = investigationWatchEnabled(member.guild.id, member.id);
 
   recordModerationSystemEvent({
     guildId: member.guild.id,
@@ -175,7 +190,7 @@ async function scanMemberOnJoin(member) {
       identity: { username: member.user.username || null, globalName: member.user.globalName || null, displayName: member.displayName || null, avatarHash: member.user.avatar || null, accountCreatedAt: member.user.createdTimestamp || null, joinedAt: member.joinedTimestamp || null },
       network: { otherGuildCount: context.network?.guildCount || 0, otherGuildCaseCount: context.network?.caseCount || 0 },
       risk: context.risk,
-      investigation: { watched: false, noteCount: 0 },
+      investigation: { watched, noteCount: 0 },
       persistentLinkEvidence: [], visibleCapabilities: { automatic: true, fullSystemContext: true },
     },
     metadata: { targetId: member.id, automatic: true, trigger: 'guild_member_add', dataSources: ['discord_api', 'guild_cache', 'moderation_cases', 'warnings', 'member_intelligence', 'cross_guild_same_id_cases', 'watchlist', 'reputation'] },
@@ -186,9 +201,18 @@ async function scanMemberOnJoin(member) {
     return { success: true, scanId, delivered: false, reason: 'missing_output_channel', risk: context.risk, assessment };
   }
 
-  const embed = buildEmbed(member, context, local, suspects, scanId, assessment);
-  await channel.send({ embeds: [embed], components: buildActionRows(member), allowedMentions: { parse: [] } });
-  return { success: true, scanId, delivered: true, channelId: channel.id, risk: context.risk, assessment, suspectedCount: suspects.length };
+  const embed = buildEmbed(member, context, local, suspects, scanId, assessment, watched);
+  const report = await channel.send({ embeds: [embed], components: buildActionRows(member, watched), allowedMentions: { parse: [] } });
+  recordModerationSystemEvent({
+    guildId: member.guild.id,
+    actorId: 'system:auto-join-intelligence',
+    event: 'moderation.member_scan.report_delivered',
+    action: 'member_scan',
+    targetId: member.id,
+    after: { scanId, channelId: channel.id, messageId: report.id },
+    metadata: { targetId: member.id, scanId, channelId: channel.id, messageId: report.id },
+  });
+  return { success: true, scanId, delivered: true, channelId: channel.id, messageId: report.id, risk: context.risk, assessment, suspectedCount: suspects.length };
 }
 
 module.exports = {

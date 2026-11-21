@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 import { api } from '../../../services/apiClient';
-import { EmptyState } from '../../../shared/PageShell';
+import { EmptyState, DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 
 function inputStyle(theme) {
   return {
@@ -52,7 +52,7 @@ export default function TempVoiceControlCentre({ theme, guildId, channels = [], 
     try {
       onError?.('');
       await request();
-      onMessage?.(`✅ ${label}`);
+      onMessage?.(`${E.SUCCESS} ${label}`);
       await onRefresh?.();
     } catch (error) {
       onError?.(error.message || `${label} failed.`);

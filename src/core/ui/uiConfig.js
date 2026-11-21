@@ -1,3 +1,5 @@
+const { EMOJIS: SHARED_EMOJIS } = require('./emojis');
+
 module.exports = {
   COLORS: {
     PRIMARY: '#5865F2',
@@ -10,46 +12,6 @@ module.exports = {
     NEUTRAL: '#2B2D31'
   },
 
-  EMOJIS: {
-    // Navigation
-    DASHBOARD: '⚙️',
-    ACTIONS: '⚖️',
-    CASES: '📜',
-    TOOLS: '🧰',
-    ANALYTICS: '📊',
-
-    // People
-    USER: '👤',
-    MODERATOR: '🔐',
-
-    // Actions
-    WARNING: '⚠️',
-    TIMEOUT: '⏳',
-    KICK: '👢',
-    BAN: '🔨',
-
-    // Status
-    SUCCESS: '✅',
-    ERROR: '❌',
-    ACTIVE: '🟢',
-    EXPIRED: '⌛',
-    REVERSED: '🔁',
-
-    // Cases / data
-    CASE: '🧾',
-    NOTE: '📝',
-    EDIT: '✏️',
-    DELETE: '🗑️',
-    SEARCH: '🔍',
-
-    // UI
-    BACK: '⬅️',
-    NEXT: '➡️',
-    REFRESH: '🔄',
-
-    // Misc
-    SETTINGS: '⚙️',
-    BULK: '📦',
-    FIRE: '🔥'
-  }
+  // Backward-compatible moderation UI mapping. Values live in ./emojis.js.
+  EMOJIS: Object.freeze({ ...SHARED_EMOJIS, DASHBOARD: SHARED_EMOJIS.MODERATION_DASHBOARD })
 };

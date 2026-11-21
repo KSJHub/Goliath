@@ -1,4 +1,6 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -35,7 +37,7 @@ const CORE_SEARCH_TERMS = Object.freeze({
 
 const row = (...items) => new ActionRowBuilder().addComponents(...items);
 const button = (id, label, style = ButtonStyle.Secondary, emoji = null) => {
-  const item = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+  const item = navigationButton(id, label, style);
   if (emoji) item.setEmoji(emoji);
   return item;
 };
@@ -144,7 +146,7 @@ function recordMemberUse(interaction, emoji, context) {
 function buildLauncher() {
   return {
     content: 'Looking for an emoji? Search with `/e find`, or open the full emoji list below.',
-    components: [row(button('user:emojis:browse', 'Browse Emojis', ButtonStyle.Primary, '😀'))],
+    components: [row(button('user:emojis:browse', 'Browse Emojis', ButtonStyle.Primary, EMOJIS.AUTOMOD_EMOJI))],
   };
 }
 
@@ -189,7 +191,7 @@ async function buildPanel(interaction, selectedPage = 'all:0') {
     content: null,
     embeds: [new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle('😀 Emoji Browser')
+      .setTitle(emojiLabel('AUTOMOD_EMOJI', 'Emoji Browser'))
       .setDescription(description)
       .setFooter({ text: `Requested by ${displayName(interaction)}` })
       .setTimestamp()],
@@ -259,13 +261,13 @@ async function buildMessageConversionPreview(interaction, message) {
     return { content: 'No available Emoji Studio shortcodes were found in that message. Try something like `:youtube:` or `:twitch:`.', components: [] };
   }
   return {
-    embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle('😀 Convert Emoji Shortcodes').setDescription([
+    embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle(emojiLabel('AUTOMOD_EMOJI', 'Convert Emoji Shortcodes')).setDescription([
       '**Preview**',
       result.resolved.slice(0, 3500),
       '',
       'Your original message will stay in place. Press **Post Converted** and Goliath will reply to it with the converted version.',
     ].join('\n'))],
-    components: [row(button(`user:emojis:convert-post:${message.channelId}:${message.id}`, 'Post Converted', ButtonStyle.Primary, '😀'))],
+    components: [row(button(`user:emojis:convert-post:${message.channelId}:${message.id}`, 'Post Converted', ButtonStyle.Primary, EMOJIS.AUTOMOD_EMOJI))],
   };
 }
 

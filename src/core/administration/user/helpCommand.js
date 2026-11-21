@@ -1,6 +1,7 @@
 'use strict';
 
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
+const { EMOJIS } = require('../../ui/emojis');
 const { enforceCommandAccess } = require('../../commands/commandAccess');
 const { showHelp } = require('./utilities');
 
@@ -34,7 +35,7 @@ async function showFaq(interaction, query) {
   const matches = faqMatches(query);
   const embed = new EmbedBuilder()
     .setColor(matches.length ? 0x5865F2 : 0xFEE75C)
-    .setTitle(matches.length ? '❓ Goliath Help • FAQ' : '🔎 Goliath Help • No Match')
+    .setTitle(matches.length ? `${EMOJIS.USER_HELP} Goliath Help • FAQ` : `${EMOJIS.SEARCH} Goliath Help • No Match`)
     .setDescription(matches.length
       ? matches.map((item) => `**${item.q}**\n${item.a}`).join('\n\n').slice(0, 4096)
       : `I couldn't find a FAQ entry for **${String(query).slice(0, 200)}**.\n\nRun \`/help\` without a question to browse the features and commands available to you.`)

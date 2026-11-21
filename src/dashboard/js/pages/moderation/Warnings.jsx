@@ -3,6 +3,7 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/apiClient';
 import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
 import PageShell, {
+  DASHBOARD_EMOJIS as E,
   EmptyState,
   LoadingPanel,
   Notice,
@@ -236,7 +237,7 @@ export default function Warnings({ selectedGuild, theme }) {
         if (!current) return null;
         return nextWarnings.find((item) => getWarningKey(item) === getWarningKey(current)) || null;
       });
-      setSyncMessage('✅ Warnings synced live.');
+      setSyncMessage(`${E.SUCCESS} Warnings synced live.`);
     });
   }, [guildId]);
 

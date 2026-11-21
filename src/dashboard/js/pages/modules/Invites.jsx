@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -60,13 +61,15 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
         api.getGuildChannels(guildId),
         api.getGuildRoles(guildId),
       ]);
-      setConfig(main.config || {});
+      if (main?.success !== true || typeof main.config?.enabled !== 'boolean' || !Array.isArray(main.inviteLinks) || !Array.isArray(main.leaderboard) || hist?.success !== true || !Array.isArray(hist.history) || healthData?.success !== true || !healthData.health || !(Array.isArray(channelData) || Array.isArray(channelData?.channels)) || !(Array.isArray(roleData) || Array.isArray(roleData?.roles))) throw new Error('Invite Studio returned incomplete data. Existing dashboard data has been retained. Refresh to retry.');
+      setConfig(main.config);
       setInviteLinks(main.inviteLinks || []);
       setLeaderboard(main.leaderboard || []);
       setHistory(hist.history || []);
       setHealth(healthData.health || null);
       setChannels(list(channelData, 'channels'));
       setRoles(list(roleData, 'roles'));
+      return main.config;
     } catch (e) { setError(e.message || 'Failed to load Invite Studio.'); }
   }
 
@@ -74,7 +77,7 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
 
   async function action(name, fn, success) {
     setBusy(name); setError(''); setNotice('');
-    try { const result = await fn(); setNotice(success || 'Action completed.'); await load(); return result; }
+    try { const result = await fn(); if (result?.success !== true) throw new Error(result?.error || 'Invite Studio did not confirm the action.'); const refreshed = await load(); if (!refreshed) return result; if (name === 'enabled' && (typeof result.config?.enabled !== 'boolean' || refreshed.enabled !== result.config.enabled)) throw new Error('Module status could not be confirmed. Refresh before retrying.'); setNotice(name === 'enabled' ? `Invite Studio ${refreshed.enabled ? 'enabled' : 'disabled'} successfully.` : (success || 'Action completed.')); return result; }
     catch (e) { setError(e.message || 'Invite Studio action failed.'); return null; }
     finally { setBusy(''); }
   }
@@ -102,7 +105,7 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
     catch { setError('Could not copy the invite link.'); }
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="✉️" title="Select a server" description="Select a server to manage Invite Studio." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.DIRECT_MESSAGE} title="Select a server" description="Select a server to manage Invite Studio." />;
 
   const activeReferrals = leaderboard.reduce((total, item) => total + Number(item.active || 0), 0);
   const departedReferrals = leaderboard.reduce((total, item) => total + Number(item.left || 0), 0);
@@ -113,14 +116,14 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16, flexWrap:'wrap' }}>
         <div><h1 style={{ margin: 0 }}>Invite Studio</h1><p style={{ color: theme.mutedText, marginBottom: 0 }}>Create role-aware Discord invites, track referrals, inspect join history and manage rewards from one module.</p></div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button style={button(theme, config?.enabled ? 'danger' : 'success')} disabled={busy} onClick={() => action('enabled', () => api.request(`/api/invites/${guildId}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled: !config?.enabled }) }), 'Module status updated.')}>{config?.enabled ? 'Disable Module' : 'Enable Module'}</button>
+          <button style={button(theme, config?.enabled ? 'danger' : 'success')} disabled={!!busy || typeof config?.enabled !== 'boolean'} onClick={() => action('enabled', () => api.request(`/api/invites/${guildId}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled: !config?.enabled }) }), 'Module status updated.')}>{busy === 'enabled' ? 'Updating…' : typeof config?.enabled !== 'boolean' ? 'Loading status…' : config.enabled ? 'Disable Module' : 'Enable Module'}</button>
           <button style={button(theme,'success')} disabled={busy} onClick={() => action('sync', () => api.request(`/api/invites/${guildId}/sync`, { method: 'POST' }), 'Invite cache synchronized.')}>Sync Invites</button>
         </div>
       </div>
     </Card>
 
     <div style={cardGrid}>
-      <Stat theme={theme} label="Status" value={config?.enabled ? 'Enabled' : 'Disabled'} />
+      <Stat theme={theme} label="Status" value={<span style={{ color: typeof config?.enabled !== 'boolean' ? theme.mutedText : config.enabled ? '#86efac' : '#fca5a5' }}>{typeof config?.enabled !== 'boolean' ? 'Unknown' : config.enabled ? 'Enabled' : 'Disabled'}</span>} />
       <Stat theme={theme} label="Invite Links" value={inviteLinks.length} detail={`${totalUses} recorded uses`} />
       <Stat theme={theme} label="Tracked Joins" value={analytics.tracked || 0} detail={`${analytics.unknown || 0} unknown`} />
       <Stat theme={theme} label="Active Referrals" value={activeReferrals} detail={`${departedReferrals} departed`} />
@@ -161,7 +164,7 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
 
     {activeTab === 'health' && <>
       <Card theme={theme}><h2 style={{ marginTop:0 }}>Module health</h2><p style={{ color:theme.mutedText }}>Checks permissions, invite access, role hierarchy, configured channels and runtime synchronization.</p><div style={{ display:'flex',gap:10,flexWrap:'wrap' }}><button style={button(theme,'primary')} disabled={busy} onClick={()=>action('repair',()=>api.request(`/api/invites/${guildId}/repair`,{method:'POST'}),'Repair completed.')}>Run Repair</button><button style={button(theme)} disabled={busy} onClick={load}>Refresh Health</button><a style={{ ...button(theme),textDecoration:'none' }} href={`/api/invites/${guildId}/export`}>Export Data</a></div></Card>
-      <Card theme={theme}><h3 style={{ marginTop:0 }}>{health?.healthy ? '✅ Healthy' : '⚠️ Attention required'}</h3><div style={{ display:'grid',gap:8 }}>{(health?.issues || []).map((issue,index)=><div key={`issue-${index}`}>❌ {issue.code || issue.reason || JSON.stringify(issue)}</div>)}{(health?.warnings || []).map((warning,index)=><div key={`warning-${index}`}>⚠️ {warning.code || warning.reason || JSON.stringify(warning)}</div>)}{health?.healthy && <div>No issues detected.</div>}</div></Card>
+      <Card theme={theme}><h3 style={{ marginTop:0 }}>{health?.healthy ? `${E.SUCCESS} Healthy` : `${E.WARNING} Attention required`}</h3><div style={{ display:'grid',gap:8 }}>{(health?.issues || []).map((issue,index)=><div key={`issue-${index}`}>{E.ERROR} {issue.code || issue.reason || JSON.stringify(issue)}</div>)}{(health?.warnings || []).map((warning,index)=><div key={`warning-${index}`}>{E.WARNING} {warning.code || warning.reason || JSON.stringify(warning)}</div>)}{health?.healthy && <div>No issues detected.</div>}</div></Card>
     </>}
 
     {activeTab === 'settings' && <>

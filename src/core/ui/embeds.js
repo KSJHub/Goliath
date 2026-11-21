@@ -15,12 +15,7 @@ const COLORS = {
   SOFT_PURPLE: '#DC92FF',
 };
 
-const EMOJIS = {
-  SUCCESS: '✅',
-  ERROR: '❌',
-  WARNING: '⚠️',
-  DASHBOARD: '📊',
-};
+const { EMOJIS } = require('./emojis');
 
 /* ---------------- SAFETY ---------------- */
 

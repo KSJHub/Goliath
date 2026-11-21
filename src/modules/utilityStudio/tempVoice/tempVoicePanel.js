@@ -1,4 +1,6 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
@@ -14,22 +16,22 @@ function buildControlRows(channelId, tempChannel = {}) {
 
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}claim:${channelId}`).setLabel('Claim').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${PREFIX}lock:${channelId}`).setLabel(locked ? 'Unlock' : 'Lock').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}hide:${channelId}`).setLabel(hidden ? 'Show' : 'Hide').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}limit:${channelId}:0`).setLabel('No Limit').setStyle(ButtonStyle.Primary)
+      navigationButton(`${PREFIX}claim:${channelId}`, 'Claim', ButtonStyle.Success),
+      navigationButton(`${PREFIX}lock:${channelId}`, locked ? 'Unlock' : 'Lock', ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}hide:${channelId}`, hidden ? 'Show' : 'Hide', ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}limit:${channelId}:0`, 'No Limit', ButtonStyle.Primary)
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}limit:${channelId}:2`).setLabel('Limit 2').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}limit:${channelId}:5`).setLabel('Limit 5').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}limit:${channelId}:10`).setLabel('Limit 10').setStyle(ButtonStyle.Secondary)
+      navigationButton(`${PREFIX}limit:${channelId}:2`, 'Limit 2', ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}limit:${channelId}:5`, 'Limit 5', ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}limit:${channelId}:10`, 'Limit 10', ButtonStyle.Secondary)
     ),
   ];
 }
 
 function buildPanelContent(tempChannel = {}) {
   return [
-    '🎙️ **Temp Voice Controls**',
+    emojiLabel('UTILITY_MIC', '**Temp Voice Controls**'),
     `Owner: <@${tempChannel.ownerId}>`,
     `State: ${tempChannel.locked ? 'Locked' : 'Unlocked'} · ${tempChannel.hidden ? 'Hidden' : 'Visible'} · Limit: ${tempChannel.userLimit || 'None'}`,
     '',

@@ -252,6 +252,26 @@ async function applyAutoRoles(member, options = {}) {
 
   const roleIds = member.user?.bot ? section.botRoles || [] : section.joinRoles || [];
   const uniqueRoleIds = cleanRoleIds(roleIds);
+  // Human join roles are deferred while Verification is active. Persist the
+  // entitlement in this existing module section for restart-safe delivery.
+  if (!member.user?.bot && guildManager.isModuleEnabled(guild.id, 'verification')) {
+    const verificationStore = require('../../securityStudio/verification/verificationStore');
+    const session = verificationStore.getSession(guild.id, member.id);
+    if (session?.state !== 'verified' || member.pending === true) {
+      updateAutoRolesSection(guild.id, (current) => ({
+        ...current,
+        deferredJoinRoles: {
+          ...(current.deferredJoinRoles || {}),
+          [member.id]: {
+            roleIds: uniqueRoleIds,
+            joinedAt: member.joinedAt?.toISOString?.() || null,
+            queuedAt: now(),
+          },
+        },
+      }));
+      return [];
+    }
+  }
   if (!uniqueRoleIds.length) {
     incrementAnalytics(guild.id, { skipped: 1, botsProcessed: member.user?.bot ? 1 : 0, membersProcessed: member.user?.bot ? 0 : 1 });
     return [];
@@ -282,6 +302,44 @@ async function applyAutoRoles(member, options = {}) {
     botsProcessed: member.user?.bot ? 1 : 0,
   });
   return addedRoles;
+}
+
+
+async function releaseDeferredJoinRoles(member) {
+  if (!member?.guild?.id || member.user?.bot || member.pending === true) return [];
+  const guildId = member.guild.id;
+  if (guildManager.isModuleEnabled(guildId, 'verification')) {
+    const store = require('../../securityStudio/verification/verificationStore');
+    if (store.getSession(guildId, member.id)?.state !== 'verified') return [];
+  }
+  const pending = getAutoRolesSection(guildId).deferredJoinRoles?.[member.id];
+  if (!pending || (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.())) return [];
+  if (!isAutoRolesEnabled(guildId)) return [];
+  const assigned = await applyAutoRoles(member, { reason: 'Goliath verified member Auto Roles' });
+  const required = cleanRoleIds(pending.roleIds).filter(id => getAutoRolesSection(guildId).joinRoles.includes(id));
+  const remaining = required.filter(id => !member.roles.cache.has(id) && !assigned.some(role => role.id === id));
+  updateAutoRolesSection(guildId, (section) => {
+    const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
+    const current = deferredJoinRoles[member.id];
+    // A leave/rejoin during role assignment must not overwrite a newer queue entry.
+    if (!current || current.joinedAt !== pending.joinedAt) return section;
+    if (remaining.length) deferredJoinRoles[member.id] = { ...current, roleIds: remaining };
+    else delete deferredJoinRoles[member.id];
+    return { ...section, deferredJoinRoles };
+  });
+  return assigned;
+}
+
+function clearDeferredJoinRoles(guildId, memberId, expectedJoinedAt = undefined) {
+  const existing = getAutoRolesSection(guildId).deferredJoinRoles || {};
+  if (!Object.prototype.hasOwnProperty.call(existing, memberId) || (expectedJoinedAt !== undefined && existing[memberId]?.joinedAt !== expectedJoinedAt)) return false;
+  updateAutoRolesSection(guildId, section => {
+    const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
+    if (!deferredJoinRoles[memberId] || (expectedJoinedAt !== undefined && deferredJoinRoles[memberId].joinedAt !== expectedJoinedAt)) return section;
+    delete deferredJoinRoles[memberId];
+    return { ...section, deferredJoinRoles };
+  });
+  return true;
 }
 
 function configureAutoRoles(guildId, input = {}, meta = {}) {
@@ -344,7 +402,31 @@ async function buildHealthReport(guild) {
     enabled === true && !configured ? 'No automatic roles are configured.' : null,
   ].filter(Boolean);
 
+  // Diagnose unsafe cross-module grants before introducing deferred role delivery.
+  // This check is read-only and preserves every configured role assignment.
+  const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
+  const verificationStore = verificationEnabled ? require('../../securityStudio/verification/verificationStore') : null;
+  const verificationSettings = verificationStore?.getVerificationSection(guild.id)?.settings || {};
+  const restrictedRoleIds = new Set([
+    ...(verificationSettings.roles?.pending || []),
+    ...(verificationSettings.roles?.verifying || []),
+    ...(verificationSettings.roles?.quarantine || []),
+  ].map(String));
+  const conflictingJoinRoles = verificationEnabled
+    ? (section.joinRoles || []).filter((id) => restrictedRoleIds.has(String(id)))
+    : [];
+  const accessBearingJoinRoles = verificationEnabled
+    ? roles.filter((entry) => section.joinRoles.includes(entry.roleId) && entry.exists)
+      .filter((entry) => {
+        const role = guild.roles.cache.get(entry.roleId);
+        return role?.permissions?.has(PermissionFlagsBits.Administrator)
+          || role?.permissions?.has(PermissionFlagsBits.ManageRoles)
+          || role?.permissions?.has(PermissionFlagsBits.ManageChannels);
+      })
+    : [];
   const warnings = [
+    ...conflictingJoinRoles.map((id) => `Auto Role ${id} overlaps a Verification pending, verifying or quarantine role; check role ownership and removal transitions.`),
+    ...accessBearingJoinRoles.map((role) => `Auto Role ${role.name || role.roleId} has elevated permissions and is assigned before Verification completes.`),
     enabled === true && !botMember?.permissions?.has(PermissionFlagsBits.ManageRoles) ? 'Goliath is missing Manage Roles.' : null,
     ...roles.filter((role) => !role.exists).map((role) => `Role ${role.roleId} no longer exists.`),
     ...roles.filter((role) => role.exists && !role.manageable).map((role) => `${role.name || role.roleId} is above Goliath or managed by an integration.`),
@@ -497,6 +579,8 @@ module.exports = {
   validateManageableRole,
   isAutoRolesEnabled,
   applyAutoRoles,
+  releaseDeferredJoinRoles,
+  clearDeferredJoinRoles,
   configureAutoRoles,
   setAutoRolesEnabled,
   addAutoRole,

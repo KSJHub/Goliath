@@ -1,4 +1,6 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 // src/modules/feedbackStudio/forms/formManager.js
 
@@ -88,10 +90,7 @@ function buildFormPanelRows(panel = {}, forms = []) {
   const buttons = forms
     .filter((form) => form.enabled !== false)
     .slice(0, 25)
-    .map((form) => new ButtonBuilder()
-      .setCustomId(buildFormOpenCustomId(form.formId))
-      .setLabel(form.buttonLabel || form.name || 'Open Form')
-      .setStyle(ButtonStyle.Primary));
+    .map((form) => navigationButton(buildFormOpenCustomId(form.formId), form.buttonLabel || form.name || 'Open Form', ButtonStyle.Primary));
 
   const rows = [];
   for (let index = 0; index < buttons.length; index += 5) {
@@ -309,7 +308,7 @@ function row(...components) {
 }
 
 function button(customId, label, style = ButtonStyle.Primary) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  return navigationButton(customId, label, style);
 }
 
 function getMemberDisplayName(interaction) {
@@ -335,18 +334,18 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePag
 
   const embed = new EmbedBuilder()
     .setColor(moduleEnabled ? 0x57f287 : 0x5865f2)
-    .setTitle('📝 Forms')
+    .setTitle(emojiLabel('NOTE', 'Forms'))
     .setDescription([
       'Configure form deployment, logging and review behaviour.',
       '',
-      `**Status:** ${moduleEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${moduleEnabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Submit Channel:** ${formatChannel(section.submitChannelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
       `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
-      `**Require Review:** ${section.requireReview !== false ? 'Yes ✅' : 'No ❌'}`,
-      `**Anonymous:** ${section.anonymousSubmissions ? 'Yes ✅' : 'No ❌'}`,
-      `**Store Responses:** ${section.storeResponses !== false ? 'Yes ✅' : 'No ❌'}`,
+      `**Require Review:** ${section.requireReview !== false ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Anonymous:** ${section.anonymousSubmissions ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Store Responses:** ${section.storeResponses !== false ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       '',
       `Forms: \`${formItems.length}\` | Submissions: \`${submissions.length}\` | Pending: \`${pending}\``,
       `Submitted: \`${section.analytics.submitted}\` | Approved: \`${section.analytics.approved}\` | Denied: \`${section.analytics.denied}\``,
@@ -365,15 +364,15 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePag
       ),
       ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:forms:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
       row(
-        button('admin:forms:deployDefault', '🚀 Deploy Form', ButtonStyle.Success),
-        button(moduleEnabled ? 'admin:forms:disable' : 'admin:forms:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
-        button('admin:forms:toggleReview', '🔎 Review', ButtonStyle.Secondary),
-        button('admin:forms:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary),
-        button('admin:forms:toggleStore', '💾 Store', ButtonStyle.Secondary)
+        button('admin:forms:deployDefault', emojiLabel('DEPLOY', 'Deploy Form'), ButtonStyle.Success),
+        button(moduleEnabled ? 'admin:forms:disable' : 'admin:forms:enable', moduleEnabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary),
+        button('admin:forms:toggleReview', emojiLabel('INVESTIGATE', 'Review'), ButtonStyle.Secondary),
+        button('admin:forms:toggleAnonymous', emojiLabel('USER', 'Anonymous'), ButtonStyle.Secondary),
+        button('admin:forms:toggleStore', emojiLabel('PRESETS', 'Store'), ButtonStyle.Secondary)
       ),
-      row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
-        button(`admin:forms:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
-        button(`admin:forms:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
+      row(button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
+        button(`admin:forms:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
+        button(`admin:forms:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
     ],
   };
 }
@@ -444,7 +443,7 @@ async function handleFormsAdminInteraction(interaction) {
 
     return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
   } catch (error) {
-    const payload = { content: `❌ Forms setup failed: ${error.message}`, flags: 64 };
+    const payload = { content: `${EMOJIS.ERROR} Forms setup failed: ${error.message}`, flags: 64 };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;

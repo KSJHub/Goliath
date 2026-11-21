@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const { MessageFlags } = require('discord.js');
 const tempVoiceStore = require('./tempVoiceStore');
@@ -27,56 +28,56 @@ async function handleTempVoiceInteraction(interaction) {
   const actorId = interaction.user?.id;
 
   if (!guild?.id || !channelId || !actorId) {
-    await replyEphemeral(interaction, '❌ Temp Voice context was not available.');
+    await replyEphemeral(interaction, emojiLabel('ERROR', 'Temp Voice context was not available.'));
     return true;
   }
 
   if (!tempVoiceStore.isEnabled(guild.id)) {
-    await replyEphemeral(interaction, '❌ Temp Voice is currently disabled for this server.');
+    await replyEphemeral(interaction, emojiLabel('ERROR', 'Temp Voice is currently disabled for this server.'));
     return true;
   }
 
   let tempChannel = tempVoiceStore.getTempChannel(guild.id, channelId);
   if (!tempChannel) {
-    await replyEphemeral(interaction, '❌ This temporary voice channel is no longer tracked.');
+    await replyEphemeral(interaction, emojiLabel('ERROR', 'This temporary voice channel is no longer tracked.'));
     return true;
   }
 
   if (action === 'claim') {
     tempChannel = await tempVoiceRuntime.claimTempChannel(guild, channelId, actorId);
     await refreshControlMessage(interaction, tempChannel);
-    await replyEphemeral(interaction, '✅ Channel ownership claimed.');
+    await replyEphemeral(interaction, emojiLabel('HEALTHY', 'Channel ownership claimed.'));
     return true;
   }
 
   if (action === 'lock') {
     tempChannel = await tempVoiceRuntime.updateTempChannelControls(guild, channelId, actorId, { locked: !tempChannel.locked });
     await refreshControlMessage(interaction, tempChannel);
-    await replyEphemeral(interaction, tempChannel.locked ? '✅ Channel locked.' : '✅ Channel unlocked.');
+    await replyEphemeral(interaction, tempChannel.locked ? emojiLabel('HEALTHY', 'Channel locked.') : emojiLabel('HEALTHY', 'Channel unlocked.'));
     return true;
   }
 
   if (action === 'hide') {
     tempChannel = await tempVoiceRuntime.updateTempChannelControls(guild, channelId, actorId, { hidden: !tempChannel.hidden });
     await refreshControlMessage(interaction, tempChannel);
-    await replyEphemeral(interaction, tempChannel.hidden ? '✅ Channel hidden.' : '✅ Channel visible.');
+    await replyEphemeral(interaction, tempChannel.hidden ? emojiLabel('HEALTHY', 'Channel hidden.') : emojiLabel('HEALTHY', 'Channel visible.'));
     return true;
   }
 
   if (action === 'limit') {
     const parsedLimit = Number(value);
     if (!Number.isInteger(parsedLimit) || parsedLimit < 0 || parsedLimit > 99) {
-      await replyEphemeral(interaction, '❌ Invalid Temp Voice user limit.');
+      await replyEphemeral(interaction, emojiLabel('ERROR', 'Invalid Temp Voice user limit.'));
       return true;
     }
     const userLimit = parsedLimit;
     tempChannel = await tempVoiceRuntime.updateTempChannelControls(guild, channelId, actorId, { userLimit });
     await refreshControlMessage(interaction, tempChannel);
-    await replyEphemeral(interaction, userLimit ? `✅ User limit set to ${userLimit}.` : '✅ User limit removed.');
+    await replyEphemeral(interaction, userLimit ? `✅ User limit set to ${userLimit}.` : emojiLabel('HEALTHY', 'User limit removed.'));
     return true;
   }
 
-  await replyEphemeral(interaction, '❌ Unknown Temp Voice action.');
+  await replyEphemeral(interaction, emojiLabel('ERROR', 'Unknown Temp Voice action.'));
   return true;
 }
 

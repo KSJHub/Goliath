@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient.js';
@@ -25,7 +26,7 @@ const PLAN_COPY = {
     idealFor: 'Large communities, businesses and professional Discord servers.',
     badge: 'Full platform',
     displayName: 'Pro',
-    icon: '👑',
+    icon: E.CROWN,
     includes: 'Includes Plus, plus:',
   },
   lifetime: {
@@ -33,7 +34,7 @@ const PLAN_COPY = {
     idealFor: 'Founders, beta testers, giveaways and owner-granted rewards.',
     badge: 'Limited availability',
     displayName: 'Lifetime',
-    icon: '💎',
+    icon: E.DIAMOND,
     includes: 'Includes Pro, plus:',
   },
 };
@@ -46,21 +47,21 @@ const PLAN_PRICING = {
 };
 
 const FEATURE_LABELS = {
-  'tickets.basic': { icon: '🎫', label: 'Ticket System', description: 'Create and manage support tickets.' },
-  'tickets.advanced': { icon: '🎟️', label: 'Advanced Tickets', description: 'Higher limits and more flexible ticket workflows.' },
-  'forms.basic': { icon: '📝', label: 'Forms System', description: 'Applications, appeals, reports and custom forms.' },
-  'forms.advanced': { icon: '📋', label: 'Advanced Forms', description: 'Expanded form limits and workflows.' },
-  'embeds.basic': { icon: '✨', label: 'Embed Builder', description: 'Create professional Discord embeds.' },
-  'embeds.presets': { icon: '💾', label: 'Embed Presets', description: 'Save reusable embed designs and templates.' },
-  'moderation.basic': { icon: '🛡️', label: 'Moderation Tools', description: 'Core moderation utilities.' },
-  'dashboard.basic': { icon: '📊', label: 'Dashboard Access', description: 'Manage Goliath from the web dashboard.' },
-  'security.basic': { icon: '🔐', label: 'Basic Security', description: 'Essential server protection.' },
-  'security.advanced': { icon: '🛡️', label: 'Advanced Security Center', description: 'Professional security and incident control.' },
-  'backup.restore': { icon: '♻️', label: 'Backup & Restore Center', description: 'Restore protected server configuration backups.' },
-  'translation.hub': { icon: '🌍', label: 'Translation Hub', description: 'Multilingual community tools and workflows.' },
-  'analytics.basic': { icon: '📈', label: 'Basic Analytics', description: 'Simple community insights.' },
-  'analytics.advanced': { icon: '📊', label: 'Advanced Analytics', description: 'Deeper premium reporting.' },
-  'modules.premium': { icon: '👑', label: 'Future Premium Modules', description: 'Access future Pro-level systems.' },
+  'tickets.basic': { icon: E.TICKETS, label: 'Ticket System', description: 'Create and manage support tickets.' },
+  'tickets.advanced': { icon: E.PREMIUM_TICKET, label: 'Advanced Tickets', description: 'Higher limits and more flexible ticket workflows.' },
+  'forms.basic': { icon: E.NOTE, label: 'Forms System', description: 'Applications, appeals, reports and custom forms.' },
+  'forms.advanced': { icon: E.CLIPBOARD, label: 'Advanced Forms', description: 'Expanded form limits and workflows.' },
+  'embeds.basic': { icon: E.SPARKLES, label: 'Embed Builder', description: 'Create professional Discord embeds.' },
+  'embeds.presets': { icon: E.SAVE, label: 'Embed Presets', description: 'Save reusable embed designs and templates.' },
+  'moderation.basic': { icon: E.SECURITY, label: 'Moderation Tools', description: 'Core moderation utilities.' },
+  'dashboard.basic': { icon: E.CHART, label: 'Dashboard Access', description: 'Manage Goliath from the web dashboard.' },
+  'security.basic': { icon: E.PERMISSIONS, label: 'Basic Security', description: 'Essential server protection.' },
+  'security.advanced': { icon: E.SECURITY, label: 'Advanced Security Center', description: 'Professional security and incident control.' },
+  'backup.restore': { icon: E.RESTORE, label: 'Backup & Restore Center', description: 'Restore protected server configuration backups.' },
+  'translation.hub': { icon: E.GLOBE, label: 'Translation Hub', description: 'Multilingual community tools and workflows.' },
+  'analytics.basic': { icon: E.TREND, label: 'Basic Analytics', description: 'Simple community insights.' },
+  'analytics.advanced': { icon: E.CHART, label: 'Advanced Analytics', description: 'Deeper premium reporting.' },
+  'modules.premium': { icon: E.CROWN, label: 'Future Premium Modules', description: 'Access future Pro-level systems.' },
 };
 
 const PLAN_FEATURE_GROUPS = {
@@ -116,7 +117,7 @@ function planDisplayIcon(plan = {}) {
 
 function featureInfo(feature) {
   return FEATURE_LABELS[feature] || {
-    icon: '✅',
+    icon: E.SUCCESS,
     label: String(feature || '').replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
     description: 'Included with this Goliath plan.',
   };
@@ -250,7 +251,7 @@ function FeatureComparison({ theme }) {
               <th style={{ padding: 14, textAlign: 'left', color: theme.mutedText, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Feature</th>
               <th style={{ padding: 14, textAlign: 'center', color: '#93c5fd' }}>🆓 Basic</th>
               <th style={{ padding: 14, textAlign: 'center', color: '#facc15' }}>⭐ Plus</th>
-              <th style={{ padding: 14, textAlign: 'center', color: '#c084fc' }}>👑 Pro</th>
+              <th style={{ padding: 14, textAlign: 'center', color: '#c084fc' }}>{E.CROWN} Pro</th>
             </tr>
           </thead>
           <tbody>

@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/apiClient';
 import PageShell, {
@@ -86,10 +87,10 @@ export default function GeneralSettings({ selectedGuild, theme }) {
         setRoles([]);
       }
 
-      setSaveMessage('✅ Roles/channels synced from Discord.');
+      setSaveMessage(`${E.SUCCESS} Roles/channels synced from Discord.`);
     } catch (err) {
       console.error(err);
-      setSaveMessage('❌ Failed to sync roles/channels.');
+      setSaveMessage(`${E.ERROR} Failed to sync roles/channels.`);
     } finally {
       setSyncing(false);
     }
@@ -197,7 +198,7 @@ export default function GeneralSettings({ selectedGuild, theme }) {
 
   const handleSave = useCallback(async () => {
     if (!selectedGuild) {
-      setSaveMessage('❌ Select a guild first.');
+      setSaveMessage(`${E.ERROR} Select a guild first.`);
       return;
     }
 
@@ -225,10 +226,10 @@ export default function GeneralSettings({ selectedGuild, theme }) {
         instantDeleteDataEnabled: Boolean(form.instantDeleteDataEnabled),
       });
 
-      setSaveMessage('✅ General settings saved successfully.');
+      setSaveMessage(`${E.SUCCESS} General settings saved successfully.`);
     } catch (err) {
       console.error(err);
-      setSaveMessage('❌ Failed to save general settings.');
+      setSaveMessage(`${E.ERROR} Failed to save general settings.`);
     } finally {
       setSaving(false);
     }
@@ -286,7 +287,7 @@ export default function GeneralSettings({ selectedGuild, theme }) {
       {error ? <Notice theme={theme} tone="danger">{error}</Notice> : null}
 
       {saveMessage ? (
-        <Notice theme={theme} tone={saveMessage.startsWith('❌') ? 'danger' : 'success'}>
+        <Notice theme={theme} tone={saveMessage.startsWith(E.ERROR) ? 'danger' : 'success'}>
           {saveMessage}
         </Notice>
       ) : null}
@@ -438,7 +439,7 @@ export default function GeneralSettings({ selectedGuild, theme }) {
                     prefix={form.prefix || '/'}
                     onPrefixChange={(value) => handleChange('prefix', value)}
                     onAddPrefix={() =>
-                      setSaveMessage('ℹ️ Multi-prefix support can be added in the next stage.')
+                      setSaveMessage(`${E.INFO} Multi-prefix support can be added in the next stage.`)
                     }
                   />
                 </div>

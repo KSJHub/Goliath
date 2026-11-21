@@ -1,10 +1,10 @@
 'use strict';
 
 const guildManager = require('../../core/guild/guildManager');
-const verificationStore = require('../../modules/securityStudio/verificationStore');
-const verificationFlow = require('../../modules/securityStudio/verificationFlowContinuation');
-const challengeInteractions = require('../../modules/securityStudio/verificationChallengeInteractions');
-const verificationQuarantine = require('../../modules/securityStudio/verificationQuarantine');
+const verificationStore = require('../../modules/securityStudio/verification/verificationStore');
+const verificationFlow = require('../../modules/securityStudio/verification/verificationFlowContinuation');
+const challengeInteractions = require('../../modules/securityStudio/verification/verificationChallengeInteractions');
+const verificationQuarantine = require('../../modules/securityStudio/verification/verificationQuarantine');
 
 const joinWindows = new Map();
 function verificationEnabled(guildId) { return Boolean(guildId) && guildManager.isModuleEnabled(guildId, 'verification') === true; }

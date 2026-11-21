@@ -4,13 +4,23 @@ const auditIntelligence = require('../../../../owner/auditIntelligence/auditInte
 const {
   QUARANTINE_MODES,
   getQuarantineState,
+  saveQuarantineState,
   emitCurrentQuarantineState,
   getQuarantineMode,
+  isAutomaticQuarantineReleaseDue,
 } = require('./state');
 const { ensureQuarantineRole } = require('./roleManager');
 const { syncQuarantineIsolation, verifyMemberContainment } = require('./isolation');
 const { ensureInvestigationRoomForSnapshot } = require('./investigationRooms');
-const { restoreQuarantinedMember, clearExpiredAbsentMember, retryPendingInvestigationRoomCleanups } = require('./releaseLifecycle');
+const { restoreQuarantinedMember, clearExpiredAbsentMember, retryPendingInvestigationRoomCleanups, tryBeginQuarantineOperation, endQuarantineOperation, cleanupReleasedInvitationDenies } = require('./releaseLifecycle');
+
+async function fetchQuarantineMember(guild, userId) {
+  try { return await guild.members.fetch(userId); }
+  catch (error) {
+    if (Number(error?.code) === 10007) return null; // Discord confirmed Unknown Member.
+    throw error; // A transport/permission error is not proof the member left.
+  }
+}
 
 async function recordAutomaticAction(guild, input = {}) {
   if (!guild?.client || !guild?.id) return;
@@ -39,7 +49,7 @@ async function enforceQuarantineOnMember(member, options = {}) {
   if (!snapshot) return { success: false, notQuarantined: true, reason: 'No quarantine snapshot' };
   const mode = getQuarantineMode(snapshot);
 
-  if (snapshot.expiresAt && Date.now() >= Number(snapshot.expiresAt)) {
+  if (isAutomaticQuarantineReleaseDue(snapshot)) {
     const restored = await restoreQuarantinedMember(guild, member, { reason: 'Automatic quarantine expiry during enforcement', system: true });
     await recordAutomaticAction(guild, {
       type: 'goliath.background.quarantine_expiry', success: restored.success, action: 'delete', memberId: member.id, memberTag: member.user?.tag,
@@ -50,20 +60,32 @@ async function enforceQuarantineOnMember(member, options = {}) {
     return restored.success ? { ...restored, expired: true, executed: false } : { ...restored, expired: true, executed: false, success: false };
   }
 
+  if (!tryBeginQuarantineOperation(guild.id, member.id)) return { success: false, busy: true, reason: 'Quarantine operation already in progress.' };
+  const groupLock = snapshot.investigationGroupId ? `investigation-group:${snapshot.investigationGroupId}` : null;
+  if (groupLock && !tryBeginQuarantineOperation(guild.id, groupLock)) { endQuarantineOperation(guild.id, member.id); return { success: false, busy: true, reason: 'This investigation is being updated; recovery will retry.' }; }
   try {
     const role = await ensureQuarantineRole(guild, options);
-    const isolation = await syncQuarantineIsolation(guild, { ...options, role, targetMemberId: member.id, rollbackMemberAllowsOnFailure: false });
+    const isolation = await syncQuarantineIsolation(guild, { ...options, role, targetMemberId: member.id, allowedChannelIds: mode === QUARANTINE_MODES.INVESTIGATION && snapshot.interviewChannelId ? [snapshot.interviewChannelId] : [], rollbackMemberAllowsOnFailure: false });
+    if (isolation.memberViewAllowRestores?.length) {
+      const latest = getQuarantineState(guild.id);
+      const active = latest.users?.[member.id];
+      if (active) {
+        active.memberViewAllowRestores = [...new Set([...(active.memberViewAllowRestores || []), ...isolation.memberViewAllowRestores.filter(channelId => !(snapshot.allowedChannelIds || []).map(String).includes(String(channelId)))])];
+        saveQuarantineState(guild, latest);
+      }
+    }
     if (!isolation.success) return { success: false, mode, reason: 'Quarantine isolation sync failed.', isolation };
     let interviewRoom = null;
-    if (mode === QUARANTINE_MODES.INVESTIGATION) interviewRoom = await ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, options);
+    if (mode === QUARANTINE_MODES.INVESTIGATION) interviewRoom = await ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, { ...options, groupOperationHeld: Boolean(groupLock) });
     await member.roles.set([role.id], `Reapplying active Goliath ${mode} quarantine`);
     const verification = await verifyMemberContainment(guild, member, mode === QUARANTINE_MODES.INVESTIGATION && interviewRoom ? [interviewRoom.id] : []);
     if (!verification.success) return { success: false, mode, reason: 'Effective containment verification failed.', isolation, verification };
+    if (snapshot.creationPending) { const latest = getQuarantineState(guild.id); if (latest.users?.[member.id]) { latest.users[member.id].creationPending = false; saveQuarantineState(guild, latest); } }
     emitCurrentQuarantineState(guild, 'member_quarantine_reapplied', { memberId: member.id, mode, interviewChannelId: interviewRoom?.id || null });
     return { success: true, mode, roleId: role.id, interviewChannelId: interviewRoom?.id || null, isolation, verification };
   } catch (error) {
     return { success: false, mode, error: error.message };
-  }
+  } finally { if (groupLock) endQuarantineOperation(guild.id, groupLock); endQuarantineOperation(guild.id, member.id); }
 }
 
 async function restoreExpiredQuarantines(client) {
@@ -78,9 +100,9 @@ async function restoreExpiredQuarantines(client) {
       let state = getQuarantineState(guild.id);
       for (const userId of Object.keys(state.users || {})) {
         const snapshot = state.users[userId];
-        if (!snapshot?.expiresAt || Date.now() < Number(snapshot.expiresAt)) continue;
+        if (!isAutomaticQuarantineReleaseDue(snapshot)) continue;
         result.checked += 1;
-        const member = await guild.members.fetch(userId).catch(() => null);
+        const member = await fetchQuarantineMember(guild, userId);
         if (!member) {
           const cleared = await clearExpiredAbsentMember(guild, userId, state);
           if (cleared.success) result.clearedAbsent += 1; else result.failed += 1;
@@ -130,8 +152,8 @@ async function recoverGuildQuarantine(guild) {
 
   let reapplied = 0; let restored = 0; let failed = cleanup.failed || 0;
   for (const [userId, snapshot] of entries) {
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (snapshot?.expiresAt && Date.now() >= Number(snapshot.expiresAt)) {
+    const member = await fetchQuarantineMember(guild, userId);
+    if (isAutomaticQuarantineReleaseDue(snapshot)) {
       let operation;
       if (member) operation = await restoreQuarantinedMember(guild, member, { reason: 'Automatic quarantine expiry during startup recovery', system: true });
       else operation = await clearExpiredAbsentMember(guild, userId, getQuarantineState(guild.id));
@@ -154,6 +176,8 @@ async function recoverGuildQuarantine(guild) {
       metadata: { phase: 'startup', mode: getQuarantineMode(snapshot), interviewChannelId: operation.interviewChannelId || null },
     });
   }
+  const inviteCleanup = typeof cleanupReleasedInvitationDenies === 'function' ? await cleanupReleasedInvitationDenies(guild) : { cleaned: 0, failed: 0 };
+  if (inviteCleanup.failed) console.warn(`[QuarantineSystem] ${inviteCleanup.failed} temporary room access cleanup(s) require retry.`);
   return { success: failed === 0, active: entries.length, reapplied, restored, cleanupChecked: cleanup.checked, cleanupArchived: cleanup.archived, cleanupFailed: cleanup.failed, failed };
 }
 

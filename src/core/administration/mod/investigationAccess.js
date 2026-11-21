@@ -1,5 +1,6 @@
 'use strict';
 
+const { EMOJIS } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { getQuarantineState, getQuarantineMode, QUARANTINE_MODES } = require('../../security/protection/quarantine');
 const audit = require('../../../owner/auditIntelligence/auditIntelligence');
@@ -34,7 +35,7 @@ async function logAccessChange(interaction, target, action, channel, beforeIds, 
     category: 'goliath',
     action: action === 'add' ? 'create' : action === 'remove' ? 'delete' : 'update',
     title: actionLabels[action] || 'Investigation Access Changed',
-    icon: '🔒',
+    icon: EMOJIS.LOCK,
     guild: interaction.guild,
     channel: channel || interaction.channel || null,
     user: target.user,
@@ -90,21 +91,14 @@ async function updateAccess(interaction, target, action, channel = null) {
     throw new Error('The private investigation room is always available while the investigation is active.');
   }
 
+  if (action === 'add') throw new Error('Investigation Isolation permits access only to the assigned private investigation room. Release the member through Mod Hub to restore normal access.');
+
   const existing = [...new Set((snapshot.allowedChannelIds || []).map(String))];
   const before = new Set(existing);
   const next = new Set(existing);
-  const changedDuringClear = [];
 
   try {
-    if (action === 'add') {
-      await editAccess(
-        channel,
-        target.id,
-        true,
-        `Investigation channel access allowed by ${interaction.user.tag}`
-      );
-      next.add(String(channel.id));
-    } else if (action === 'remove') {
+    if (action === 'remove') {
       await editAccess(
         channel,
         target.id,
@@ -114,8 +108,11 @@ async function updateAccess(interaction, target, action, channel = null) {
       next.delete(String(channel.id));
     } else {
       for (const channelId of existing) {
-        const current = interaction.guild.channels.cache.get(channelId)
-          || await interaction.guild.channels.fetch(channelId).catch(() => null);
+        let current = interaction.guild.channels.cache.get(channelId);
+        if (!current) {
+          try { current = await interaction.guild.channels.fetch(channelId); }
+          catch (error) { if (Number(error?.code) !== 10003) throw error; }
+        }
 
         if (!current) continue;
 
@@ -126,7 +123,6 @@ async function updateAccess(interaction, target, action, channel = null) {
           `Investigation returned to private-room-only by ${interaction.user.tag}`
         );
 
-        changedDuringClear.push(current);
       }
 
       next.clear();
@@ -153,26 +149,7 @@ async function updateAccess(interaction, target, action, channel = null) {
       allowedChannelIds: [...next],
     };
   } catch (error) {
-    if (action === 'clear' && changedDuringClear.length) {
-      await Promise.allSettled(
-        changedDuringClear.map(current =>
-          editAccess(
-            current,
-            target.id,
-            true,
-            'Rollback incomplete investigation access reset'
-          )
-        )
-      );
-    } else if (channel) {
-      await editAccess(
-        channel,
-        target.id,
-        before.has(String(channel.id)),
-        'Rollback failed investigation access change'
-      ).catch(() => null);
-    }
-
+    // Keep successful revocations in place; rollback must never reopen an outside channel.
     throw error;
   }
 }

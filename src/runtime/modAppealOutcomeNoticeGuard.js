@@ -63,29 +63,30 @@ if (!globalThis[PATCH_KEY]) {
       const base = String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim().replace(/\/+$/, '');
       buttons.push({ url: `${base}/appeals`, label: 'Appeals Portal', emoji: '⚖️' });
 
+      const originalAction = String(modCase?.action || 'moderation action').replace(/(^|[-_ ])\w/g, (m) => m.toUpperCase());
+      const outcomeText = String(parsed.outcome || '').trim();
+      const friendlyOutcome = approved && /warning record was already absent; no further warning action was required\.?/i.test(outcomeText)
+        ? 'The warning was already removed from your record. No further action was necessary.'
+        : outcomeText;
       const notice = buildMemberNotice(guild, {
         module: 'Goliath Appeals',
         emoji: approved ? '✅' : '❌',
         title: approved ? 'Your Appeal Has Been Approved' : 'Your Appeal Has Been Denied',
         color: approved ? COLORS.success : COLORS.danger,
-        description: `A decision has been recorded for your appeal relating to **Case #${parsed.caseId}**. This message is your official Goliath appeal outcome record.`,
+        description: `Your appeal for **Case #${parsed.caseId}** has been reviewed and **${status.toLowerCase()}**.`,
         reference: `Case #${parsed.caseId}`,
         status,
         fields: [
-          { name: '⚖️ Appeal Decision', value: `**${status}**`, inline: true },
-          { name: '🛡️ Original Action', value: `**${String(modCase?.action || 'Moderation Case').replace(/(^|[-_ ])\w/g, (m) => m.toUpperCase())}**`, inline: true },
-          ...(parsed.outcome ? [{ name: '🔄 Outcome / Remedy', value: parsed.outcome, inline: false }] : []),
-          ...(parsed.invite ? [{ name: '🔗 Rejoin Access', value: 'A single-use rejoin link has been issued below and expires after 24 hours.', inline: false }] : []),
+          { name: '🛡️ Original Action', value: originalAction, inline: true },
+          { name: '📝 Management’s Decision', value: String(parsed.review || 'No explanation was provided.').slice(0, 1024), inline: false },
+          ...(friendlyOutcome ? [{ name: '🔄 What Has Changed', value: friendlyOutcome.slice(0, 1024), inline: false }] : []),
+          ...(parsed.invite ? [{ name: '🔗 Rejoin Access', value: 'A single-use rejoin link is available below for 24 hours.', inline: false }] : []),
         ],
-        reason: parsed.review,
-        meaning: approved
-          ? 'Management has completed its review and approved your appeal. Any recorded remedy shown above forms part of this decision.'
-          : 'Management has completed its review and the original moderation decision remains in effect unless a later case update changes it.',
         nextSteps: parsed.invite
-          ? 'Use the **Rejoin Server** button below before the invite expires. Keep this DM as your appeal record.'
+          ? 'Use **Rejoin Server** before the link expires. Keep this message for your records.'
           : approved
-            ? 'No further action is required unless the outcome above gives you a specific next step. Keep this DM as your appeal record.'
-            : 'You can keep this DM as your appeal record. The Appeals Portal remains available for any future eligible appeal action.',
+            ? 'Your appeal is complete. No further action is required unless the outcome above specifies otherwise.'
+            : 'The original moderation decision remains in effect. Keep this message for your records; the Appeals Portal is available for eligible future appeals.',
         buttons,
       });
 

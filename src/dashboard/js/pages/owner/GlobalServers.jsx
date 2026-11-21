@@ -1,3 +1,4 @@
+import { goDashboard } from '../../services/dashboardPath.js';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -71,7 +72,7 @@ export default function GlobalServers({ theme, onSelectGuild }) {
   setStorage(GUILD_STORAGE_KEY, guildId);
   setStorage(OWNER_MANAGED_GUILD_KEY, payload);
 
-  window.location.assign(createOwnerManagedPath(payload, path));
+  goDashboard(createOwnerManagedPath(payload, path));
 }
 
   function openOwnerRuntime(guild) {

@@ -1,10 +1,11 @@
 'use strict';
 const { randomBytes } = require('node:crypto');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+  ActionRowBuilder, ButtonStyle, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const security = require('../../core/security/protection/core');
+const { navigationButton, linkButton } = require('../../core/guild/goliathNavigation');
 const PREFIX = 'ownerpanel:guildaccess:';
 const pending = new Map();
 
@@ -55,8 +56,7 @@ const INVITE_PERMISSIONS = Object.values(INVITE_PERMISSION_BITS)
 
 function restartRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('ownerpanel:restart:ask:beta')
-      .setLabel('Restart BETA').setStyle(ButtonStyle.Primary)
+    navigationButton('ownerpanel:restart:ask:beta', 'Restart BETA', ButtonStyle.Primary)
   );
 }
 
@@ -118,8 +118,7 @@ async function handle(interaction, api) {
             'The invite requests the configured DEV permission set (Administrator excluded). After joining, place the bot role above the roles it must manage.',
           components: [
             new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setLabel('Invite BETA Bot')
-                .setStyle(ButtonStyle.Link).setURL(url.toString())
+              linkButton('Invite BETA Bot', url.toString())
             ),
             restartRow(),
           ],
@@ -135,10 +134,8 @@ async function handle(interaction, api) {
             'This removes its approval. Rejoining later requires approval and a new invitation.\n' +
             'Confirmation expires in 60 seconds.',
           components: [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`${PREFIX}remove-confirm:${nonce}`)
-              .setLabel('Confirm Removal').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`${PREFIX}remove-cancel:${nonce}`)
-              .setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+            navigationButton(`${PREFIX}remove-confirm:${nonce}`, 'Confirm Removal', ButtonStyle.Danger),
+            navigationButton(`${PREFIX}remove-cancel:${nonce}`, 'Cancel', ButtonStyle.Secondary)
           )],
           allowedMentions: { parse: [] },
         });

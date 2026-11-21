@@ -1,0 +1,332 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { api } from '../../services/apiClient.js';
+import ModuleShell from '../../shared/ModuleShell.jsx';
+import { SectionCard, DASHBOARD_EMOJIS as E } from '../../shared/PageShell.jsx';
+import { ChannelSelect, RoleSelect, DiscordResourceSelect } from '../../ui/DiscordResourceSelects.jsx';
+
+function stamp(value, config = {}) { return value ? new Date(value).toLocaleString(config.locale || 'en-GB', { timeZone: config.timeZone || 'Europe/London' }) : 'Never'; }
+const blankUpdate = () => ({ appId: '', name: '', channelId: null, roleId: null, enabled: true, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: '', excludeWords: '' });
+export default function Games({ theme, selectedGuild, selectedGuildData }) {
+  const guildId = String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '').split(':').pop();
+  const generation = useRef(0);
+  const [data, setData] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [gameForm, setGameForm] = useState(blankUpdate);
+  const [updateSearch, setUpdateSearch] = useState('');
+  const [sourceCheck, setSourceCheck] = useState(null);
+  const [updateView, setUpdateView] = useState('games');
+  const [updatePreview, setUpdatePreview] = useState(null);
+  const [quiet, setQuiet] = useState({ quietStart: '', quietEnd: '' });
+  const [confirmRemove, setConfirmRemove] = useState(null);
+  useEffect(() => {
+    const current = ++generation.current;
+    setGameForm(blankUpdate()); setSourceCheck(null); setUpdatePreview(null); setConfirmRemove(null); setUpdateSearch('');
+    setData(null); setDraft(null); setPreview(null); setError(''); setNotice(''); setBusy(false);
+    if (!guildId) return;
+    api.request(`/api/games/${guildId}`).then((payload) => {
+      if (generation.current !== current) return;
+      setData(payload); setDraft(payload.config); setQuiet({ quietStart: payload.updates?.quietStart || '', quietEnd: payload.updates?.quietEnd || '' });
+    }).catch((err) => { if (generation.current === current) setError(err.message); });
+    return () => { generation.current++; };
+  }, [guildId]);
+  async function act(refresh = false) {
+    const current = generation.current;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const settings = Object.fromEntries(['enabled', 'channelId', 'destinations', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const payload = await api.request(`/api/games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
+      if (generation.current !== current) return;
+      setData((old) => ({ ...old, config: payload.config })); setDraft(payload.config);
+      setNotice(refresh ? (payload.result?.skipped ? 'Free Games is disabled.' : 'Discord listing refreshed.') : 'Settings saved. The listing updates automatically within five minutes.');
+    } catch (err) { if (generation.current === current) setError(err.message); }
+    finally { if (generation.current === current) setBusy(false); }
+  }
+  async function previewDraft() {
+    const current = generation.current;
+    setBusy(true); setError('');
+    try {
+      const settings = Object.fromEntries(['enabled', 'channelId', 'destinations', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const result = await api.request(`/api/games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
+      if (current === generation.current) setPreview(result);
+    } catch (err) { if (current === generation.current) setError(err.message); }
+    finally { if (current === generation.current) setBusy(false); }
+  }
+
+  async function verifySource(appId) {
+    if (!appId) { setError('Choose a Steam catalogue game before verifying its source.'); return; }
+    const current = generation.current;
+    setBusy(true); setError(''); setSourceCheck(null);
+    try {
+      const payload = await api.request('/api/games/' + guildId + '/updates/verify-source', {
+        method: 'POST', body: JSON.stringify({ appId })
+      });
+      if (current === generation.current) setSourceCheck(payload.result);
+    } catch (err) { if (current === generation.current) setError(err.message); }
+    finally { if (current === generation.current) setBusy(false); }
+  }
+  async function updateAction(action, body = null, method = 'POST') {
+    const current = generation.current;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const payload = await api.request('/api/games/' + guildId + '/updates/' + action, { method, ...(body === null ? {} : { body: JSON.stringify(body) }) });
+      if (current !== generation.current) return;
+      if (payload.updates) {
+        setData(old => ({ ...old, updates: payload.updates }));
+        setQuiet({ quietStart: payload.updates.quietStart || '', quietEnd: payload.updates.quietEnd || '' });
+      }
+      if (action.endsWith('/preview')) setUpdatePreview(payload);
+      else {
+        setUpdatePreview(null);
+        if (action === 'subscriptions') setGameForm(blankUpdate());
+        setConfirmRemove(null);
+        setNotice(payload.result?.alreadyDelivered ? 'The latest matching update was already delivered.' :
+          action.endsWith('/send-latest') ? 'Latest update processed without a role ping.' : action === 'check' ? 'Update check complete.' : 'Game Updates settings saved.');
+      }
+    } catch (err) { if (current === generation.current) setError(err.message); }
+    finally { if (current === generation.current) setBusy(false); }
+  }
+
+  const button = { border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, padding: '10px 16px', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer' };
+  if (!guildId) return <p>Select a server to configure Games.</p>;
+  if (!draft) return <p role={error ? 'alert' : 'status'}>{error || 'Loading Games…'}</p>;
+  const patch = (value) => { setPreview(null); setDraft((old) => ({ ...old, ...value })); };
+  const destinations = draft.destinationsConfigured ? (draft.destinations || []) :
+    draft.channelId ? [{ channelId: draft.channelId, enabled: true, alerts: draft.alerts, roleId: draft.roleId, stores: null, types: null }] : [];
+  const editDestinations = (next) => patch({ destinations: next, destinationsConfigured: true });
+  const editDestination = (id, changes) => editDestinations(destinations.map(route => route.channelId === id ? { ...route, ...changes } : route));
+  const toggle = (key, value, checked) => patch({ [key]: checked ? [...draft[key], value] : draft[key].filter((item) => item !== value) });
+  const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: 14 };
+  const selectionStyle = (checked) => ({ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, padding: '13px 14px', borderRadius: 12, border: '1px solid ' + (checked ? theme.primaryBorder || theme.primary : theme.cardBorder), background: checked ? theme.primarySoft || theme.softBg : theme.softBg, color: theme.cardText, cursor: busy ? 'wait' : 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.4 });
+  const checks = (key, choices) => <div style={grid}>{Object.entries(choices).map(([value, label]) => <label key={value} style={selectionStyle(draft[key].includes(value))}><input type="checkbox" disabled={busy} style={{ width: 16, height: 16, accentColor: theme.primary, flexShrink: 0 }} checked={draft[key].includes(value)} onChange={(event) => toggle(key, value, event.target.checked)} />{label}</label>)}</div>;
+  const inputStyle = { ...button, width: '100%', boxSizing: 'border-box', marginTop: 8, background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, fontWeight: 500, padding: '12px 14px' };
+  const select = (key, label, choices) => <DiscordResourceSelect searchable clearable={false} theme={theme} label={label} disabled={busy} value={draft[key]} placeholder="Choose an option" resources={choices.map(([id, name]) => ({ id, name }))} onChange={value => { if (value) patch({ [key]: value }); }} />;
+  const previewCard = <SectionCard themed theme={theme} title="Preview matching offers">
+    <p style={{ color: theme.mutedText }}>Preview your current selections before saving. This does not post to Discord or send alerts.</p>
+    <button style={button} disabled={busy} onClick={previewDraft}>{busy ? 'Working…' : 'Preview current selections'}</button>
+    {preview ? <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+      <p>{preview.offers.length} unique matching offers · {preview.pages.length} Discord listing messages · Feed checked {stamp(preview.fetchedAt, draft)}</p>
+      {preview.pricing.warning ? <p role="status">{preview.pricing.warning}</p> : null}
+      <p style={{ color: theme.mutedText }}>Discord displays platform columns where space allows; narrow screens may stack them. Additional messages keep every offer accessible.</p>
+      {preview.sections.map((section) => {
+        const offers = preview.offers.filter((offer) => section.types.includes(offer.type));
+        const accent = `#${section.color.toString(16).padStart(6, '0')}`;
+        return offers.length ? <section key={section.title} style={{ border: `1px solid ${theme.cardBorder}`, borderLeft: `4px solid ${accent}`, borderRadius: 12, padding: 16, minWidth: 0 }}>
+          <h3 style={{ margin: '0 0 16px' }}>{section.title}{draft.showOfferCount !== false ? ` · ${offers.length}` : ''}</h3>
+          {section.types.includes('game') && preview.featured ? <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, padding: '18px 0 22px', marginBottom: 18, borderBottom: '1px solid ' + theme.cardBorder }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ color: theme.primary, margin: '0 0 8px', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Featured game</p>
+              <a href={preview.featured.url} target="_blank" rel="noreferrer" style={{ color: theme.cardText, fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 700, textDecoration: 'none', overflowWrap: 'anywhere' }}>{preview.featured.displayTitle}</a>
+              <p style={{ margin: '10px 0', fontSize: 14 }}>{preview.featured.stores.filter(store => draft.stores.includes(store)).map(store => data.stores[store]).join(' · ')}{preview.featured.priceText ? <> · <s>{preview.featured.priceText}</s></> : null} <strong style={{ color: theme.success }}>FREE</strong></p>
+              {preview.featured.description ? <p style={{ color: theme.mutedText, lineHeight: 1.6, fontSize: 14, marginBottom: 0 }}>{preview.featured.description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').slice(0, 220)}</p> : null}
+            </div>
+            {draft.featuredArtwork !== 'hidden' ? <img src={preview.featured.image} alt={preview.featured.displayTitle} onError={event => { event.currentTarget.style.display = 'none'; }} style={{ width: 'clamp(64px, 16vw, 112px)', aspectRatio: '1', objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} /> : null}
+          </div> : null}
+          <div style={{ display: 'grid', gridTemplateColumns: draft.layout === 'list' ? '1fr' : 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
+            {Object.entries(data.stores).map(([key, label]) => {
+              const group = offers.filter((offer) => offer.id !== preview.featured?.id && offer.stores.find((store) => draft.stores.includes(store)) === key);
+              if (!group.length) return null;
+              const platform = preview.platforms[key];
+              return <div key={key} style={{ background: theme.softBg, border: `1px solid ${theme.cardBorder}`, borderRadius: 10, padding: 12, minWidth: 0 }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px' }}>{platform.imageUrl ? <img src={platform.imageUrl} alt="" width="22" height="22" /> : <span aria-hidden="true">{platform.fallback}</span>}{label} · {group.length}</h4>
+                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{draft.showNew !== false && draft.state.newSince[offer.id] && Date.now() >= draft.state.newSince[offer.id] && Date.now() - draft.state.newSince[offer.id] < 86400000 ? `${E.GAME_NEW} ` : ''}{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{draft.showPlatforms !== false && offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}</span></li>)}</ul>
+              </div>;
+            })}
+          </div>
+          <p style={{ color: theme.mutedText, fontSize: 12, marginBottom: 0 }}>Goliath Free Games{draft.showTimestamps !== false ? ` · Updated ${stamp(preview.fetchedAt, draft)}` : ''}</p>
+        </section> : null;
+      })}
+    </div> : null}
+  </SectionCard>;
+  const configuration = <div style={{ display: 'grid', gap: 18 }}>
+    <SectionCard themed theme={theme} title="Delivery">
+      <fieldset disabled={busy} style={{ border: 0, padding: 0, display: 'grid', gap: 18 }}>
+        <label style={{ ...selectionStyle(draft.enabled), justifyContent: 'space-between' }}><span><strong style={{ display: 'block', fontWeight: 600 }}>Automatic listings</strong><span style={{ color: theme.mutedText, fontSize: 13 }}>Keep your server’s free offers up to date.</span></span><input type="checkbox" role="switch" aria-label="Enable Free Games" checked={draft.enabled} style={{ accentColor: theme.primary, width: 20, height: 20, flexShrink: 0 }} onChange={(event) => patch({ enabled: event.target.checked })} /></label>
+        <div style={{ display: 'grid', gap: 12 }}>
+          <strong>Delivery destinations ({destinations.length}/10)</strong>
+          <ChannelSelect searchable disabled={busy || destinations.length >= 10} theme={theme}
+            resources={data.channels.filter(channel => !destinations.some(route => route.channelId === String(channel.id)))}
+            value="" onChange={channelId => {
+              if (channelId && !destinations.some(route => route.channelId === channelId))
+                editDestinations([...destinations, { channelId, enabled: true, alerts: false, roleId: null, stores: null, types: null }]);
+            }} label="Add a delivery channel" />
+          {destinations.map(route => <div key={route.channelId} style={{ border: '1px solid ' + theme.cardBorder, borderRadius: 12, padding: 14, display: 'grid', gap: 12 }}>
+            <strong>{data.channels.find(channel => String(channel.id) === route.channelId)?.name || route.channelId}</strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              <label><input type="checkbox" disabled={busy} checked={route.enabled !== false} onChange={e => editDestination(route.channelId, { enabled: e.target.checked })} /> Enabled</label>
+              <label><input type="checkbox" disabled={busy} checked={route.alerts === true} onChange={e => editDestination(route.channelId, { alerts: e.target.checked })} /> New offer alerts</label>
+            </div>
+            <RoleSelect searchable disabled={busy} theme={theme} resources={data.roles} value={route.roleId || ''}
+              onChange={roleId => editDestination(route.channelId, { roleId: roleId || null })} label="Notification role" />
+            <strong>Platforms</strong>
+            <div style={grid}>{Object.entries(data.stores).map(([key, name]) => <label key={key}>
+              <input type="checkbox" disabled={busy} checked={(route.stores ?? draft.stores).includes(key)}
+                onChange={e => { const next = e.target.checked ? [...(route.stores ?? draft.stores), key] : (route.stores ?? draft.stores).filter(v => v !== key); editDestination(route.channelId, { stores: next }); }} /> {name}
+            </label>)}</div>
+            <strong>Offer types</strong>
+            <div style={grid}>{Object.entries(data.types).map(([key, name]) => <label key={key}>
+              <input type="checkbox" disabled={busy} checked={(route.types ?? draft.types).includes(key)}
+                onChange={e => { const next = e.target.checked ? [...(route.types ?? draft.types), key] : (route.types ?? draft.types).filter(v => v !== key); editDestination(route.channelId, { types: next }); }} /> {name}
+            </label>)}</div>
+            <button style={button} disabled={busy} onClick={() => editDestinations(destinations.filter(item => item.channelId !== route.channelId))}>Remove destination</button>
+          </div>)}
+        </div>
+        <p style={{ color: theme.mutedText, margin: 0 }}>Channels follow your server’s category order. Choose where the maintained catalogue is posted; pausing keeps existing messages.</p>
+      </fieldset>
+    </SectionCard>
+    <SectionCard themed theme={theme} title="Currency and regional formatting">
+      <div style={grid}>
+        {select('currency', 'Display currency', data.currencies.map((code) => [code, code]))}
+        {select('priceMode', 'Original price display', [['converted', 'Convert to selected currency (estimate)'], ['source', 'Show source USD'], ['hidden', 'Hide original prices']])}
+        <label>Formatting locale<input style={inputStyle} disabled={busy} value={draft.locale} onChange={(event) => patch({ locale: event.target.value })} placeholder="en-GB" /></label>
+        <label>Region code<input style={inputStyle} disabled={busy} value={draft.region} onChange={(event) => patch({ region: event.target.value.toUpperCase() })} placeholder="GB" maxLength={2} /></label>
+        <label>Timezone<input style={inputStyle} list="free-games-timezones" disabled={busy} value={draft.timeZone} onChange={(event) => patch({ timeZone: event.target.value })} /><datalist id="free-games-timezones">{data.timeZones.map((zone) => <option key={zone} value={zone} />)}</datalist></label>
+      </div>
+      <p style={{ color: theme.mutedText }}>These settings also apply to the Discord management panel. GBP and UK formatting are the default. Converted values use dated exchange rates and show ≈; they are not verified local store prices. If conversion is unavailable, prices are hidden while offers continue updating. Locale changes number/date formatting; offer text remains in the provider’s language. Region records your preference; check each offer’s regional eligibility.</p>
+    </SectionCard>
+    <SectionCard themed theme={theme} title="Listing appearance">
+      <div style={grid}>
+        {select('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']])}
+        {[['showTimestamps', 'Footer timestamps'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={selectionStyle(draft[key] !== false)}><input type="checkbox" style={{ accentColor: theme.primary, width: 16, height: 16 }} disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
+      </div>
+      <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Games.</p>
+    </SectionCard>
+
+    <SectionCard themed theme={theme} title="Featured main game" subtitle="One standout full game above the list, all in the same Discord embed.">
+      <div style={grid}>
+        {select('featuredMode', 'Featured selection', [['auto', 'Automatic main game'], ['manual', 'Selected main game'], ['off', 'No featured game']])}
+        {select('featuredArtwork', 'Featured artwork', [['thumbnail', 'Top-right artwork thumbnail'], ['hidden', 'Hide artwork']])}
+      </div>
+      <DiscordResourceSelect searchable theme={theme} label="Choose the featured main game" disabled={busy} value={draft.featuredOfferId || ''} placeholder="Automatic selection" resources={(() => { const choices = preview?.featuredChoices || data.featuredChoices || []; return draft.featuredOfferId && !choices.some(choice => choice.id === draft.featuredOfferId) ? [{ id: draft.featuredOfferId, name: 'Previously selected game (currently unavailable)' }, ...choices] : choices; })()} onChange={featuredOfferId => patch({ featuredOfferId: featuredOfferId || null, featuredMode: featuredOfferId ? 'manual' : 'auto' })} />
+      <p style={{ color: theme.mutedText, lineHeight: 1.6, fontSize: 14, margin: 0 }}>Automatic selection uses GamerPower’s popularity order for full games on your selected Steam, Epic, GOG and console stores. DLC, loot, demos and trials never take this spot. If your chosen game is no longer available, an eligible replacement is selected automatically. Artwork stays on the featured title; the list below remains compact.</p>
+    </SectionCard>
+    <SectionCard themed theme={theme} title="Stores and platforms">{checks('stores', data.stores)}</SectionCard>
+    <SectionCard themed theme={theme} title="Offer types">{checks('types', data.types)}<p style={{ color: theme.mutedText }}>Games to keep is the default. DLC and loot may require a base game. Beta access, demos and free weekends are temporary and labelled separately. Availability depends on the provider feed.</p></SectionCard>
+    <SectionCard themed theme={theme} title="New offer alerts">
+      <fieldset disabled={busy} style={{ border: 0, padding: 0, display: 'grid', gap: 16 }}>
+        <label style={selectionStyle(draft.alerts)}><input type="checkbox" style={{ accentColor: theme.primary, width: 16, height: 16 }} checked={draft.alerts} onChange={(event) => patch({ alerts: event.target.checked })} /> Post an alert for newly discovered offers</label>
+        <RoleSelect searchable disabled={busy} theme={theme} resources={data.roles} value={draft.roleId || ''} onChange={(roleId) => patch({ roleId: roleId || null })} placeholder="No role ping" label="Optional notification role" />
+        <p style={{ margin: 0, color: theme.mutedText }}>No role selected means no ping. Initial setup and filter changes establish a quiet baseline. Restarts and routine updates do not repeat alerts.</p>
+      </fieldset>
+    </SectionCard>
+    {previewCard}
+    <button style={{ ...button, background: theme.primary, color: theme.primaryText, borderColor: theme.primary, justifySelf: 'start', minWidth: 170 }} disabled={busy} onClick={() => act(false)}>{busy ? 'Working…' : 'Save settings'}</button>
+  </div>;
+  const overview = <><SectionCard themed theme={theme} title="Free Games status"><div style={{ display: 'grid', gap: 12 }}>
+    <p>{data.config.state.offerCount} matching offers · {data.config.state.deliveries.length} listing messages</p>
+    <p>Last check: {stamp(data.config.state.lastCheck, data.config)}<br />Last successful update: {stamp(data.config.state.lastSuccess, data.config)}</p>
+    <p>{!data.config.enabled ? 'Updates are paused.' : !(data.config.destinationsConfigured ? data.config.destinations?.some(route => route.enabled) : data.config.channelId) ? 'Needs setup: choose a destination channel.' : data.config.state.error ? 'Update failed. The last successful listing is retained.' : !data.config.state.lastSuccess ? 'Waiting for the first successful listing update.' : 'The last listing update succeeded.'}</p>
+    {data.config.state.warning ? <p role="status">{data.config.state.warning}</p> : null}
+    {data.config.state.error ? <p role="alert" style={{ color: '#fca5a5' }}>{data.config.state.error}</p> : null}
+    <button style={button} disabled={busy || !data.config.enabled} onClick={() => act(true)}>Refresh saved listing now</button>
+    <p style={{ color: theme.mutedText }}>Checks run every five minutes; the shared offer feed refreshes every 15 minutes. NEW marks offers discovered after the initial baseline and lasts 24 hours. Individual offers keep their dates hidden; the footer shows the source feed update time. Expiry data still filters out ended offers.</p>
+    <a href="https://www.gamerpower.com/" target="_blank" rel="noreferrer">Offers provided by GamerPower</a>
+  </div></SectionCard>{previewCard}</>;
+
+  const updateConfig = data.updates || { enabled: false, subscriptions: {}, history: [] };
+  const subscriptions = Object.values(updateConfig.subscriptions);
+  const shownGames = subscriptions.filter(sub => sub.name.toLowerCase().includes(updateSearch.toLowerCase()));
+  const editGame = sub => { setGameForm({ ...sub, includeWords: sub.includeWords.join(', '), excludeWords: sub.excludeWords.join(', ') }); setUpdatePreview(null); };
+  const formPatch = patch => setGameForm(previous => ({ ...previous, ...patch }));
+  const formSelect = (key, label, choices) => <DiscordResourceSelect searchable clearable={false} theme={theme} label={label} disabled={busy} value={gameForm[key]} resources={choices.map(([id, name]) => ({ id, name }))} onChange={value => formPatch({ [key]: value })} />;
+  const gameCard = sub => <article key={sub.appId} style={{ border: '1px solid ' + theme.cardBorder, borderRadius: 14, padding: 16, background: theme.softBg, minWidth: 0, display: 'grid', gap: 12 }}>
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+      <img src={'https://cdn.akamai.steamstatic.com/steam/apps/' + sub.appId + '/header.jpg'} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} style={{ width: 88, height: 42, borderRadius: 8, objectFit: 'cover' }} />
+      <div style={{ minWidth: 0 }}><strong style={{ overflowWrap: 'anywhere' }}>{sub.name}</strong><div style={{ color: theme.mutedText, fontSize: 12 }}>{sub.enabled ? 'Following' : 'Paused'} · Steam publisher announcements</div></div>
+    </div>
+    <div style={{ color: theme.mutedText, fontSize: 13, lineHeight: 1.6 }}>{data.channels.find(channel => channel.id === sub.channelId)?.name || 'No destination'} · {sub.filter === 'all' ? 'All announcements' : sub.filter === 'patches' ? 'Patch / update titles' : 'Other announcements'}<br />Last delivery: {stamp(sub.lastSuccess, data.config)} · {sub.pending.length} queued</div>
+    {sub.error ? <p role="status" style={{ color: theme.warningText || theme.warning, margin: 0, fontSize: 13 }}>{sub.error}</p> : null}
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <button style={button} disabled={busy} onClick={() => editGame(sub)}>Edit</button>
+      <button style={button} disabled={busy} onClick={() => updateAction(sub.appId + '/preview')}>Preview</button>
+      <button style={button} disabled={busy || !sub.channelId} onClick={() => updateAction(sub.appId + '/send-latest')}>Send latest</button>
+      <button style={button} disabled={busy} onClick={() => updateAction('subscriptions', { appId: sub.appId, enabled: !sub.enabled })}>{sub.enabled ? 'Pause' : 'Resume'}</button>
+      <button style={button} disabled={busy} onClick={() => setConfirmRemove(sub.appId)}>Unsubscribe</button>
+    </div>
+    {confirmRemove === sub.appId ? <div role="alert" style={{ display: 'grid', gap: 8 }}>
+      <span>Unsubscribe from {sub.name}? Existing posts and history will be kept.</span>
+      <div style={{ display: 'flex', gap: 8 }}><button style={button} disabled={busy} onClick={() => updateAction('subscriptions/' + sub.appId, null, 'DELETE')}>Confirm unsubscribe</button><button style={button} onClick={() => setConfirmRemove(null)}>Cancel</button></div>
+    </div> : null}
+  </article>;
+  const updatesPanel = <div style={{ display: 'grid', gap: 18 }}>
+    <SectionCard themed theme={theme} title="Game Updates" subtitle="Follow publisher announcements independently of Free Games.">
+      <label style={{ ...selectionStyle(updateConfig.enabled), justifyContent: 'space-between' }}><span><strong>Automatic game updates</strong><span style={{ display: 'block', color: theme.mutedText, fontSize: 13 }}>{subscriptions.length} subscribed games · checks run every five minutes</span></span><input type="checkbox" role="switch" aria-label="Enable game updates" disabled={busy} checked={updateConfig.enabled} style={{ width: 20, height: 20, accentColor: theme.primary }} onChange={event => updateAction('settings', { enabled: event.target.checked }, 'PATCH')} /></label>
+      <div style={grid}>
+        <label>Quiet hours start<input type="time" style={inputStyle} disabled={busy} value={quiet.quietStart} onChange={event => setQuiet(previous => ({ ...previous, quietStart: event.target.value }))} /></label>
+        <label>Quiet hours end<input type="time" style={inputStyle} disabled={busy} value={quiet.quietEnd} onChange={event => setQuiet(previous => ({ ...previous, quietEnd: event.target.value }))} /></label>
+      </div>
+      <p style={{ color: theme.mutedText, fontSize: 13, margin: 0 }}>Timezone: {data.config.timeZone}. Quiet hours hold updates for later delivery. Clear both times to disable them.</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><button style={button} disabled={busy} onClick={() => updateAction('settings', { quietStart: quiet.quietStart || null, quietEnd: quiet.quietEnd || null }, 'PATCH')}>Save quiet hours</button><button style={button} disabled={busy || !updateConfig.enabled} onClick={() => updateAction('check')}>Check for updates</button></div>
+    </SectionCard>
+    <SectionCard themed theme={theme} title="Publisher game catalogue" subtitle="Discovery only — publisher feeds must be integrated and verified before subscriptions become available.">
+      <p style={{ color: theme.mutedText, marginTop: 0 }}>These titles are not Steam subscriptions. They cannot send automatic notifications yet.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 10 }}>
+        {(data.publisherUpdateCatalog || []).map(game => (
+          <div key={game.id} style={{ border: '1px solid ' + (theme.border || '#555'), borderRadius: 10, padding: 12 }}>
+            <strong>{game.name}</strong>
+            <p style={{ color: theme.mutedText, margin: '6px 0' }}>{game.publisher} · Integration pending</p>
+            <a href={game.newsUrl} target="_blank" rel="noopener noreferrer">Publisher news</a>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+    <SectionCard themed theme={theme} title={updateConfig.subscriptions[gameForm.appId] ? 'Edit game subscription' : 'Follow a game'} subtitle="Use the starter catalogue or enter a Steam store URL / App ID.">
+      <DiscordResourceSelect searchable theme={theme} label="Game catalogue" disabled={busy} value={gameForm.appId} placeholder="Choose a game or enter one below" resources={(data.updateCatalog || []).filter(game => !game.catalogueType || game.catalogueType === 'game' || updateConfig.subscriptions[game.appId]).map(game => ({ id: game.appId, name: game.name + (game.catalogueType && game.catalogueType !== 'game' ? ' (' + game.catalogueType.toUpperCase() + ' — legacy)' : '') }))} onChange={appId => { const game = data.updateCatalog.find(game => game.appId === appId); const current = updateConfig.subscriptions[appId]; current ? editGame(current) : setGameForm({ ...blankUpdate(), appId, name: game?.name || '' }); }} />
+      <p style={{ color: theme.mutedText, fontSize: 13, margin: '8px 0' }}>Only games appear in the starter list. Existing software/DLC subscriptions remain available and labelled as legacy; custom Steam App IDs can still be entered.</p>
+      {gameForm.appId && (data.updateCatalog || []).some(game => game.appId === gameForm.appId && game.catalogueType && game.catalogueType !== 'game') && (
+        <p role="status" style={{ color: theme.mutedText, fontSize: 13 }}>This Steam entry is classified as {data.updateCatalog.find(game => game.appId === gameForm.appId)?.catalogueType?.toUpperCase()}, not a standalone game. Existing subscriptions are preserved.</p>
+      )}
+      <div style={{ margin: '10px 0', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <button style={button} disabled={busy || !gameForm.appId.trim()} onClick={() => verifySource(gameForm.appId)}>Verify announcement source</button>
+        {sourceCheck && sourceCheck.appId === gameForm.appId && <span style={{ color: theme.mutedText }}>
+          {sourceCheck.status === 'announcements-found' ? 'Feed returned ' + sourceCheck.announcementCount + ' announcements (identity checked separately below)' : sourceCheck.status === 'no-announcements' ? 'Feed reachable, no valid announcements' : 'Feed unavailable'}
+          {' · Checked ' + stamp(sourceCheck.checkedAt)}
+          {sourceCheck.error ? ' · ' + sourceCheck.error : ''}
+          {sourceCheck.identity && <> · Store identity: {sourceCheck.identity.status === 'match' ? 'Name matches Steam' : sourceCheck.identity.status === 'name-mismatch' ? 'Name mismatch — review catalogue entry' : sourceCheck.identity.status === 'non-game' ? 'Not confirmed as a game — review store type' : sourceCheck.identity.status === 'unlisted' ? 'Custom Steam App ID' : sourceCheck.identity.status === 'not-found' ? 'Steam store entry not found' : 'Store metadata unavailable'}
+            {sourceCheck.identity.storeName ? ' (' + sourceCheck.identity.storeName + ')' : ''}{sourceCheck.identity.storeType ? ' · Type: ' + sourceCheck.identity.storeType : ''}
+          </>}
+          {sourceCheck.latestAnnouncementUrl && <> · <a href={sourceCheck.latestAnnouncementUrl} target="_blank" rel="noopener noreferrer">Latest announcement</a></>}
+        </span>}
+      </div>
+      <div style={grid}>
+        <label>Steam App ID or store URL<input style={inputStyle} disabled={busy} value={gameForm.appId} onChange={event => formPatch({ appId: event.target.value })} placeholder="https://store.steampowered.com/app/…" /></label>
+        <label>Game name<input style={inputStyle} disabled={busy} maxLength={100} value={gameForm.name} onChange={event => formPatch({ name: event.target.value })} /></label>
+      </div>
+      <ChannelSelect searchable disabled={busy} theme={theme} resources={data.channels} value={gameForm.channelId || ''} label="Update destination" onChange={channelId => formPatch({ channelId: channelId || null })} />
+      <RoleSelect searchable disabled={busy} theme={theme} resources={data.roles} value={gameForm.roleId || ''} label="Optional notification role" placeholder="No role ping" onChange={roleId => formPatch({ roleId: roleId || null })} />
+      <div style={grid}>
+        {formSelect('filter', 'Update filter', [['patches', 'Patch / update titles'], ['all', 'All publisher announcements'], ['announcements', 'Other announcements']])}
+        {formSelect('artwork', 'Artwork', [['banner', 'Large artwork'], ['thumbnail', 'Thumbnail'], ['hidden', 'No artwork']])}
+        {formSelect('detail', 'Text length', [['compact', 'Compact summary'], ['detailed', 'Detailed summary']])}
+        <label>Include keywords<input style={inputStyle} disabled={busy} maxLength={500} value={gameForm.includeWords} onChange={event => formPatch({ includeWords: event.target.value })} placeholder="Any match, separated by commas" /></label>
+        <label>Exclude keywords<input style={inputStyle} disabled={busy} maxLength={500} value={gameForm.excludeWords} onChange={event => formPatch({ excludeWords: event.target.value })} placeholder="Any match, separated by commas" /></label>
+      </div>
+      <label style={selectionStyle(gameForm.enabled)}><input type="checkbox" disabled={busy} checked={gameForm.enabled} style={{ accentColor: theme.primary }} onChange={event => formPatch({ enabled: event.target.checked })} />Enable this game subscription</label>
+      <p style={{ color: theme.mutedText, fontSize: 13, lineHeight: 1.6, margin: 0 }}>Patch filtering matches words in announcement titles. Steam does not provide a uniform patch classification for every game. New subscriptions, resumed games and destination/filter changes start from the next announcement. Preview is private; Send latest posts once without a role ping. Up to 50 games per server.</p>
+      <div style={{ display: 'flex', gap: 10 }}><button style={{ ...button, background: theme.primary, color: theme.primaryText }} disabled={busy || !gameForm.appId || !gameForm.name} onClick={() => updateAction('subscriptions', gameForm)}>Save subscription</button><button style={button} disabled={busy} onClick={() => setGameForm(blankUpdate())}>Clear editor</button></div>
+    </SectionCard>
+    {updatePreview ? <SectionCard themed theme={theme} title="Announcement preview" subtitle="This preview does not post a message or ping a role.">
+      <article style={{ border: '1px solid ' + theme.cardBorder, borderLeft: '4px solid ' + theme.primary, borderRadius: 12, padding: 18, minWidth: 0 }}>
+        <h3 style={{ marginTop: 0 }}>{updatePreview.payload.embeds[0].author.name}</h3>
+        <a href={updatePreview.item.url} target="_blank" rel="noreferrer" style={{ fontSize: 20, fontWeight: 700 }}>{updatePreview.item.title}</a>
+        <p style={{ color: theme.mutedText, lineHeight: 1.7 }}>{updatePreview.item.description.slice(0, updatePreview.payload.embeds[0].description.length > 1000 ? 3000 : 650)}</p>
+        {updatePreview.payload.embeds[0].image || updatePreview.payload.embeds[0].thumbnail ? <img src={(updatePreview.payload.embeds[0].image || updatePreview.payload.embeds[0].thumbnail).url} alt="" style={{ width: updatePreview.payload.embeds[0].image ? '100%' : 100, maxWidth: 640, borderRadius: 12 }} onError={event => { event.currentTarget.style.display = 'none'; }} /> : null}
+        <p style={{ fontSize: 12, color: theme.mutedText }}>Game Updates · Steam · {stamp(updatePreview.item.publishedAt, data.config)}</p>
+      </article>
+    </SectionCard> : null}
+    <SectionCard themed theme={theme} title="Subscriptions" subtitle="Route all games to one channel or choose a destination for each.">
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><button style={button} onClick={() => setUpdateView('games')}>Games</button><button style={button} onClick={() => setUpdateView('channels')}>Channels</button><input aria-label="Search subscribed games" style={{ ...inputStyle, width: 'min(100%, 360px)', marginTop: 0 }} placeholder="Search subscribed games…" value={updateSearch} onChange={event => setUpdateSearch(event.target.value)} /></div>
+      {!shownGames.length ? <p style={{ color: theme.mutedText }}>No matching subscriptions. Choose a game above to start following updates.</p> : updateView === 'games' ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 310px), 1fr))', gap: 14 }}>{shownGames.map(gameCard)}</div> :
+        [...data.channels, ...[...new Set(shownGames.map(sub => sub.channelId))].filter(id => id && !data.channels.some(channel => channel.id === id)).map(id => ({ id, name: 'Unavailable channel · ' + id })), { id: null, name: 'No destination' }].filter(channel => shownGames.some(sub => sub.channelId === channel.id)).map(channel => <div key={channel.id || 'none'}><h3>{channel.name}</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 310px), 1fr))', gap: 14 }}>{shownGames.filter(sub => sub.channelId === channel.id).map(gameCard)}</div></div>)}
+    </SectionCard>
+    <SectionCard themed theme={theme} title="Delivery history" subtitle="Recent deliveries, failures and items needing review.">
+      {!updateConfig.history.length ? <p style={{ color: theme.mutedText }}>No updates have been delivered yet.</p> : <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}><thead><tr>{['Update', 'Status', 'Time'].map(label => <th key={label} style={{ textAlign: 'left', padding: 10 }}>{label}</th>)}</tr></thead><tbody>{updateConfig.history.slice(0, 15).map((record, index) => <tr key={record.appId + ':' + record.itemId + ':' + index}><td style={{ padding: 10, borderTop: '1px solid ' + theme.cardBorder }}><a href={record.url} target="_blank" rel="noreferrer">{record.title}</a></td><td style={{ padding: 10 }}>{({ delivered: 'Delivered', recovered: 'Delivery recovered', failed: 'Delivery failed', needs_review: 'Needs review' })[record.status] || record.status}</td><td style={{ padding: 10 }}>{stamp(record.at, data.config)}</td></tr>)}</tbody></table></div>}
+      {subscriptions.some(sub => sub.pending.some(entry => entry.status === 'ambiguous')) ? <div style={{ display: 'grid', gap: 10 }}><p style={{ color: theme.warningText || theme.warning }}>Inspect the destination channel before retrying uncertain deliveries. Retries check for existing posts and do not ping roles.</p>{subscriptions.filter(sub => sub.pending.some(entry => entry.status === 'ambiguous')).map(sub => <button key={sub.appId} style={button} disabled={busy} onClick={() => updateAction(sub.appId + '/retry')}>Retry held: {sub.name}</button>)}</div> : null}
+    </SectionCard>
+  </div>;
+
+  return <ModuleShell key={guildId} theme={theme} title="Games" subtitle="Manage game updates, publisher announcements and free-game offers." guild={selectedGuildData} status={data.updates?.enabled ? (subscriptions.some(sub => sub.error) ? 'Warning' : 'Enabled') : data.config.enabled ? ((data.config.state.error || data.config.state.warning) ? 'Warning' : !data.config.channelId ? 'Needs setup' : !data.config.state.lastSuccess ? 'Pending' : 'Enabled') : 'Disabled'} updatedAt={stamp(data.config.state.lastSuccess, data.config)} templateCount={3} deploymentCount={data.config.state.deliveries.length} notice={error || notice} noticeTone={error ? 'danger' : 'info'} tabs={[{ key: 'updates', label: 'Game Updates' }, { key: 'overview', label: 'Free Games' }, { key: 'configuration', label: 'Free Games settings' }]}>{{ updates: updatesPanel, overview, configuration }}</ModuleShell>;
+}

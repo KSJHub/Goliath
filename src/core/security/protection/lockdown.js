@@ -1,6 +1,7 @@
 'use strict';
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { EMOJIS } = require('../../ui/emojis');
 const guildManager = require('../../guild/guildManager');
 const schedulerRegistry = require('../../../owner/sentinel/schedulerRegistry');
 const { emitLockdownUpdate } = require('../../../server/sockets/socketHub');
@@ -268,7 +269,7 @@ function startLockdownReminder(guild, reminderChannelId, reminderUserId) {
         return;
       }
       const reminderMessage = await channel.send({
-        content: `⚠️ <@${latest.reminderUserId || reminderUserId}> Lockdown is still **ACTIVE**. ⚠️\nRemove the lockdown as soon as the server is secure.`,
+        content: `${EMOJIS.WARNING} <@${latest.reminderUserId || reminderUserId}> Lockdown is still **ACTIVE**. ${EMOJIS.WARNING}\nRemove the lockdown as soon as the server is secure.`,
       });
       saveLockdownState(guild, { ...latest, lastReminderAt: Date.now() });
       schedulerRegistry.beat(schedulerId, { reminderSent: true, reminderChannelId: channel.id });

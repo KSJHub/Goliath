@@ -13,9 +13,9 @@ function optionalRequire(label, modulePath, fallback = {}) {
 
 const guildManager = optionalRequire('guild manager', '../../core/guild/guildManager');
 const panelNavigation = optionalRequire('panel navigation', '../../core/ui/panelNavigation');
-const verificationManager = optionalRequire('verification manager', '../../modules/securityStudio/verificationManager');
-const verificationFlowContinuation = optionalRequire('verification flow continuation', '../../modules/securityStudio/verificationFlowContinuation');
-const verificationChallengeInteractions = optionalRequire('verification challenge interactions', '../../modules/securityStudio/verificationChallengeInteractions');
+const verificationManager = optionalRequire('verification manager', '../../modules/securityStudio/verification/verificationManager');
+const verificationFlowContinuation = optionalRequire('verification flow continuation', '../../modules/securityStudio/verification/verificationFlowContinuation');
+const verificationChallengeInteractions = optionalRequire('verification challenge interactions', '../../modules/securityStudio/verification/verificationChallengeInteractions');
 const ticketInteractionHandler = optionalRequire('tickets', '../../modules/feedbackStudio/tickets/tickets');
 const pollsInteractions = optionalRequire('polls', '../../modules/communityStudio/polls/pollsInteractions');
 const tempVoiceInteractionHandler = optionalRequire('temp voice', '../../modules/utilityStudio/tempVoice/tempVoiceInteractionHandler');
@@ -30,6 +30,7 @@ const adminPanel = optionalRequire('admin panel', '../../core/administration/adm
 const adminCommand = optionalRequire('admin security controls', '../../core/administration/admin/command');
 const automodPanel = optionalRequire('automod panel', '../../core/administration/automod/panel');
 const modInteractions = optionalRequire('mod interactions', '../../core/administration/mod/interactions');
+const joinIntelligenceActions = optionalRequire('join intelligence actions', './joinIntelligenceActions');
 const restoreRequestManager = optionalRequire('restore requests', '../../core/security/restoreBackup/requests');
 const statsAdminPanel = optionalRequire('stats admin', '../../modules/utilityStudio/stats/statsPanel');
 const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../modules/roleStudio/reactionRoles/reactionRolesPanel');
@@ -42,7 +43,7 @@ const socialAdminPanel = optionalRequire('social admin', '../../modules/socialSt
 const socialCreatorActionCompat = optionalRequire('social creator actions', '../../modules/socialStudio/socialAlerts/socialStudioCreatorActionCompat');
 const schedulePanel = optionalRequire('schedule admin', '../../modules/utilityStudio/schedule/schedulePanel');
 const scheduleDeployment = optionalRequire('schedule RSVP', '../../modules/utilityStudio/schedule/scheduleDeployment');
-const verificationAdminPanel = optionalRequire('verification admin', '../../modules/securityStudio/verificationPanel');
+const verificationAdminPanel = optionalRequire('verification admin', '../../modules/securityStudio/verification/verificationPanel');
 const autorolesPanel = optionalRequire('auto roles', '../../modules/roleStudio/autoRoles/autoRolesPanel');
 const timedRolesPanel = optionalRequire('timed roles', '../../modules/roleStudio/timedRoles/timedRolesPanel');
 const welcomePanel = optionalRequire('welcome', '../../modules/messageStudio/welcome/welcomePanel');
@@ -213,6 +214,13 @@ module.exports={
     try{
       wrapInteractionResponses(interaction);
       if(interaction?.isAutocomplete?.()){const command=client.commands?.get?.(interaction.commandName);if(command?.autocomplete)await command.autocomplete(interaction,client);else await interaction.respond([]).catch(()=>null);return;}
+      // Join Intelligence buttons must bypass legacy role pagination and other
+      // potentially slow routers so their handler can acknowledge immediately.
+      if (String(interaction?.customId || '').startsWith('joinintel:')) {
+        if (typeof joinIntelligenceActions.execute !== 'function') throw new Error('Member Intelligence controls are unavailable.');
+        await joinIntelligenceActions.execute(interaction);
+        return;
+      }
       if(!interaction?.customId&&!interaction?.isChatInputCommand?.())return;
       if(interaction.isChatInputCommand?.()){const command=client.commands?.get?.(interaction.commandName);if(!command)return;await command.execute(interaction,client);return;}
       if(await handleLegacyRolePage(interaction))return;
@@ -243,8 +251,23 @@ module.exports={
         return;
       }
       if(customId.startsWith('permstudio:')||customId.startsWith('permedit:')||customId.startsWith('permbulk:')||customId.startsWith('permpreset:')||customId.startsWith('permsync:')||customId.startsWith('permaccess:')||customId.startsWith('permfinder:')||customId.startsWith('permaudit:')||customId.startsWith('permrestore:')){await permissionsStudioInteractions.execute(interaction,client);return;}
+      if (customId.startsWith('inv_transcript_download:')) {
+        await require('../../core/administration/mod/quarantineInteractions').handleInvestigationTranscriptDownload(interaction);
+        return;
+      }
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
+      if(customId.startsWith('verify:challenge:')||customId.startsWith('verify:staff:')||customId.startsWith('verify:answer:')){
+        const runtimeServices={
+          resumeVerification:verificationFlowContinuation.resumeVerification,
+          recordVerificationFailure:verificationFlowContinuation.recordVerificationFailure,
+          quarantineVerificationMember:verificationFlowContinuation.quarantineVerificationMember,
+        };
+        const handled=await verificationChallengeInteractions.handleVerificationChallengeInteraction(interaction,runtimeServices);
+        if(!handled)throw new Error('Verification challenge action was not recognised.');
+        return;
+      }
+
       if(await enforceAdminModuleAuthority(interaction))return;
       if(customId==='admin:studio:roleStudio'){if(!roleStudioPanel||typeof roleStudioPanel.buildRoleStudioPanel!=='function')throw new Error('Role Studio panel is unavailable.');if(!interaction.deferred&&!interaction.replied)await interaction.deferUpdate();const payload=await roleStudioPanel.buildRoleStudioPanel(interaction.guild,interaction.member?.displayName||interaction.user?.username||'Unknown User');await interaction.editReply(payload);return;}
       if(customId.startsWith('admin:roleSelector')||customId.startsWith('roleSelector:')||customId.startsWith('admin:colourRoles')||customId.startsWith('colourRoles:')){if(!await callHandler(roleSelectorPanel,'handleRoleSelectorInteraction',interaction))throw new Error(`Role Selector did not handle ${customId}.`);return;}

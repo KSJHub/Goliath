@@ -1,3 +1,5 @@
+import { DASHBOARD_EMOJIS as E } from './PageShell.jsx';
+import { goDashboard } from '../services/dashboardPath.js';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/apiClient.js';
 import { buildNotificationRoute } from '../utils/notificationLinks.js';
@@ -107,8 +109,8 @@ function Topbar({
 
   const handleThemeToggle = useCallback(() => setDarkMode((prev) => !prev), [setDarkMode]);
   const onLogoutClick = useCallback(() => { closeMenu(); handleLogout(); }, [closeMenu, handleLogout]);
-  const goToPath = useCallback((path, { preserveOwnerQuery = false } = {}) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') window.location.href = path + (preserveOwnerQuery ? getOwnerManagedSearch() : ''); }, [closeMenu, closeDrawer]);
-  const openNotification = useCallback((item) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') window.location.href = buildNotificationRoute(item); }, [closeMenu, closeDrawer]);
+  const goToPath = useCallback((path, { preserveOwnerQuery = false } = {}) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') goDashboard(path + (preserveOwnerQuery ? getOwnerManagedSearch() : '')); }, [closeMenu, closeDrawer]);
+  const openNotification = useCallback((item) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') goDashboard(buildNotificationRoute(item)); }, [closeMenu, closeDrawer]);
 
   const rootStyle = { ...styles.root, width: '100%', maxWidth: '100%', minWidth: 0, overflow: 'visible' };
   const innerStyle = { ...styles.inner, width: '100%', maxWidth: '100%', minWidth: 0, gap: isMobile ? 10 : styles.inner?.gap, paddingLeft: isMobile ? 64 : styles.inner?.paddingLeft, paddingRight: isMobile ? 12 : styles.inner?.paddingRight };
@@ -130,7 +132,7 @@ function Topbar({
           {isAuthenticated ? (
             <>
               <button ref={bellRef} type="button" title="Notifications" aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ''}`} aria-expanded={drawerOpen} onClick={toggleDrawer} onMouseEnter={() => setBellHovered(true)} onMouseLeave={() => setBellHovered(false)} onBlur={() => setBellHovered(false)} style={bellButtonStyle}>
-                <span aria-hidden="true">🔔</span>{unreadNotifications ? <span style={{ color: '#93c5fd' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</span> : null}
+                <span aria-hidden="true">{E.BELL}</span>{unreadNotifications ? <span style={{ color: '#93c5fd' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</span> : null}
               </button>
 
               {drawerOpen ? (
@@ -165,11 +167,11 @@ function Topbar({
 
               {menuOpen ? (
                 <div ref={menuRef} style={menuStyle} role="menu">
-                  <MenuButton styles={styles} hovered={hoveredMenuItem === 'notifications'} onHover={() => setHoveredMenuItem('notifications')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/notifications', { preserveOwnerQuery: true })} icon="🔔" label="Notifications" />
-                  <MenuButton styles={styles} hovered={hoveredMenuItem === 'timeline'} onHover={() => setHoveredMenuItem('timeline')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/timeline', { preserveOwnerQuery: true })} icon="🕘" label="Activity Timeline" />
+                  <MenuButton styles={styles} hovered={hoveredMenuItem === 'notifications'} onHover={() => setHoveredMenuItem('notifications')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/notifications', { preserveOwnerQuery: true })} icon={E.BELL} label="Notifications" />
+                  <MenuButton styles={styles} hovered={hoveredMenuItem === 'timeline'} onHover={() => setHoveredMenuItem('timeline')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/timeline', { preserveOwnerQuery: true })} icon={E.HISTORY} label="Activity Timeline" />
                   <MenuButton styles={styles} hovered={hoveredMenuItem === 'billing'} onHover={() => setHoveredMenuItem('billing')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/billing')} icon="£" label="Billing" />
                   <MenuButton styles={styles} hovered={hoveredMenuItem === 'docs'} onHover={() => setHoveredMenuItem('docs')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/docs')} icon="?" label="Documentation" />
-                  {isOwner ? (isOwnerView ? <MenuButton styles={styles} hovered={hoveredMenuItem === 'return'} onHover={() => setHoveredMenuItem('return')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/overview', { preserveOwnerQuery: true })} icon="🏠" label="Return" /> : <MenuButton styles={styles} hovered={hoveredMenuItem === 'owner'} onHover={() => setHoveredMenuItem('owner')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/owner')} icon="👑" label="Owner View" />) : null}
+                  {isOwner ? (isOwnerView ? <MenuButton styles={styles} hovered={hoveredMenuItem === 'return'} onHover={() => setHoveredMenuItem('return')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/overview', { preserveOwnerQuery: true })} icon={E.HOME} label="Return" /> : <MenuButton styles={styles} hovered={hoveredMenuItem === 'owner'} onHover={() => setHoveredMenuItem('owner')} onLeave={() => setHoveredMenuItem('')} onClick={() => goToPath('/owner')} icon={E.CROWN} label="Owner View" />) : null}
                   <div style={styles.themeRow}><div style={styles.themeCopy}><span style={styles.themeLabel}>Dark mode</span></div><button type="button" role="switch" aria-checked={darkMode} aria-label={`Switch to ${darkMode ? 'light' : 'dark'} mode`} onClick={handleThemeToggle} onMouseEnter={() => setHoveredMenuItem('theme')} onMouseLeave={() => setHoveredMenuItem('')} onBlur={() => setHoveredMenuItem('')} style={styles.themeSwitch(!darkMode, hoveredMenuItem === 'theme')}><span style={styles.themeSwitchTrack}><span style={styles.themeIconLeft}>☾</span><span style={styles.themeIconRight}>☀</span><span style={styles.themeThumb(!darkMode)} /></span></button></div>
                   <button type="button" role="menuitem" onClick={onLogoutClick} onMouseEnter={() => setHoveredMenuItem('logout')} onMouseLeave={() => setHoveredMenuItem('')} onBlur={() => setHoveredMenuItem('')} style={styles.logoutButton(hoveredMenuItem === 'logout')}>Log out</button>
                 </div>

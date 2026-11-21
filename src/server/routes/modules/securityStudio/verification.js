@@ -5,9 +5,9 @@ const { PermissionFlagsBits } = require('discord.js');
 
 const guildManager = require('../../../../core/guild/guildManager');
 const { isBotOwner } = require('../../../../core/security/protection/core');
-const verificationHealth = require('../../../../modules/securityStudio/verificationHealth');
-const verificationManager = require('../../../../modules/securityStudio/verificationManager');
-const verificationStore = require('../../../../modules/securityStudio/verificationStore');
+const verificationHealth = require('../../../../modules/securityStudio/verification/verificationHealth');
+const verificationManager = require('../../../../modules/securityStudio/verification/verificationManager');
+const verificationStore = require('../../../../modules/securityStudio/verification/verificationStore');
 
 const router = express.Router();
 const MODULE = 'verification';
@@ -50,6 +50,7 @@ function buildMeta(req, action) {
   return {
     action,
     actorId: getActorId(req),
+    expectedConfigRevision: req.body?.expectedConfigRevision,
   };
 }
 
@@ -158,14 +159,38 @@ function getConfig(guildId) {
 
 function saveConfig(guildId, input = {}, meta = {}) {
   const current = verificationManager.getVerificationStatus(guildId);
+  const { expectedConfigRevision: _revision, ...cleanInput } = input;
+  input = cleanInput;
   const settingsInput = input.settings && typeof input.settings === 'object'
     ? input.settings
     : input;
-  const settings = verificationStore.normalizeSettings({
-    ...current.settings,
-    ...settingsInput,
-  });
+  // Role arrays are canonical. Updating only legacy role aliases would otherwise
+  // be ignored because normalizeSettings prefers existing settings.roles entries.
+  const roles = { ...(current.settings.roles || {}), ...(settingsInput.roles || {}) };
+  if (Object.prototype.hasOwnProperty.call(settingsInput, 'verifiedRoleIds')) {
+    roles.verified = settingsInput.verifiedRoleIds;
+  }
+  if (Object.prototype.hasOwnProperty.call(settingsInput, 'pendingRoleIds')) {
+    roles.pending = settingsInput.pendingRoleIds;
+  }
+  // Merge nested configuration groups so partial dashboard updates cannot
+  // silently reset unrelated security, flow, raid or logging settings.
+  const merged = { ...current.settings, ...settingsInput, roles };
+  for (const key of ['security', 'flow', 'intelligence', 'logs', 'raid', 'quarantine', 'botPolicy', 'health']) {
+    if (settingsInput[key] && typeof settingsInput[key] === 'object' && !Array.isArray(settingsInput[key])) {
+      merged[key] = { ...(current.settings[key] || {}), ...settingsInput[key] };
+    }
+  }
+  for (const key of ['captchaConfig', 'minigameConfig', 'staffApprovalConfig', 'oneTimeChallengeConfig', 'riskConfig', 'rejoinConfig']) {
+    if (settingsInput.security?.[key] && typeof settingsInput.security[key] === 'object' && !Array.isArray(settingsInput.security[key])) {
+      merged.security[key] = { ...(current.settings.security?.[key] || {}), ...settingsInput.security[key] };
+    }
+  }
+  const settings = verificationStore.normalizeSettings(merged);
 
+  // Persist and validate the configuration before changing module enablement.
+  // A failed configuration write must not leave the module toggled unexpectedly.
+  verificationManager.configureVerification(guildId, { settings }, meta);
   if (input.enabled !== undefined) {
     guildManager.setModuleEnabled(
       guildId,
@@ -174,8 +199,6 @@ function saveConfig(guildId, input = {}, meta = {}) {
       meta
     );
   }
-
-  verificationManager.configureVerification(guildId, { settings }, meta);
   return getConfig(guildId);
 }
 
@@ -189,6 +212,7 @@ function buildExport(guildId) {
 }
 
 function resetVerification(guildId, meta = {}) {
+  if (meta.expectedConfigRevision != null && Number(meta.expectedConfigRevision) !== Number(verificationStore.getVerificationSection(guildId).configRevision)) throw new Error('Verification configuration changed. Reload before resetting.');
   const section = verificationStore.saveVerificationSection(
     guildId,
     verificationStore.defaultVerificationSection(),
@@ -212,6 +236,8 @@ router.get('/:guildId/overview', async (req, res) => {
       guildId,
       updatedAt: new Date().toISOString(),
       config: getConfig(guildId),
+      configRevision: section.configRevision,
+      activePanelId: section.activePanelId,
       messages: section.messages,
       panelTemplate: section.panelTemplate,
       panels: Object.values(section.panels || {}),
@@ -274,7 +300,7 @@ router.post('/:guildId/template', (req, res) => {
     const guildId = getGuildId(req);
     const template = verificationManager.updatePanelTemplate(
       guildId,
-      req.body || {},
+      Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => key !== 'expectedConfigRevision')),
       buildMeta(req, 'verification_api_template')
     );
 
@@ -315,10 +341,7 @@ router.post('/:guildId/deploy', async (req, res) => {
         panelId,
         createdBy: actorId,
       },
-      {
-        action: 'verification_api_deploy',
-        actorId,
-      }
+      buildMeta(req, 'verification_api_deploy')
     );
 
     return success(res, { guildId, panel });
@@ -336,10 +359,8 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
     if (!existing) throw new Error('Verification panel not found.');
 
     const actorId = getActorId(req);
-    const meta = {
-      action: 'verification_api_redeploy',
-      actorId,
-    };
+    const meta = buildMeta(req, 'verification_api_redeploy');
+    const { expectedConfigRevision: _revision, ...panelInput } = req.body || {};
 
     let panel;
 
@@ -347,7 +368,7 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
       panel = await verificationManager.refreshVerificationPanel(
         guild,
         existing.panelId,
-        req.body || {},
+        panelInput,
         meta
       );
     } else {
@@ -374,7 +395,7 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
         createdAt: _createdAt,
         createdBy: _createdBy,
         ...redeployInput
-      } = req.body || {};
+      } = panelInput;
       const section = verificationStore.getVerificationSection(guildId);
 
       panel = await verificationManager.deployVerificationPanel(

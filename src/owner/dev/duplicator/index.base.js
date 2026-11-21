@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   Client,
@@ -14,6 +13,7 @@ const {
   PermissionsBitField,
   Role,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const core = require('./core');
 const selective = require('./selective');
 const history = require('./history');
@@ -434,7 +434,7 @@ function bulkDeleteFailureDetails(interaction) {
       ].filter(Boolean).join('\n'))
       .setTimestamp()],
     components: sessionId ? [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`dupselect:${sessionId}:home`).setLabel('Back to Duplicator').setStyle(ButtonStyle.Secondary),
+      navigationButton(`dupselect:${sessionId}:home`, 'Back to Duplicator', ButtonStyle.Secondary),
     )] : [],
   };
 }

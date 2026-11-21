@@ -6,7 +6,7 @@ const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 
 const autoRoleStore = require('../../../modules/roleStudio/autoRoles/autoRoles');
-const verificationStore = require('../../../modules/securityStudio/verificationStore');
+const verificationStore = require('../../../modules/securityStudio/verification/verificationStore');
 const formsStore = require('../../../modules/feedbackStudio/forms/forms');
 const ticketStore = require('../../../modules/feedbackStudio/tickets/tickets');
 const translationStore = require('../../../modules/utilityStudio/translation/translationStore');

@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 /**
  * Canonical Tickets interactions layer.
@@ -1352,7 +1353,7 @@ let ticketInteractionHandlerApi;
     await refreshTicketButtons(interaction, updated);
 
     return safeEditOrReply(interaction, {
-      content: '📁 Ticket archived.',
+      content: emojiLabel('MOD_CASE_FOLDER', 'Ticket archived.'),
     });
   }
 
@@ -1380,7 +1381,7 @@ let ticketInteractionHandlerApi;
     await refreshTicketButtons(interaction, updated);
 
     return safeEditOrReply(interaction, {
-      content: '🔓 Ticket reopened.',
+      content: emojiLabel('UNLOCK', 'Ticket reopened.'),
     });
   }
 
@@ -1414,7 +1415,7 @@ let ticketInteractionHandlerApi;
     }
 
     return safeEditOrReply(interaction, {
-      content: '📄 Transcript generated.',
+      content: emojiLabel('DOCUMENT', 'Transcript generated.'),
     });
   }
 
@@ -1650,7 +1651,7 @@ let ticketInteractionHandlerApi;
     );
 
     return safeEditOrReply(interaction, {
-      content: '🗑️ Ticket deleted.',
+      content: emojiLabel('DELETE', 'Ticket deleted.'),
     });
   }
 
@@ -1804,7 +1805,7 @@ let ticketInteractionHandlerApi;
         interaction,
         ephemeralPayload({
           content:
-            '❌ Ticket interaction failed. Check VPS logs for details.',
+            emojiLabel('ERROR', 'Ticket interaction failed. Check VPS logs for details.'),
         })
       );
 

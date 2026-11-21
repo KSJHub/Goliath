@@ -1,6 +1,7 @@
 'use strict';
 
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const sharp = require('sharp');
 const guildManager = require('../../../core/guild/guildManager');
 const { replaceVariables } = require('../../../core/guild/guildVariables');
 const { deleteExpiredCreators } = require('./socialStudioStore');
@@ -147,17 +148,31 @@ function buildLiveFields({ account, event, vars, liveStatus, durationText, start
     return fields;
   }
 
+  if (platform === 'tiktok') {
+    // Mirror the two complete three-column rows of the approved ENDED card.
+    // TikTok LIVE has no reliable game or viewer data, so use truthful placeholders.
+    if (platformField) fields.push(platformField);
+    fields.push({name:'🕐 Started',value:started || '—',inline:true});
+    fields.push({name:'🌐 Language',value:event?.language ? clean(String(event.language).toUpperCase(),100) : '—',inline:true});
+    fields.push({name:'👥 Viewers',value:vars.viewers || '—',inline:true});
+    fields.push({name:'⏱️ Live For',value:durationText || '—',inline:true});
+    fields.push({name:'🔴 Status',value:liveStatus==='PAUSED'?'PAUSED':'LIVE',inline:true});
+    return fields;
+  }
   if (platform !== 'tiktok' && vars.game) fields.push({ name: '🎮 Game', value: vars.game, inline: true });
   if (platformField) fields.push(platformField);
   if (vars.viewers) fields.push({ name:'👥 Viewers', value:vars.viewers, inline:true });
   if (started) fields.push({ name:'🕐 Started', value:started, inline:true });
+  // LIVE-only: complete TikTok's three-column metadata row, matching the
+  // proven wide ENDED layout without modifying the ENDED path or its artwork.
+  if (platform === 'tiktok' && !vars.viewers) fields.push({ name:'🌐 Language', value:event?.language ? clean(String(event.language).toUpperCase(),100) : '—', inline:true });
   if (durationText) fields.push({ name:'⏱️ Live For', value:durationText, inline:true });
-  if (event?.language) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true });
+  if (event?.language && !(platform === 'tiktok' && !vars.viewers)) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true });
   if (event?.hasMatureContent === true) fields.push({ name:'🔞 Mature', value:'Yes', inline:true });
   return fields;
 }
 function eventVars(account, event, creator, options = {}) { const username = clean(event.kickUsername || account.username || account.normalizedUsername || account.externalId, 100).replace(/^@/, ''), creatorName = creator?.displayName || account.displayName || username || 'Creator', title = clean(event.title || `${creatorName} has a new ${event.type}`, 256), url = clean(event.url || account.profileUrl || account.url, 1000), game = clean(event.category || event.game || '', 200), viewers = options.includeViewerCount === false || !Number.isFinite(Number(event.viewerCount)) || Number(event.viewerCount) <= 0 ? '' : intText(event.viewerCount), durationSeconds = event.type === 'live' ? saneLiveDurationSeconds(event) : (Number.isFinite(Number(event.durationSeconds)) ? Number(event.durationSeconds) : secondsBetween(event.startedAt, event.endedAt || new Date().toISOString())); return { creator:creatorName, username, platform:PLATFORM[account.platform]?.label || account.platform, platformIcon:PLATFORM[account.platform]?.icon || '🔔', type:event.type, title, url, game, category:game, viewers, peakViewers:intText(account.state?.peakViewers || event.peakViewers || event.viewerCount || 0), duration:options.includeLiveDuration === false ? '' : humanDuration(durationSeconds), started:discordTimestamp(event.startedAt), ended:discordTimestamp(event.endedAt), published:discordTimestamp(event.publishedAt), kickUsername:String(account.platform || '').toLowerCase() === 'kick' ? username : '' }; }
-function buildEmbed(account, event, template, creator, settings = {}) { const vars = eventVars(account,event,creator,settings), platformKey=String(account.platform||'').toLowerCase(), platform = PLATFORM[account.platform] || { color:0x5865F2,icon:'🔔',label:account.platform || 'Social' }, embed = new EmbedBuilder().setColor(event.type === 'ended' ? 0x747F8D : platform.color), liveStatus = event.type === 'ended' ? 'OFFLINE' : event.type === 'live' ? ((event.paused===true||String(event.liveStatus||'').toUpperCase()==='PAUSED')?'PAUSED':'LIVE') : '', authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '',1000), profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\/\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\/\//i.test(profileUrl)) author.url=profileUrl; embed.setAuthor(author); if (/^https?:\/\//i.test(authorIcon)) embed.setThumbnail(authorIcon); if (liveStatus) { const headline=liveStatus==='LIVE'?'🔴 **LIVE NOW**':liveStatus==='PAUSED'?'⏸️ **LIVE PAUSED**':'⚫ **STREAM ENDED**', actions=[]; const standardLiveAction=(liveStatus==='LIVE'||liveStatus==='PAUSED')&&platformKey!=='tiktok'; if(standardLiveAction&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})**\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003\u2003${liveStatus==='PAUSED'?'⏸️ **PAUSED**':'🔴 **LIVE**'}`); else if((liveStatus==='LIVE'||liveStatus==='PAUSED')&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})**${liveStatus==='PAUSED'?' · ⏸️ **PAUSED**':' · 🔴 **LIVE**'}`); if(liveStatus==='OFFLINE'&&event.vod?.url) actions.push(`▶️ **[Watch VOD](${event.vod.url})**\u2003\u2003\u2003\u2003\u2003\u2003⚫ **OFFLINE**`); const liveDescription=`${headline}\n${stripTrailingDivider(vars.title)}${embedActionBlock(actions)}`; embed.setDescription(liveDescription); if(platformKey==='tiktok'&&liveStatus==='LIVE') embed.addFields({name:'\u200B',value:'\u200B',inline:true},{name:'\u200B',value:'\u200B',inline:true},{name:'\u200B',value:'\u200B',inline:true}); embed.addFields(buildLiveFields({account,event,vars,liveStatus,durationText:vars.duration,started:vars.started,ended:vars.ended}));
+function buildEmbed(account, event, template, creator, settings = {}) { const vars = eventVars(account,event,creator,settings), platformKey=String(account.platform||'').toLowerCase(), platform = PLATFORM[account.platform] || { color:0x5865F2,icon:'🔔',label:account.platform || 'Social' }, embed = new EmbedBuilder().setColor(event.type === 'ended' ? 0x747F8D : platform.color), liveStatus = event.type === 'ended' ? 'OFFLINE' : event.type === 'live' ? ((event.paused===true||String(event.liveStatus||'').toUpperCase()==='PAUSED')?'PAUSED':'LIVE') : '', authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '',1000), profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\/\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\/\//i.test(profileUrl)) author.url=profileUrl; embed.setAuthor(author); if (/^https?:\/\//i.test(authorIcon) && !(platformKey==='tiktok' && event.type==='live')) embed.setThumbnail(authorIcon); if (liveStatus) { const headline=liveStatus==='LIVE'?'🔴 **LIVE NOW**':liveStatus==='PAUSED'?'⏸️ **LIVE PAUSED**':'⚫ **STREAM ENDED**', actions=[]; const standardLiveAction=(liveStatus==='LIVE'||liveStatus==='PAUSED')&&platformKey!=='tiktok'; if(standardLiveAction&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})** · ${liveStatus==='PAUSED'?'⏸️ **PAUSED**':'🔴 **LIVE**'}`); else if((liveStatus==='LIVE'||liveStatus==='PAUSED')&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})** · ${liveStatus==='PAUSED'?'⏸️ **PAUSED**':'🔴 **LIVE**'}`); if(liveStatus==='OFFLINE'&&event.vod?.url) actions.push(`▶️ **[Watch VOD](${event.vod.url})** · ⚫ **OFFLINE**`); const liveDescription=`${headline}\n${stripTrailingDivider(vars.title)}${embedActionBlock(actions)}`; embed.setDescription(platformKey==='tiktok' && event.type==='live' ? liveDescription.replace(EMBED_WIDTH_DIVIDER, '').trim() : liveDescription); embed.addFields(buildLiveFields({account,event,vars,liveStatus,durationText:vars.duration,started:vars.started,ended:vars.ended}));
     if ((liveStatus === 'LIVE' || liveStatus === 'PAUSED') && creator?.showProfileInLive !== false) {
       const safeProfileText = (value, max) => clean(String(value || '').replace(/<@!?&?\d+>/g, '@mention').replace(/@(everyone|here)/gi, '@$1'), max);
       const group = safeProfileText(creator?.group, 200);
@@ -167,6 +182,137 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
       if (tags) embed.addFields({ name: '\u200B', value: `**🏷️** ${tags}`, inline: false });
       if (notes) embed.addFields({ name: '\u200B', value: `💬 *${notes.replace(/([*_~\\])/g, '\\$1')}*`, inline: false });
     } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
+async function socialWideMediaPayload(account,event,embed,previousMessage=null) {
+  if(String(account?.platform||'').toLowerCase()!=='tiktok' || !['live','ended'].includes(String(event?.type||'').toLowerCase())) return {embed,files:[],keepAttachments:false};
+
+  // Re-upload the actual landscape attachment on every edit. Discord may discard
+  // attachment URL references when the message is edited, leaving a narrow card.
+  // The existing wide attachment is the first source, not an embed URL to reuse.
+  const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
+    ['goliath-social-wide.jpg','goliath-tiktok-wide.jpg','goliath-tiktok-live-wide.jpg'].includes(file.name)
+  );
+  // LIVE always uses its own freshly uploaded 16:9 artwork. Keep the approved
+  // ENDED implementation below untouched.
+  if(String(event?.type||'').toLowerCase()==='live') {
+    const liveUrls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail]
+      .map(value=>clean(value,1500)).filter(value=>/^https:\/\//i.test(value));
+    let portrait=null;
+    for(const url of [...new Set(liveUrls)]) {
+      try {
+        const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
+        let response;
+        try {response=await fetch(url,{signal:controller.signal});} finally {clearTimeout(timeout);}
+        if(!response.ok) continue;
+        const bytes=Buffer.from(await response.arrayBuffer());
+        if(bytes.length>8*1024*1024) continue;
+        await sharp(bytes).metadata();
+        portrait=bytes;
+        break;
+      } catch(error) {console.warn('[Social Studio] TikTok LIVE source:',error?.message||error);}
+    }
+    const width=960,height=540;
+    const background=portrait
+      ? await sharp(portrait).rotate().resize(width,height,{fit:'cover'}).blur(24).modulate({brightness:0.55}).toBuffer()
+      : await sharp({create:{width,height,channels:3,background:'#111216'}}).png().toBuffer();
+    // Landscape artwork must LOOK landscape: use a blurred full-bleed canvas
+    // with a contained portrait on the right, never a centred portrait card.
+    const foreground=portrait
+      ? await sharp(portrait).rotate().resize(320,470,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
+      : null;
+    const escapeSvg=(value)=>String(value||'').replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));
+    const handle=escapeSvg('@'+String(account?.username||'creator').replace(/^@/,'').slice(0,28));
+    const title=escapeSvg(String(event?.title||'STREAM IS LIVE').slice(0,42));
+    const overlay=Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540">
+      <rect x="0" y="0" width="600" height="540" fill="#090b13" fill-opacity=".77"/>
+      <rect x="0" y="0" width="12" height="540" fill="#fe2c55"/>
+      <text x="58" y="132" fill="#ffffff" font-family="sans-serif" font-size="65" font-weight="bold">TIKTOK LIVE</text>
+      <text x="58" y="203" fill="#25f4ee" font-family="sans-serif" font-size="32">${handle}</text>
+      <text x="58" y="300" fill="#ffffff" font-family="sans-serif" font-size="28">${title}</text>
+      <rect x="58" y="365" width="360" height="4" fill="#25f4ee"/>
+      <text x="58" y="427" fill="#ffffff" font-family="sans-serif" font-size="25">WATCH LIVE ON TIKTOK</text>
+    </svg>`);
+    const layers=[{input:overlay}];
+    if(foreground) layers.push({input:foreground,left:625,top:35});
+    const image=await sharp(background).resize(width,height,{fit:'fill'})
+      .composite(layers).jpeg({quality:87}).toBuffer();
+    const metadata=await sharp(image).metadata();
+    if(metadata.width!==width||metadata.height!==height) throw new Error('TikTok LIVE wide artwork dimensions invalid');
+    const filename='goliath-tiktok-live-wide.jpg';
+    embed.setImage('attachment://'+filename);
+    return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
+  }
+  const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,retained?.url,retained?.proxyURL,
+    previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,
+    previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url,embed?.data?.image?.url,account?.avatar,account?.avatarUrl,event?.avatar,event?.avatarUrl]
+    .map((value)=>clean(value,1500)).filter((value)=>/^https:\/\//i.test(value));
+  for(const url of [...new Set(urls)]) {
+    try {
+      const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+      let response;
+      try {response=await fetch(url,{signal:controller.signal});} finally {clearTimeout(timeout);}
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      const length=Number(response.headers.get('content-length')||0);
+      if(length>8*1024*1024) throw new Error('Image exceeds size limit');
+      const bytes=Buffer.from(await response.arrayBuffer());
+      if(bytes.length>8*1024*1024) throw new Error('Image exceeds size limit');
+      const image=await sharp(bytes).rotate().resize(960,540,{fit:'contain',background:'#111216'}).jpeg({quality:85}).toBuffer();
+      const filename='goliath-social-wide.jpg';
+      embed.setImage('attachment://'+filename);
+      return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
+    } catch(error) {console.warn('[Social Studio] Social wide image fetch:',error?.message||error);}
+  }
+
+  // Always send an actual wide image, even if a provider blocks its artwork.
+  // Never silently fall back to a portrait embed on a subsequent refresh.
+  const filename='goliath-social-wide.jpg';
+  const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).jpeg({quality:85}).toBuffer();
+  console.warn('[Social Studio] TikTok artwork unavailable; using wide fallback.');
+  embed.setImage('attachment://'+filename);
+  return {embed,files:[new AttachmentBuilder(fallback,{name:filename})],keepAttachments:false};
+}
+// Check the delivered message rather than assuming Discord retained the image.
+async function verifyTikTokWideImage(message,account,event,expectedEmbed=null) {
+  if(String(account?.platform||'').toLowerCase()!=='tiktok'||!['live','ended'].includes(String(event?.type||'').toLowerCase())) return;
+  const latest=await message.channel.messages.fetch(message.id,{force:true});
+  const live=String(event.type).toLowerCase()==='live';
+  const actual=latest.embeds?.[0], image=actual?.image;
+  if(live && (String(actual?.footer?.text||'').includes('OFFLINE') || String(actual?.description||'').includes('STREAM ENDED'))) {
+    console.info('[Social Studio] TikTok LIVE layout recheck skipped: message now ENDED',message.id);
+    return;
+  }
+  const hasWideImage=Boolean(image && Number(image.width)>=900 && Number(image.height)>=500 && Number(image.width)/Math.max(1,Number(image.height))>=1.7);
+  const expected=expectedEmbed?.toJSON?.()||null;
+  const fields=actual?.fields||[];
+  const requiredLiveFields=['TikTok','Started','Language','Viewers','Live For','Status'];
+  const layoutCorrect=!live||(requiredLiveFields.every(name=>fields.some(field=>String(field.name||'').includes(name)))&&!actual?.thumbnail);
+  const imageIsOurs=!live||String(image?.url||'').includes('goliath-tiktok-live-wide.jpg');
+  if(live) console.info('[Social Studio] TikTok LIVE delivered layout',message.id,JSON.stringify({mode:process.env.BOT_MODE||'unknown',pid:process.pid,wide:hasWideImage,width:image?.width||null,height:image?.height||null,fields:fields.map(field=>field.name),thumbnail:Boolean(actual?.thumbnail),imageIsOurs,imageUrl:image?.url||null,expectedFields:expected?.fields?.length||null}));
+  if(hasWideImage&&layoutCorrect&&imageIsOurs) return;
+  if(!expected) {console.error('[Social Studio] TikTok LIVE layout mismatch; expected embed unavailable',message.id);return;}
+  console.warn('[Social Studio] TikTok LIVE layout mismatch; rebuilding delivered card',message.id);
+  const media=await socialWideMediaPayload(account,event,EmbedBuilder.from(expected),latest);
+  const beforeEdit=await latest.channel.messages.fetch(latest.id,{force:true});
+  if(live && (String(beforeEdit.embeds?.[0]?.footer?.text||'').includes('OFFLINE') || String(beforeEdit.embeds?.[0]?.description||'').includes('STREAM ENDED'))) {
+    console.info('[Social Studio] TikTok LIVE repair cancelled: stream ended during image rebuild',message.id);
+    return;
+  }
+  await beforeEdit.edit({embeds:[media.embed],files:media.files,attachments:[]});
+  const verified=await latest.channel.messages.fetch(latest.id,{force:true});
+  const repaired=verified.embeds?.[0],repairedImage=repaired?.image;
+  const repairedWide=Boolean(repairedImage&&Number(repairedImage.width)>=900&&Number(repairedImage.height)>=500&&Number(repairedImage.width)/Math.max(1,Number(repairedImage.height))>=1.7);
+  const repairedLayout=!live||((repaired?.fields?.length||0)>=6&&!repaired?.thumbnail);
+  console.info('[Social Studio] TikTok layout repair result',message.id,JSON.stringify({wide:repairedWide,fields:repaired?.fields?.length||0,thumbnail:Boolean(repaired?.thumbnail),imageUrl:repairedImage?.url||null}));
+  if(!repairedWide||!repairedLayout) console.error('[Social Studio] TikTok LIVE layout still incorrect after repair',message.id);
+}
+function scheduleTikTokLiveLayoutRecheck(message,account,event,expectedEmbed) {
+  if(String(account?.platform||'').toLowerCase()!=='tiktok'||String(event?.type||'').toLowerCase()!=='live') return;
+  const timer=setTimeout(()=>{
+    verifyTikTokWideImage(message,account,event,expectedEmbed).catch(error=>
+      console.error('[Social Studio] TikTok LIVE delayed layout verification failed',message.id,error?.message||error)
+    );
+  },20000);
+  timer.unref?.();
+}
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
   if (!channelId) throw permanentDeliveryError(`No alert channel configured for ${account.platform}/${event.type}.`);
@@ -187,19 +333,23 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
   if (!permissions?.has('EmbedLinks')) throw permanentDeliveryError('Goliath cannot embed links in the configured alert channel.');
 
   const embed = buildEmbed(account,event,templateFor(config,event.type),creatorFor(config,account.accountId),config.settings);
+  const media = await socialWideMediaPayload(account,event,embed);
   const mention = await resolveMention(guild,account,config,options.suppressMention===true,event.type);
   const message = await channel.send({
     content: mention.content || null,
-    embeds: [embed],
+    embeds: [media.embed],
+    files: media.files,
     allowedMentions: mention.allowedMentions
   });
 
   if (!message?.id) throw new Error('Discord did not return a message id for the alert.');
+  await verifyTikTokWideImage(message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok delivery verification:',error?.message||error));
+  scheduleTikTokLiveLayoutRecheck(message,account,event,media.embed);
   return {channelId,messageId:message.id};
 }
 async function trackedMessage(client,guildId,previous) { const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId, messageId=previous.lastLiveMessageId||previous.lastAlertMessageId; if(!channelId||!messageId)return null; const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null); if(!guild)return null; const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null); if(!channel?.isTextBased?.())return null; const message=await channel.messages.fetch(messageId).catch(()=>null); return message?{channelId,messageId,message}:null; }
-async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; await tracked.message.edit({embeds:[buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings)],attachments:[]}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
-async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; await tracked.message.edit({content:null,embeds:[buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings)],attachments:[]}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok refresh verification:',error?.message||error)); scheduleTikTokLiveLayoutRecheck(tracked.message,account,event,media.embed); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok ended verification:',error?.message||error)); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 function livePostInWindow(config,creator,windowMs=2*60*60*1000) { const ids=new Set(creator?.accountIds||[]), cutoff=Date.now()-windowMs; return [...(config.history||[])].reverse().find((item)=>ids.has(item.accountId)&&['alert_sent','alert_updated','alert_recovered'].includes(item.status)&&item.alertType==='live'&&new Date(item.createdAt||0).getTime()>=cutoff)||null; }
 function accountLivePostInWindow(config,account,windowMs=2*60*60*1000) {
   if (!account?.accountId) return null;
@@ -212,7 +362,7 @@ function accountLivePostInWindow(config,account,windowMs=2*60*60*1000) {
   })||null;
 }
 function liveAccountsForCreator(config,creator) { return (creator?.accountIds||[]).map((id)=>config.accounts?.[id]).filter((account)=>account&&account.enabled!==false&&account.state?.isLive===true&&account.state?.lastLiveEvent).sort((a,b)=>new Date(b.state?.lastCheckedAt||0)-new Date(a.state?.lastCheckedAt||0)); }
-function liveMessageUpdateDue(account,previous,checked,settings={}) { if(checked.isLive!==true||previous.isLive!==true||!checked.event)return false; if(String(account?.platform||'').toLowerCase()==='tiktok'){const before=String(previous.lastLiveEvent?.liveStatus||(previous.lastLiveEvent?.paused===true?'PAUSED':'LIVE')).toUpperCase(), current=String(checked.event?.liveStatus||(checked.event?.paused===true?'PAUSED':'LIVE')).toUpperCase(); return before!==current;} if(settings.liveMessageRefreshEnabled===false)return false; const raw=previous.lastLiveMessageUpdatedAt||previous.lastLiveMessageUpdateAt||0, numeric=Number(raw), parsed=Number.isFinite(numeric)?numeric:Date.parse(String(raw)); if(!Number.isFinite(parsed))return true; const requested=Number(settings.liveMessageRefreshMs), refresh=LIVE_MESSAGE_REFRESH_INTERVALS.has(requested)?requested:LIVE_MESSAGE_REFRESH_MS; return Date.now()-parsed>=refresh; }
+function liveMessageUpdateDue(account,previous,checked,settings={}) { if(checked.isLive!==true||previous.isLive!==true||!checked.event||settings.liveMessageRefreshEnabled===false)return false; const requested=Number(settings.liveMessageRefreshMs), refresh=LIVE_MESSAGE_REFRESH_INTERVALS.has(requested)?requested:LIVE_MESSAGE_REFRESH_MS; const raw=previous.lastLiveMessageUpdatedAt||previous.lastLiveMessageUpdateAt||0, numeric=Number(raw), last=Number.isFinite(numeric)&&numeric>0?numeric:Date.parse(String(raw)); if(String(account?.platform||'').toLowerCase()==='tiktok'){const before=String(previous.lastLiveEvent?.liveStatus||(previous.lastLiveEvent?.paused===true?'PAUSED':'LIVE')).toUpperCase(), current=String(checked.event?.liveStatus||(checked.event?.paused===true?'PAUSED':'LIVE')).toUpperCase(); if(before!==current)return true; /* TikTok LIVE must refresh on the configured interval too; otherwise old portrait cards can remain indefinitely. */} return !Number.isFinite(last)||Date.now()-last>=refresh; }
 async function forcePostCreatorLive(client,guildId,creatorId,options={}) {
   const config=configFor(guildId,options.guildConfig), creator=config.creators?.[creatorId]; if(!creator)throw new Error('Select a creator profile first.'); if(creator.enabled===false)throw new Error('This creator profile is paused.'); const liveAccounts=liveAccountsForCreator(config,creator); if(!liveAccounts.length)throw new Error('No checked LIVE account is available for this creator yet.'); const accounts=options.bypassCooldown===true?liveAccounts:liveAccounts.filter((account)=>{const event={...account.state.lastLiveEvent,type:'live'}, key=eventKey(event); return !hasDelivered(account.state,key)&&!hasTrackedLiveMessage(account.state)&&!accountLivePostInWindow(config,account);}); if(!accounts.length)throw new Error('Every currently LIVE account has already been posted for its current LIVE session.');
   const sent=[], monitorUpdates=new Map(), historyEntries=[], stamp=now();
@@ -234,14 +384,48 @@ async function checkGuildAccounts(client,guildId,options={}) {
     let checked = null;
     let currentState = { ...previous };
     let activeDeliveryEvent = null;
-    try { checked=await checkAccount(account); const state={...previous,lastCheckedAt:checked.checkedAt||now(),lastStatus:checked.status,lastError:['unavailable','configuration_required'].includes(checked.status)?checked.reason:null}; currentState=state;
-      if(checked.isLive===true){const incoming=checked.event?.id?String(checked.event.id):null, old=previous.liveEventId?String(previous.liveEventId):null, newBroadcast=Boolean(incoming&&old&&incoming!==old); state.isLive=true; state.liveEventId=incoming||state.liveEventId||null; state.liveStartedAt=checked.event?.startedAt||(newBroadcast?null:state.liveStartedAt)||null; state.lastLiveEvent=checked.event||state.lastLiveEvent||null; if(newBroadcast){state.peakViewers=0;state.lastLiveMessageId=null;state.lastLiveMessageChannelId=null;state.lastAlertMessageId=null;state.lastAlertChannelId=null;} const viewers=Number(checked.event?.viewerCount); if(Number.isFinite(viewers)&&viewers>=0)state.peakViewers=Math.max(Number(state.peakViewers||0),viewers);
+    try {
+      checked=await checkAccount(account);
+      const tiktok=String(account.platform||'').toLowerCase()==='tiktok';
+      const wasLive=previous.isLive===true;
+      const negative=tiktok&&wasLive&&checked.isLive===false;
+      const misses=negative?Number(previous.tiktokOfflineChecks||0)+1:0;
+      const firstMiss=negative?(previous.tiktokOfflineFirstAt||now()):null;
+      const elapsed=negative?Date.now()-Date.parse(firstMiss):0;
+      const confirmedOffline=negative&&misses>=3&&Number.isFinite(elapsed)&&elapsed>=120000;
+      if(negative&&!confirmedOffline){
+        console.warn('[Social Studio] TikTok offline unconfirmed; preserving LIVE notification',JSON.stringify({accountId,misses,elapsedMs:elapsed,providerStatus:checked.status}));
+        checked={...checked,isLive:null,event:null,status:'offline_unconfirmed'};
+      }
+      const state={...previous,lastCheckedAt:checked.checkedAt||now(),lastStatus:checked.status,lastError:['unavailable','configuration_required'].includes(checked.status)?checked.reason:null};
+      state.tiktokOfflineChecks=negative?misses:0;
+      state.tiktokOfflineFirstAt=negative?firstMiss:null;
+      currentState=state;
+      if(checked.isLive===true){const incoming=checked.event?.id?String(checked.event.id):null, old=previous.liveEventId?String(previous.liveEventId):null, newBroadcast=Boolean(incoming&&old&&incoming!==old&&previous.isLive!==true); state.isLive=true; state.liveEventId=(previous.isLive===true&&old?old:incoming)||state.liveEventId||null; state.liveStartedAt=checked.event?.startedAt||(newBroadcast?null:state.liveStartedAt)||null; state.lastLiveEvent=checked.event||state.lastLiveEvent||null; if(newBroadcast){state.peakViewers=0;state.lastLiveMessageId=null;state.lastLiveMessageChannelId=null;state.lastAlertMessageId=null;state.lastAlertChannelId=null;} const viewers=Number(checked.event?.viewerCount); if(Number.isFinite(viewers)&&viewers>=0)state.peakViewers=Math.max(Number(state.peakViewers||0),viewers);
       } else if(checked.isLive===false){state.isLive=false;if(previous.isLive===true)state.lastLiveEndedAt=checked.checkedAt||now();}
       const creator=creatorFor(config,accountId);
       for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId);
 
       if(options.diagnosticOnly===true){
-        monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()});
+        // Periodically enforce the approved TikTok LIVE card even between full
+      // refreshes. Another editor may replace the embed after delivery.
+      if(sameActiveBroadcast&&String(account.platform||'').toLowerCase()==='tiktok'){
+        // Audit on every monitor cycle: a different writer can revert the
+        // Discord embed immediately after the normal refresh.
+        {
+          state.lastTikTokLiveLayoutAuditAt=now();
+          try {
+            const tracked=await trackedMessage(client,guildId,{...previous,...state});
+            if(tracked){
+              const expected=buildEmbed(account,checked.event,templateFor(config,'live'),creatorFor(config,accountId),config.settings);
+              await verifyTikTokWideImage(tracked.message,account,checked.event,expected);
+            }
+          }catch(error){
+            console.warn('[Social Studio] TikTok LIVE persistence audit failed',accountId,error?.message||error);
+          }
+        }
+      }
+      monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()});
         results.push({accountId,platform:account.platform,status:checked.status,isLive:checked.isLive,live:checked.event||null,delivered:[],diagnosticOnly:true});
         analyticsDelta.checks=Number(analyticsDelta.checks||0)+1;
         return;
@@ -349,19 +533,37 @@ async function checkGuildAccounts(client,guildId,options={}) {
           continue;
         }
         if(event.type==='ended'){let updated=null; updated=await updateEndedAlert(client,guildId,config,account,event,previous).catch(()=>null); if(updated){delivered.push({type:'ended',id:event.id,...updated}); rememberDelivered(state,key); state.lastAlertKey=key; state.lastAlertAt=now(); state.pendingEndedEvent=null; state.lastLiveMessageId=null; state.lastLiveMessageChannelId=null; state.lastAlertMessageId=null; state.lastAlertChannelId=null;} else {state.pendingEndedEvent=event;} continue;}
-        if(event.type==='live'&&previous.isLive===true&&String(previous.liveEventId||'')===String(event.id||'')&&hasTrackedLiveMessage(previous)){const existing=await trackedMessage(client,guildId,previous).catch(()=>null); if(existing){state.lastAlertKey=key;rememberDelivered(state,key);continue;}}
+        if(event.type==='live'&&previous.isLive===true&&hasTrackedLiveMessage(previous)){
+          const existing=await trackedMessage(client,guildId,previous).catch(()=>null);
+          if(existing){
+            state.lastAlertKey=key;
+            rememberDelivered(state,key);
+            state.lastLiveMessageId=existing.messageId;
+            state.lastLiveMessageChannelId=existing.channelId;
+            // A repeated LIVE event must not skip the canonical TikTok layout:
+            // edit the tracked message instead of leaving a stale portrait card.
+            if(String(account.platform||'').toLowerCase()==='tiktok'){
+              try{
+                const refreshed=await updateLiveAlert(client,guildId,config,account,event,previous);
+                if(refreshed){
+                  state.lastLiveMessageUpdatedAt=now();
+                  delivered.push({type:'live',id:event.id,refreshed:true,...refreshed});
+                }
+              }catch(error){
+                console.error('[Social Studio] TikTok repeated LIVE canonical refresh failed',accountId,existing.messageId,error?.message||error);
+              }
+            }
+            continue;
+          }
+          console.warn('[Social Studio] LIVE tracked message unavailable; suppressing duplicate until stream identity is confirmed',accountId,previous.lastLiveMessageId);
+          continue;
+        }
         activeDeliveryEvent=event; const delivery=await sendAlert(client,guildId,config,account,event,options); activeDeliveryEvent=null; delivered.push({type:event.type,id:event.id,...delivery}); rememberDelivered(state,key);completedEventKeys.add(keyString);state.pendingDelivery=null;state.lastAlertKey=key;state.lastAlertAt=now();state.lastAlertMessageId=delivery.messageId;state.lastAlertChannelId=delivery.channelId;state.lastDeliveryError=null;if(event.type==='live'){state.lastLiveMessageId=delivery.messageId;state.lastLiveMessageChannelId=delivery.channelId;state.lastLiveMessageUpdatedAt=now();}
       }
-      const checkedLiveId=checked.isLive===true&&checked.event?.id?String(checked.event.id):null;
+      const checkedLiveId=checked.isLive===true&&checked.event?.id?String(checked.event.id):null; if(checkedLiveId&&previous.isLive===true&&previous.liveEventId&&checkedLiveId!==String(previous.liveEventId)) console.warn('[Social Studio] LIVE provider event ID changed during active session; retaining tracked message',accountId,previous.liveEventId,checkedLiveId);
       const previousLiveId=previous.isLive===true&&previous.liveEventId?String(previous.liveEventId):null;
       const currentLiveId=state.isLive===true&&state.liveEventId?String(state.liveEventId):null;
-      const sameActiveBroadcast=Boolean(
-        checkedLiveId &&
-        previousLiveId &&
-        currentLiveId &&
-        checkedLiveId===previousLiveId &&
-        checkedLiveId===currentLiveId
-      );
+      const sameActiveBroadcast=Boolean(checked.isLive===true&&previous.isLive===true&&checked.event&&hasTrackedLiveMessage(previous)); // Track the live session by its Discord message, not unstable provider event IDs.
 
       if(sameActiveBroadcast&&liveMessageUpdateDue(account,previous,checked,config.settings)){
         let updated=null,recovered=false,refreshError=null;
@@ -370,26 +572,37 @@ async function checkGuildAccounts(client,guildId,options={}) {
             updated=await updateLiveAlert(client,guildId,config,account,checked.event,previous);
           }catch(error){
             refreshError=error?.message||String(error);
+            if(String(account?.platform||'').toLowerCase()==='tiktok') console.error('[Social Studio] TikTok LIVE refresh failed',JSON.stringify({accountId,messageId:previous.lastLiveMessageId||previous.lastAlertMessageId,error:String(refreshError).slice(0,500)}));
           }
 
         if(!updated&&hasTrackedLiveMessage(previous)){
-          try{
-            updated=await sendAlert(
-              client,
-              guildId,
-              config,
-              account,
-              checked.event,
-              {...options,suppressMention:true}
-            );
-            recovered=Boolean(updated);
-            refreshError=null;
-          }catch(error){
-            refreshError=error?.message||String(error);
+          // Recover only a confirmed deleted message. A timeout, permissions
+          // error or failed edit must never generate a duplicate LIVE alert.
+          let deleted=false;
+          try {
+            const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId;
+            const messageId=previous.lastLiveMessageId||previous.lastAlertMessageId;
+            const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId);
+            if(channel?.isTextBased?.()) {
+              try { await channel.messages.fetch(messageId); }
+              catch(error) { deleted=Number(error?.code)===10008; }
+            }
+          } catch(error) {
+            console.warn('[Social Studio] LIVE message recovery check unavailable',accountId,error?.message||error);
+          }
+          if(deleted) {
+            try {
+              updated=await sendAlert(client,guildId,config,account,checked.event,{...options,suppressMention:true});
+              recovered=Boolean(updated);
+              refreshError=null;
+            } catch(error) { refreshError=error?.message||String(error); }
+          } else {
+            console.warn('[Social Studio] LIVE refresh skipped to avoid duplicate notification',accountId,previous.lastLiveMessageId,refreshError||'tracked message unavailable');
           }
         }
 
         if(updated){
+          if(String(account?.platform||'').toLowerCase()==='tiktok') console.info('[Social Studio] TikTok LIVE tracked message refreshed',JSON.stringify({accountId,messageId:updated.messageId,recovered}));
           const key=eventKey(checked.event);
           rememberDelivered(state,key);
           state.lastAlertKey=key;

@@ -1,9 +1,9 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
   AttachmentBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
@@ -12,6 +12,7 @@ const {
   TextInputStyle,
 } = require('discord.js');
 const { goliathNavigation } = require('../../../components/goliathNavigation');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const store = require('./socialStudioStore');
 const { providerInfo } = require('./socialStudioProviders');
 
@@ -45,7 +46,7 @@ function row(...components) {
 }
 
 function button(id, label, style = ButtonStyle.Secondary) {
-  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+  return navigationButton(id, label, style);
 }
 
 function normalizeQuietTime(value) {
@@ -112,7 +113,7 @@ function creatorsPayload(interaction, message) {
         '👥 Creators',
         ButtonStyle.Primary,
       ),
-      button(`${P}settings`, '⚙️ Settings'),
+      button(`${P}settings`, emojiLabel('SETTINGS', 'Settings')),
     )],
   };
 }

@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -190,7 +191,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       };
     });
     const roleName = roles.find((role) => role.id === roleId)?.name || 'role';
-    setNotice(`✅ Applied ${preset.label} preset to ${roleName}. Save Access to persist.`);
+    setNotice(`${E.SUCCESS} Applied ${preset.label} preset to ${roleName}. Save Access to persist.`);
   }
 
   function setCommandAccess(commandKey, access) {
@@ -251,7 +252,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       const nextRoles = normalizeArray(rolesRes, 'roles');
       setRoles(nextRoles);
       setSelectedRoleId((current) => current || nextRoles[0]?.id || '');
-      setNotice('✅ Synced latest roles from Discord.');
+      setNotice(`${E.SUCCESS} Synced latest roles from Discord.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to sync roles from Discord.');
@@ -272,7 +273,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       updatePermissions((current) => ({ ...current, roleOrder: [role.id, ...(current.roleOrder || []).filter((id) => id !== role.id)] }));
       setSelectedRoleId(role.id);
       setFullAccessRole(role.id, true);
-      setNotice(`✅ Created Discord role ${role.name}. Save order to persist hierarchy.`);
+      setNotice(`${E.SUCCESS} Created Discord role ${role.name}. Save order to persist hierarchy.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to create Discord role.');
@@ -289,7 +290,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       const response = await api.updateGuildRole(guildId, selectedRole.id, draft);
       if (Array.isArray(response?.roles)) setRoles(response.roles);
       else if (response?.role) setRoles((current) => current.map((role) => role.id === response.role.id ? response.role : role));
-      setNotice(`✅ Updated Discord role ${response?.role?.name || draft.name}.`);
+      setNotice(`${E.SUCCESS} Updated Discord role ${response?.role?.name || draft.name}.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to update Discord role.');
@@ -309,7 +310,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       const nextRoles = Array.isArray(response?.roles) ? response.roles : roles.filter((item) => item.id !== role.id);
       setRoles(nextRoles);
       setSelectedRoleId(nextRoles[0]?.id || '');
-      setNotice(`✅ Removed Discord role ${role.name}.`);
+      setNotice(`${E.SUCCESS} Removed Discord role ${role.name}.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to remove Discord role.');
@@ -325,7 +326,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       const nextPermissions = { ...permissions, accessControl, syncDiscordRoles: false };
       const saved = await api.saveGeneralSettings(guildId, { ...general, dashboardPermissions: nextPermissions });
       setGeneral(normalizeGeneral(saved?.config || { ...general, dashboardPermissions: nextPermissions }));
-      setNotice('✅ Access control saved.');
+      setNotice(`${E.SUCCESS} Access control saved.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to save access control.');
@@ -347,7 +348,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       setRoleSyncReport(reordered?.diagnostics || null);
       const moved = reordered?.diagnostics?.appliedRoles?.length || 0;
       const skipped = reordered?.diagnostics?.skippedRoles?.length || 0;
-      setNotice(skipped ? `⚠️ Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'} and skipped ${skipped}.` : `✅ Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'}.`);
+      setNotice(skipped ? `${E.WARNING} Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'} and skipped ${skipped}.` : `${E.SUCCESS} Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'}.`);
     } catch (err) {
       console.error(err);
       setRoleSyncReport(err.diagnostics || null);

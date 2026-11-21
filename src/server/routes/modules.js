@@ -15,8 +15,8 @@ const {
 
 const autoRoleStore = require('../../modules/roleStudio/autoRoles/autoRoles');
 const autoRoleManager = autoRoleStore;
-const verificationStore = require('../../modules/securityStudio/verificationStore');
-const verificationManager = require('../../modules/securityStudio/verificationManager');
+const verificationStore = require('../../modules/securityStudio/verification/verificationStore');
+const verificationManager = require('../../modules/securityStudio/verification/verificationManager');
 const embedTemplateManager = require('../../modules/messageStudio/embed/embedTemplates');
 const embedRuntime = require('../../modules/messageStudio/embed/embed');
 const {
@@ -55,7 +55,7 @@ function assertSupportedEmbedBinding(moduleKey, slot) {
 }
 
 const MODULE_CATALOG = Object.freeze({
-  freeGames: { key: 'freeGames', name: 'Free Games', icon: '🎁', category: 'Utilities', summary: 'Maintained free-game offers and optional new-offer alerts.', apiBase: '/api/free-games', dashboardPath: '/free-games', maturity: 'in_progress', configurable: true },
+  freeGames: { key: 'freeGames', name: 'Games', icon: '🎮', category: 'Utilities', summary: 'Game updates, publisher announcements, free offers and configurable notifications.', apiBase: '/api/games', dashboardPath: '/games', maturity: 'in_progress', configurable: true },
   verification: {
     key: 'verification', name: 'Verification', icon: '\u2705', category: 'Security',
     summary: 'Verify members, assign roles and deploy a custom verification panel.',

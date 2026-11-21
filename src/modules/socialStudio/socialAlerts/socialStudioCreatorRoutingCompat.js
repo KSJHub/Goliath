@@ -1,8 +1,8 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
@@ -10,6 +10,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 const { goliathNavigation } = require('../../../components/goliathNavigation');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const store = require('./socialStudioStore');
 const { ALERT_TYPES } = require('./socialStudioTemplates');
 
@@ -28,7 +29,7 @@ function getSession(interaction) {
 }
 function setSession(interaction, patch) { const next = { ...getSession(interaction), ...patch }; sessions.set(sessionKey(interaction), next); return next; }
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
-function button(id, label, style = ButtonStyle.Secondary, disabled = false) { return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled); }
+function button(id, label, style = ButtonStyle.Secondary, disabled = false) { return navigationButton(id, label, style, disabled); }
 function who(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 function embed(config, title, description, interaction) { return new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle(title).setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp(); }
 function channelSelect(id, selected, placeholder) {
@@ -288,7 +289,7 @@ function creatorPlatformChannelsPayload(interaction) {
     platformSelect(selectedPlatform, `${P}channel:creator:platform:select`, 'Route this creator’s'),
     channelSelect(`${P}channel:creator:platform:route`, selectedChannel, `Choose ${creator.displayName || 'creator'} ${PLATFORM_LABEL[selectedPlatform]} channel`),
     row(button(`${P}channel:creator:platform:clear`, '↩️ Use Creator / Server Routing', ButtonStyle.Secondary, !selectedChannel)),
-    row(button(`${P}channel:creator:back`, '⬅️ Back')),
+    row(button(`${P}channel:creator:back`, emojiLabel('BACK', 'Back'))),
   ];
   return { embeds: [embed(config, '👤📱 Creator Platform Overrides', description, interaction)], components };
 }

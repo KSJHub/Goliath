@@ -8,15 +8,17 @@ on:
 permissions:
   contents: read
 
+# Keep separate commits from evicting one another from GitHub's pending slot.
+# The VPS flock below remains the authoritative cross-run deployment lock.
 concurrency:
-  group: sync-goliath-dev
+  group: sync-goliath-dev-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   sync-dev:
     name: Validate, build and sync DEV
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - name: Sync and verify DEV
         uses: appleboy/ssh-action@v1
@@ -29,29 +31,39 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           timeout: 60s
-          command_timeout: 15m
+          command_timeout: 40m
           envs: EXPECTED_SHA,GITHUB_DEPLOY_TOKEN
           script: |
             set -euo pipefail
             APP_DIR=/home/goliath/dev
             RUNTIME_DIR="$APP_DIR/src/runtime/dev"
             PM2_NAME=goliath-dev
-            DEV_HOST=dev.goliath.ksjdigital.co.uk
+            DEV_PUBLIC_URL=https://goliath.ksjdigital.co.uk/dev
+            DASHBOARD_ROOT=/var/www/goliath-paths/dev
             BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
             LOCK_FILE=/home/goliath/.goliath-dev-sync.lock
 
-            # Serialize on the VPS as well as in GitHub Actions. This protects the
+            # Serialize all deployment runs on the VPS. This protects the
             # shared DEV worktree/node_modules even if an SSH runner disconnects.
             exec 9>"$LOCK_FILE"
             echo "🔒 Waiting for DEV deployment lock"
-            flock -w 900 9 || { echo "Timed out waiting for DEV deployment lock." >&2; exit 1; }
+            flock -w 1200 9 || { echo "Timed out waiting for DEV deployment lock." >&2; exit 1; }
             echo "🔒 DEV deployment lock acquired"
 
             cd "$APP_DIR"
 
-            AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
-            git remote set-url origin "$AUTH_URL"
-            cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
+            # Keep credentials out of Git remote URLs and process arguments.
+            # Git reads this transient HTTP header from the process environment.
+            git remote set-url origin "https://github.com/${{ github.repository }}.git"
+            AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_DEPLOY_TOKEN" | base64 -w0)"
+            export GIT_CONFIG_COUNT=1
+            export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+            export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $AUTH_HEADER"
+            unset AUTH_HEADER
+            cleanup_remote() {
+              git remote set-url origin "https://github.com/${{ github.repository }}.git" || true
+              unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+            }
             trap cleanup_remote EXIT
 
             retry_git() {
@@ -85,18 +97,54 @@ jobs:
             ensure_expected_commit
 
             # DEV SAFETY CONTRACT:
-            # Never reset, clean, stash, overwrite, or otherwise modify a dirty
-            # DEV worktree. A push may arrive while local development is active.
-            # In that case deployment must stop and leave every local change intact.
+            # Recover only absent tracked Markdown documentation. Never overwrite existing files or touch
+            # modified source, runtime data, or untracked user work.
+            REQUIRED_AUDIT_FILES=(
+              docs/modules/goodbye.md
+              docs/modules/communityStudio/invites.md
+            )
+            restore_missing_audit_files() {
+              local audit_file
+              # git ls-files --deleted reports tracked files missing from disk.
+              # Process all missing docs, not just the subset referenced by Doctor.
+              while IFS= read -r -d '' audit_file; do
+                case "$audit_file" in
+                  docs/*.md)
+                    if [ ! -e "$audit_file" ]; then
+                      echo "🩹 Restore missing tracked documentation: $audit_file"
+                      mkdir -p "$(dirname "$audit_file")"
+                      git show "HEAD:$audit_file" > "$audit_file"
+                    fi
+                    ;;
+                  *)
+                    echo "Refusing to restore unexpected missing file: $audit_file" >&2
+                    return 1
+                    ;;
+                esac
+              done < <(git ls-files --deleted -z -- docs/)
+              for audit_file in "${REQUIRED_AUDIT_FILES[@]}"; do
+                if [ ! -f "$audit_file" ]; then
+                  git cat-file -e "HEAD:$audit_file" || {
+                    echo "Required audit file absent from HEAD: $audit_file" >&2
+                    return 1
+                  }
+                  echo "🩹 Restore missing required audit input: $audit_file"
+                  mkdir -p "$(dirname "$audit_file")"
+                  git show "HEAD:$audit_file" > "$audit_file"
+                fi
+                test -f "$audit_file" || return 1
+              done
+            }
+            restore_missing_audit_files
             DIRTY_STATUS="$(git status --porcelain -- . ':!src/runtime/')"
             if [ -n "$DIRTY_STATUS" ]; then
               echo "❌ DEV sync refused: /home/goliath/dev contains local changes."
-              echo "The DEV worktree has been left completely untouched."
+              echo "Unrelated local changes have been left untouched."
               echo
               printf '%s\n' "$DIRTY_STATUS"
               echo
-              echo "DEV sync deferred safely. Commit or otherwise resolve the local DEV changes, then sync again."
-              exit 0
+              echo "DEV sync blocked: resolve local DEV changes before retrying." >&2
+              exit 1
             fi
 
             rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
@@ -105,15 +153,62 @@ jobs:
             fi
             # Runtime is Git-ignored and must remain in place while SQLite is open.
             # Never delete/recreate live runtime files as part of a deployment.
-            finish() { status=$?; cleanup_remote; exit "$status"; }
+            # Always recover DEV if this run exits after stopping it, including
+            # clean supersession (exit 0), validation failures and SSH interruption.
+            DEV_STOPPED=0
+            finish() {
+              status=$?
+              trap - EXIT ERR
+              if [ "$DEV_STOPPED" = 1 ]; then
+                echo "⚠️ DEV deployment exited before restart; restoring DEV service."
+                pm2 restart "$PM2_NAME" --update-env ||
+                  BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env || true
+              fi
+              cleanup_remote
+              exit "$status"
+            }
             trap finish EXIT
 
             git reset --hard "$EXPECTED_SHA"
+            restore_missing_audit_files
             test -d "$RUNTIME_DIR"
 
-            echo "📦 Clean locked dependency install"
-            rm -rf node_modules
-            npm ci --no-audit --no-fund
+            # Keep DEV serving requests during checks when the dependency tree
+            # is reusable. Stop before npm ci only if a clean install is needed.
+            # EXIT trap restores DEV if a later step fails.
+            # Reuse dependencies only when npm's installed lock metadata agrees
+            # with the repository lock and the full dependency tree is healthy.
+            # Otherwise retain the original clean-install safety path.
+            echo "📦 Check locked dependency installation"
+            if node - <<'NODE'
+            const fs = require('node:fs');
+            const expected = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+            const installed = JSON.parse(fs.readFileSync('node_modules/.package-lock.json', 'utf8'));
+            if (expected.lockfileVersion !== installed.lockfileVersion) process.exit(1);
+            for (const [name, pkg] of Object.entries(expected.packages || {})) {
+              if (!name || pkg.optional) continue;
+              const actual = installed.packages?.[name];
+              if (!actual || actual.version !== pkg.version ||
+                  (pkg.integrity && actual.integrity !== pkg.integrity) ||
+                  (pkg.resolved && actual.resolved !== pkg.resolved)) process.exit(1);
+            }
+            console.log('✅ Installed lock metadata matches required packages');
+            NODE
+            then
+              if npm ls --all --omit=optional --silent >/dev/null 2>&1; then
+                echo "✅ Reusing validated dependencies; skipping npm ci"
+              else
+                echo "⚠️ Dependency tree inconsistent; stopping DEV for reinstall"
+                DEV_STOPPED=1
+                pm2 stop "$PM2_NAME" || true
+                npm ci --no-audit --no-fund
+              fi
+            else
+              echo "⚠️ Lock metadata missing or mismatched; stopping DEV for reinstall"
+              DEV_STOPPED=1
+              pm2 stop "$PM2_NAME" || true
+              npm ci --no-audit --no-fund
+            fi
 
             echo "🔧 Verify native/runtime dependencies"
             node - <<'NODE'
@@ -128,8 +223,20 @@ jobs:
             console.log('✅ better-sqlite3 native binding operational');
             NODE
 
+            # Restore the same known audit inputs after npm lifecycle scripts.
+            restore_missing_audit_files
+            [ -z "$(git status --porcelain -- . ':!src/runtime/')" ] || {
+              echo "Unexpected worktree changes after dependency install" >&2
+              git status --short -- . ':!src/runtime/'
+              exit 1
+            }
+
             echo "🔎 Validate DEV"
             BOT_MODE=dev npm run doctor
+            npm run audit:emojis
+            # Exercise the existing Goliath AI blueprint safety contract before
+            # building or restarting DEV; no new test files or runtime writes.
+            BOT_MODE=dev npm run test:goliath-ai-blueprint
             node scripts/goliath.js embed-graphic-headers
             node - <<'NODE'
             const fs=require('node:fs'),assert=require('node:assert/strict');
@@ -145,19 +252,29 @@ jobs:
 
             echo "🏗️ Build dashboard"
             rm -rf dist
-            npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
+            npx vite build src/dashboard --base /dev/ --outDir ../../dist --emptyOutDir --logLevel warn
             mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
             grep -q 'GOLIATH_APPEALS_ENTRY' dist/assets/*.js
+            grep -q '/dev/assets/' dist/index.html
 
             LATEST_SHA="$(remote_dev_sha)"
             [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
 
-            NGINX_DUMP="$(nginx -T 2>&1)"
-            DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
-            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe dashboard root" >&2; exit 1;; esac
-            rm -rf "$DASHBOARD_ROOT" && mkdir -p "$DASHBOARD_ROOT" && cp -a dist/. "$DASHBOARD_ROOT/"
-            nginx -t && systemctl reload nginx
+            [ "$DASHBOARD_ROOT" = /var/www/goliath-paths/dev ] || exit 1
+            nginx -t
+            mkdir -p "$DASHBOARD_ROOT"
+            cp -a dist/. "$DASHBOARD_ROOT/"
 
+            # Fail before command registration if dependency files are unavailable.
+            # Stop only for the final command sync and controlled PM2 replacement
+            # when dependency installation did not already require downtime.
+            if [ "$DEV_STOPPED" = 0 ]; then
+              echo "🛑 Stop DEV for final command sync and restart"
+              DEV_STOPPED=1
+              pm2 stop "$PM2_NAME" || true
+            fi
+
+            node -e "require('discord.js'); require('./src/core/commands/syncCommands'); console.log('✅ Command sync dependencies ready')"
             BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
             LATEST_SHA="$(remote_dev_sha)"
@@ -166,7 +283,9 @@ jobs:
             echo "♻️ One controlled PM2 reload from ecosystem config"
             pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
             BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
-            pm2 save
+            # Keep the recovery trap armed until health and stability checks pass.
+            # A successful PM2 start alone does not mean DEV is healthy.
+            # Persist PM2 state only after verification, not before it.
 
             NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
             if [ -z "$NEW_PID" ] || [ "$NEW_PID" = "0" ]; then
@@ -199,7 +318,11 @@ jobs:
             # to deploy the newer commit instead of reporting a false SHA mismatch.
             REMOTE_SHA="$(remote_dev_sha)"
             if [ "$EXPECTED_SHA" != "$REMOTE_SHA" ]; then
-              echo "Superseded during stability gate; exiting cleanly."
+              echo "Superseded during stability gate; handing over to newer deployment."
+              # This run already restarted DEV and verified the new PID is alive.
+              # Do not let the EXIT recovery handler restart it a second time;
+              # the queued newer deployment owns the next controlled restart.
+              DEV_STOPPED=0
               exit 0
             fi
 
@@ -220,13 +343,25 @@ jobs:
               exit 1
             fi
 
-            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
-            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' https://$DEV_HOST/api/auth/me || true)"
+            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 http://127.0.0.1:3001/api/auth/me || true)"
+            # Verify public HTTPS certificates; never accept an invalid TLS
+            # chain as a successful deployment health check.
+            PUBLIC_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/api/auth/me" || true)"
+            DASHBOARD_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/" || true)"
+            SUBDOMAIN_API_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 https://dev.goliath.ksjdigital.co.uk/api/auth/me || true)"
+            SUBDOMAIN_DASHBOARD_STATUS="$(curl -fsS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 https://dev.goliath.ksjdigital.co.uk/ || true)"
+            [ "$SUBDOMAIN_DASHBOARD_STATUS" = 200 ] || { echo "DEV subdomain dashboard health failed: $SUBDOMAIN_DASHBOARD_STATUS" >&2; exit 1; }
+            case "$SUBDOMAIN_API_STATUS" in 200|401) ;; *) echo "DEV subdomain API health failed: $SUBDOMAIN_API_STATUS" >&2; exit 1;; esac
+            [ "$DASHBOARD_STATUS" = 200 ] || { echo "DEV dashboard health failed: $DASHBOARD_STATUS" >&2; exit 1; }
             case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
-            echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             test -d "$RUNTIME_DIR"
+            # Do not persist a potentially broken PM2 process before health checks.
+            pm2 save
+            # Disarm recovery only after every process, endpoint and runtime check passes.
+            DEV_STOPPED=0
+            echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             rm -rf "$BACKUP_DIR"
             trap - EXIT
             cleanup_remote

@@ -1,9 +1,11 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const Discord = require('discord.js');
 const { safeReply, safeEditReply } = require('../../../core/ui/interactionResponse');
 const {
   requireModeratableTarget,
+  canUseModAction,
   recordModerationSystemEvent,
 } = require('./permissions');
 const {
@@ -14,6 +16,7 @@ const {
 const {
   QUARANTINE_MODES,
   quarantineMember,
+  quarantineInvestigationMembers,
   restoreQuarantinedMember,
   getQuarantineState,
   getQuarantineMode,
@@ -47,9 +50,10 @@ async function ensureInitiatorInterviewAccess(guild, channelId, initiatorId) {
   const channel = guild.channels.cache.get(String(channelId))
     || await guild.channels.fetch(String(channelId)).catch(() => null);
   if (!channel?.permissionOverwrites?.edit) return { success: false, reason: 'Investigation room is unavailable.' };
-  const member = guild.members.cache.get(String(initiatorId))
-    || await guild.members.fetch(String(initiatorId)).catch(() => null);
-  if (!member) return { success: false, reason: 'Initiating moderator is no longer in the guild.' };
+  const member = await guild.members.fetch({ user: String(initiatorId), force: true }).catch(() => null);
+  if (!member) return { success: false, reason: 'Initiating moderator is unavailable.' };
+  if (getQuarantineState(guild.id).users?.[member.id]) return { success: false, reason: 'A quarantined investigator cannot receive access to another investigation room.' };
+  if (!canUseModAction(member, guild, 'quarantine')) return { success: false, reason: 'Initiating moderator no longer has investigation authority.' };
   try {
     // Keep this to the permissions required to use the room. Asking Discord to
     // grant unrelated bits (for example ManageMessages) can return 50013 when
@@ -85,7 +89,7 @@ function investigationModal(targetId) {
 
 async function resolveTarget(interaction, targetId, action = 'quarantine') {
   if (!targetId) {
-    await safeReply(interaction, { content: '❌ Missing target member.', flags: 64 });
+    await safeReply(interaction, { content: `${EMOJIS.ERROR} Missing target member.`, flags: 64 });
     return null;
   }
   return requireModeratableTarget(interaction, targetId, action);
@@ -95,31 +99,34 @@ function currentSnapshot(interaction, targetId) {
   return getQuarantineState(interaction.guild.id)?.users?.[String(targetId)] || null;
 }
 
-async function openQuarantine(interaction, targetId) {
-  const target = await resolveTarget(interaction, targetId, 'quarantine');
-  if (!target) return true;
-  const existing = currentSnapshot(interaction, target.id);
+// Modal interactions must be acknowledged by showModal (not deferReply).
+// Avoid a network member fetch before the modal, which can exceed Discord's
+// three-second deadline. Full target safety checks remain on submission.
+async function openInvestigationPrompt(interaction, targetId) {
+  if (!/^\d{15,25}$/.test(String(targetId || ''))) {
+    return safeReply(interaction, { content: `${EMOJIS.ERROR} Invalid target member.`, flags: 64 });
+  }
+  if (!canUseModAction(interaction.member, interaction.guild, 'quarantine', interaction)) {
+    return safeReply(interaction, { content: `${EMOJIS.ERROR} You do not have permission to investigate members.`, flags: 64 });
+  }
+  const existing = currentSnapshot(interaction, targetId);
   if (existing) {
     const mode = getQuarantineMode(existing);
     return safeReply(interaction, {
-      content: `⚠️ **${target.user.tag}** is already in **${mode === QUARANTINE_MODES.SECURITY ? 'Full Security Isolation' : 'Investigation Isolation'}**.`,
+      content: `${EMOJIS.WARNING} <@${targetId}> is already in **${mode === QUARANTINE_MODES.SECURITY ? 'Full Security Isolation' : 'Investigation Isolation'}**.`,
       flags: 64,
     });
   }
-
-  // /mod is an investigation workflow only. Manual Full Security Isolation lives in /admin.
-  await interaction.showModal(investigationModal(target.id));
+  await interaction.showModal(investigationModal(targetId));
   return true;
 }
 
+async function openQuarantine(interaction, targetId) {
+  return openInvestigationPrompt(interaction, targetId);
+}
+
 async function openInvestigationModal(interaction, targetId) {
-  const target = await resolveTarget(interaction, targetId, 'quarantine');
-  if (!target) return true;
-  if (currentSnapshot(interaction, target.id)) {
-    return safeReply(interaction, { content: `⚠️ **${target.user.tag}** is already isolated.`, flags: 64 });
-  }
-  await interaction.showModal(investigationModal(target.id));
-  return true;
+  return openInvestigationPrompt(interaction, targetId);
 }
 
 async function securityMovedToAdmin(interaction, targetId, submitAttempt = false) {
@@ -132,7 +139,7 @@ async function securityMovedToAdmin(interaction, targetId, submitAttempt = false
     metadata: { submitAttempt },
   });
   return safeReply(interaction, {
-    content: '🚨 **Full Security Isolation has moved to `/admin`.** The `/mod` panel is for staff investigations only.',
+    content: `${EMOJIS.SECURITY_SIREN} **Full Security Isolation has moved to \`/admin\`.** The \`/mod\` panel is for staff investigations only.`,
     flags: 64,
   });
 }
@@ -164,7 +171,82 @@ function createQuarantineCase(interaction, target, mode, reason, result) {
   return created;
 }
 
-async function submitQuarantine(interaction, targetId, requestedMode, legacy = false) {
+const investigationDrafts = new Map();
+const INVESTIGATION_DRAFT_TTL = 15 * 60 * 1000;
+
+function investigationInvitePayload(draft) {
+  const users = new Discord.UserSelectMenuBuilder().setCustomId(`mod_invroom_invite_users:${draft.token}`)
+    .setPlaceholder('Invite staff or guests (optional)').setMinValues(0).setMaxValues(5);
+  const roles = new Discord.RoleSelectMenuBuilder().setCustomId(`mod_invroom_invite_roles:${draft.token}`)
+    .setPlaceholder('Choose roles (optional)').setMinValues(0).setMaxValues(5);
+  const investigated = new Discord.UserSelectMenuBuilder().setCustomId(`mod_invroom_invite_subjects:${draft.token}`)
+    .setPlaceholder('Additional members to investigate (optional)').setMinValues(0).setMaxValues(5);
+  if (draft.investigatedIds?.length) investigated.setDefaultUsers(...draft.investigatedIds);
+  if (draft.userIds.length) users.setDefaultUsers(...draft.userIds);
+  if (draft.roleIds.length) roles.setDefaultRoles(...draft.roleIds);
+  return {
+    content: `${EMOJIS.LOCK} **Who would you like to bring into this investigation?**\nChoose additional members to investigate separately from staff or guests. Only investigated members will be isolated.\n\n**Under investigation:** <@${draft.targetId}>${(draft.investigatedIds || []).map(id => `, <@${id}>`).join('')}\n**Guests:** ${draft.userIds.length} selected • **Guest roles:** ${draft.roleIds.length} selected`,
+    components: [new Discord.ActionRowBuilder().addComponents(investigated), new Discord.ActionRowBuilder().addComponents(users), new Discord.ActionRowBuilder().addComponents(roles),
+      new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder().setCustomId(`mod_invroom_invite_start:${draft.token}`)
+        .setLabel('Open Investigation').setStyle(Discord.ButtonStyle.Primary),
+      new Discord.ButtonBuilder().setCustomId(`mod_invroom_invite_cancel:${draft.token}`).setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary))],
+    flags: Discord.MessageFlags.Ephemeral, allowedMentions: { parse: [] },
+  };
+}
+
+async function prepareInvestigationInvites(interaction, targetId, legacy) {
+  // Always create a private reply: modal replies with components may otherwise
+  // be converted into updates of the originating moderation message.
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  const target = await resolveTarget(interaction, targetId, 'quarantine');
+  if (!target) return safeEditReply(interaction, { content: 'Unable to open this investigation. Check your access and the selected member.', components: [], flags: 64 });
+  const reason = fieldValue(interaction, 'reason');
+  if (!reason) return safeEditReply(interaction, { content: `${EMOJIS.ERROR} An investigation reason is required.`, flags: 64 });
+  for (const [token, draft] of investigationDrafts) if (draft.expiresAt <= Date.now()) investigationDrafts.delete(token);
+  const token = require('node:crypto').randomBytes(8).toString('hex');
+  const draft = { token, guildId: interaction.guild.id, actorId: interaction.user.id, targetId: target.id,
+    reason, legacy, userIds: [], roleIds: [], investigatedIds: [], expiresAt: Date.now() + INVESTIGATION_DRAFT_TTL };
+  investigationDrafts.set(token, draft);
+  return safeEditReply(interaction, investigationInvitePayload(draft));
+}
+
+async function handleInvestigationInvites(interaction) {
+  const [action, token] = String(interaction.__goliathLegacyRoleBase || interaction.customId || '').split(':');
+  const draft = investigationDrafts.get(token);
+  if (!draft || draft.expiresAt <= Date.now() || draft.guildId !== interaction.guild?.id || draft.actorId !== interaction.user?.id) {
+    if (draft?.expiresAt <= Date.now()) investigationDrafts.delete(token);
+    return safeReply(interaction, { content: 'This investigation setup has expired or belongs to another moderator. Start it again from the member’s moderation panel.', flags: 64 });
+  }
+  await interaction.deferUpdate();
+  const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  if (!actor || getQuarantineState(interaction.guild.id).users?.[actor.id] || !canUseModAction(actor, interaction.guild, 'quarantine')) {
+    investigationDrafts.delete(token);
+    return safeEditReply(interaction, { content: 'You no longer have permission to open this investigation.', components: [], flags: 64 });
+  }
+  interaction.member = actor;
+  if (action === 'mod_invroom_invite_cancel') {
+    investigationDrafts.delete(token);
+    return interaction.editReply({ content: 'Investigation setup cancelled.', components: [], allowedMentions: { parse: [] } });
+  }
+  if (action === 'mod_invroom_invite_subjects' || action === 'mod_invroom_invite_users' || action === 'mod_invroom_invite_roles') {
+    const key = action.endsWith('_subjects') ? 'investigatedIds' : action.endsWith('_users') ? 'userIds' : 'roleIds';
+    draft[key] = [...new Set((interaction.values || []).map(String))].slice(0, 5);
+    const payload = investigationInvitePayload(draft); delete payload.flags;
+    return interaction.editReply(payload);
+  }
+  if (action !== 'mod_invroom_invite_start') return false;
+  // Consume first to prevent duplicate rooms on repeated clicks.
+  investigationDrafts.delete(token);
+  await interaction.editReply({ content: 'Opening the investigation…', components: [], allowedMentions: { parse: [] } });
+  try {
+    await submitQuarantine(interaction, draft.targetId, QUARANTINE_MODES.INVESTIGATION, draft.legacy, draft);
+  } catch (error) {
+    await safeEditReply(interaction, { content: `${EMOJIS.WARNING} ${error.message}`, components: [], flags: 64 });
+  }
+  return true;
+}
+
+async function submitQuarantine(interaction, targetId, requestedMode, legacy = false, draft = null) {
   if (requestedMode === QUARANTINE_MODES.SECURITY) {
     return securityMovedToAdmin(interaction, targetId, true);
   }
@@ -172,12 +254,26 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
   const mode = QUARANTINE_MODES.INVESTIGATION;
   const target = await resolveTarget(interaction, targetId, 'quarantine');
   if (!target) return true;
-  const reason = fieldValue(interaction, 'reason');
-  if (!reason) return safeReply(interaction, { content: '❌ An investigation reason is required.', flags: 64 });
+  const reason = draft?.reason || fieldValue(interaction, 'reason');
+  if (!reason) return safeReply(interaction, { content: `${EMOJIS.ERROR} An investigation reason is required.`, flags: 64 });
 
   // Acknowledge first: isolation performs several Discord API writes and may outlive the modal deadline.
   if (!interaction.deferred && !interaction.replied) {
     await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  }
+
+  if (draft?.investigatedIds?.length) {
+    const ids = [...new Set([target.id, ...draft.investigatedIds])];
+    const result = await quarantineInvestigationMembers(interaction.guild, ids, {
+      reason, quarantinedBy: interaction.user.id, invitedUserIds: draft.userIds, invitedRoleIds: draft.roleIds,
+    });
+    recordModerationSystemEvent({ interaction, event: result.success ? 'moderation.investigation.group_created' : 'moderation.investigation.group_failed',
+      action: 'quarantine', targetId: target.id, reason, after: result, metadata: { investigatedMemberIds: ids } });
+    if (result.interviewChannelId) await ensureInitiatorInterviewAccess(interaction.guild, result.interviewChannelId, interaction.user.id);
+    return safeEditReply(interaction, { content: result.success
+      ? `${EMOJIS.LOCK} Investigation opened for ${ids.map(id => `<@${id}>`).join(', ')} in <#${result.interviewChannelId}>. Each member has a separate case and release control.`
+      : `${EMOJIS.WARNING} ${result.reason}${result.retained ? `\nThe room and original role records have been retained for recovery: <#${result.interviewChannelId}>. Do not start a duplicate investigation.` : ''}`,
+      components: [], allowedMentions: { parse: [] }, flags: 64 });
   }
 
   const result = await quarantineMember(interaction.guild, target, {
@@ -185,6 +281,7 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
     quarantinedBy: interaction.user.id,
     source: 'moderation',
     mode,
+    ...(draft ? { invitationSelection: true, invitedUserIds: draft.userIds, invitedRoleIds: draft.roleIds } : {}),
   });
 
   if (!result?.success) {
@@ -198,7 +295,7 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
       metadata: { containmentMode: mode, legacyEntryPoint: legacy },
     });
     return safeEditReply(interaction, {
-      content: `❌ Failed to investigate **${target.user.tag}**: ${result?.error || result?.reason || 'Unknown error'}`,
+      content: `${EMOJIS.ERROR} Failed to investigate **${target.user.tag}**: ${result?.error || result?.reason || 'Unknown error'}`,
       flags: 64,
     });
   }
@@ -226,7 +323,7 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
   try {
     modCase = createQuarantineCase(interaction, target, mode, reason, result);
   } catch (error) {
-    console.error('❌ Failed to create investigation moderation case:', error);
+    console.error(`${EMOJIS.ERROR} Failed to create investigation moderation case:`, error);
     recordModerationSystemEvent({
       interaction,
       event: 'moderation.quarantine.case_failed',
@@ -253,18 +350,18 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
   });
 
   const content = result.dryRun
-    ? `🧪 Investigation dry-run completed for **${target.user.tag}**.`
-    : `🔒 **${target.user.tag}** is now under **Investigation Isolation**.${result.interviewChannelId ? ` • Interview room: <#${result.interviewChannelId}>` : ''}${modCase?.caseId ? ` • Case **#${modCase.caseId}**` : ''}`;
+    ? `${EMOJIS.TEST} Investigation dry-run completed for **${target.user.tag}**.`
+    : `${EMOJIS.LOCK} **${target.user.tag}** is now under **Investigation Isolation**.${result.interviewChannelId ? ` • Interview room: <#${result.interviewChannelId}>` : ''}${modCase?.caseId ? ` • Case **#${modCase.caseId}**` : ''}`;
 
   await safeEditReply(interaction, { content, flags: 64 });
   await refreshDashboard(Discord, interaction, target, { view: 'actions' });
   return true;
 }
 
-function canUseInvestigationRoomControls(interaction, snapshot) {
+async function canUseInvestigationRoomControls(interaction, snapshot) {
   if (!interaction?.guild || !interaction?.user?.id || !snapshot) return false;
-  return String(interaction.guild.ownerId || '') === String(interaction.user.id)
-    || String(snapshot.quarantinedBy || '') === String(interaction.user.id);
+  const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  return Boolean(actor && !getQuarantineState(interaction.guild.id).users?.[actor.id] && canUseModAction(actor, interaction.guild, 'quarantine'));
 }
 
 async function openInvestigationAccess(interaction, targetId) {
@@ -272,21 +369,21 @@ async function openInvestigationAccess(interaction, targetId) {
 
   if (!snapshot) {
     return safeReply(interaction, {
-      content: '⚠️ This investigation is no longer active.',
+      content: `${EMOJIS.WARNING} This investigation is no longer active.`,
       flags: 64,
     });
   }
 
   if (getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) {
     return safeReply(interaction, {
-      content: '❌ Channel Access is only available for Investigation Isolation.',
+      content: `${EMOJIS.ERROR} Channel Access is only available for Investigation Isolation.`,
       flags: 64,
     });
   }
 
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) {
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) {
     return safeReply(interaction, {
-      content: '❌ Only the lead investigator or server owner can manage investigation channel access.',
+      content: `${EMOJIS.ERROR} Only authorised management can manage investigation channel access.`,
       flags: 64,
     });
   }
@@ -298,7 +395,7 @@ async function openInvestigationAccess(interaction, targetId) {
 
   if (!target) {
     return safeEditReply(interaction, {
-      content: '❌ The investigated member could not be found.',
+      content: `${EMOJIS.ERROR} The investigated member could not be found.`,
       flags: 64,
     });
   }
@@ -313,19 +410,19 @@ async function openInvestigationAccess(interaction, targetId) {
 
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🔐 Investigation Channel Access')
+    .setTitle(`${EMOJIS.PERMISSIONS} Investigation Channel Access`)
     .setDescription([
       `**Member:** ${target}`,
       '',
-      '**Currently Allowed**',
+      '**Legacy Additional Access**',
       allowedText,
       '',
-      'Select a normal server channel below, then choose whether to allow or remove access.',
+      'Investigation Isolation permits only the assigned private room. Select a channel below to revoke legacy additional access.',
       '',
       'Use **Room Only** to remove all additional channel access.',
     ].join('\n'))
     .setFooter({
-      text: 'Goliath • Investigation Isolation',
+      text: 'Private Investigation',
     })
     .setTimestamp();
 
@@ -341,23 +438,16 @@ async function openInvestigationAccess(interaction, targetId) {
 
   const actions = new Discord.ActionRowBuilder().addComponents(
     new Discord.ButtonBuilder()
-      .setCustomId(`mod_invroom_access_allow:${targetId}`)
-      .setLabel('Allow Access')
-      .setEmoji('➕')
-      .setStyle(Discord.ButtonStyle.Success)
-      .setDisabled(true),
-
-    new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_remove:${targetId}`)
       .setLabel('Remove Access')
-      .setEmoji('➖')
+      .setEmoji(EMOJIS.REMOVE)
       .setStyle(Discord.ButtonStyle.Danger)
       .setDisabled(true),
 
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_clear:${targetId}`)
       .setLabel('Room Only')
-      .setEmoji('🔒')
+      .setEmoji(EMOJIS.RESTRICTIONS)
       .setStyle(Discord.ButtonStyle.Secondary)
       .setDisabled(allowedIds.length === 0)
   );
@@ -380,14 +470,14 @@ function investigationAccessIds(customId) {
   };
 }
 
-function investigationAccessAuthorised(interaction, targetId) {
+async function investigationAccessAuthorised(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
 
   if (!snapshot) {
     return {
       allowed: false,
       snapshot: null,
-      message: '⚠️ This investigation is no longer active.',
+      message: `${EMOJIS.WARNING} This investigation is no longer active.`,
     };
   }
 
@@ -395,15 +485,15 @@ function investigationAccessAuthorised(interaction, targetId) {
     return {
       allowed: false,
       snapshot,
-      message: '❌ Channel Access is only available for Investigation Isolation.',
+      message: `${EMOJIS.ERROR} Channel Access is only available for Investigation Isolation.`,
     };
   }
 
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) {
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) {
     return {
       allowed: false,
       snapshot,
-      message: '❌ Only the lead investigator or server owner can manage investigation channel access.',
+      message: `${EMOJIS.ERROR} Only authorised management can manage investigation channel access.`,
     };
   }
 
@@ -416,7 +506,7 @@ function investigationAccessAuthorised(interaction, targetId) {
 
 async function selectInvestigationAccessChannel(interaction) {
   const { targetId } = investigationAccessIds(interaction.customId);
-  const auth = investigationAccessAuthorised(interaction, targetId);
+  const auth = await investigationAccessAuthorised(interaction, targetId);
 
   if (!auth.allowed) {
     return safeReply(interaction, {
@@ -429,14 +519,14 @@ async function selectInvestigationAccessChannel(interaction) {
 
   if (!channelId) {
     return safeReply(interaction, {
-      content: '❌ No channel was selected.',
+      content: `${EMOJIS.ERROR} No channel was selected.`,
       flags: 64,
     });
   }
 
   if (String(auth.snapshot.interviewChannelId || '') === channelId) {
     return safeReply(interaction, {
-      content: 'ℹ️ The private investigation room is always available and does not need additional access.',
+      content: `${EMOJIS.INFO} The private investigation room is always available and does not need additional access.`,
       flags: 64,
     });
   }
@@ -448,7 +538,7 @@ async function selectInvestigationAccessChannel(interaction) {
 
   if (!channel) {
     return safeReply(interaction, {
-      content: '❌ That channel could not be found.',
+      content: `${EMOJIS.ERROR} That channel could not be found.`,
       flags: 64,
     });
   }
@@ -459,23 +549,16 @@ async function selectInvestigationAccessChannel(interaction) {
 
   const actions = new Discord.ActionRowBuilder().addComponents(
     new Discord.ButtonBuilder()
-      .setCustomId(`mod_invroom_access_allow:${targetId}:${channelId}`)
-      .setLabel('Allow Access')
-      .setEmoji('➕')
-      .setStyle(Discord.ButtonStyle.Success)
-      .setDisabled(allowedIds.has(channelId)),
-
-    new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_remove:${targetId}:${channelId}`)
       .setLabel('Remove Access')
-      .setEmoji('➖')
+      .setEmoji(EMOJIS.REMOVE)
       .setStyle(Discord.ButtonStyle.Danger)
       .setDisabled(!allowedIds.has(channelId)),
 
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_clear:${targetId}`)
       .setLabel('Room Only')
-      .setEmoji('🔒')
+      .setEmoji(EMOJIS.RESTRICTIONS)
       .setStyle(Discord.ButtonStyle.Secondary)
       .setDisabled(allowedIds.size === 0)
   );
@@ -500,7 +583,7 @@ async function selectInvestigationAccessChannel(interaction) {
 
 async function changeInvestigationAccess(interaction, action) {
   const { targetId, channelId } = investigationAccessIds(interaction.customId);
-  const auth = investigationAccessAuthorised(interaction, targetId);
+  const auth = await investigationAccessAuthorised(interaction, targetId);
 
   if (!auth.allowed) {
     return safeReply(interaction, {
@@ -516,7 +599,7 @@ async function changeInvestigationAccess(interaction, action) {
 
   if (!target) {
     return safeReply(interaction, {
-      content: '❌ The investigated member could not be found.',
+      content: `${EMOJIS.ERROR} The investigated member could not be found.`,
       flags: 64,
     });
   }
@@ -526,7 +609,7 @@ async function changeInvestigationAccess(interaction, action) {
   if (action !== 'clear') {
     if (!channelId) {
       return safeReply(interaction, {
-        content: '❌ Select a channel first.',
+        content: `${EMOJIS.ERROR} Select a channel first.`,
         flags: 64,
       });
     }
@@ -536,7 +619,7 @@ async function changeInvestigationAccess(interaction, action) {
 
     if (!channel) {
       return safeReply(interaction, {
-        content: '❌ The selected channel could not be found.',
+        content: `${EMOJIS.ERROR} The selected channel could not be found.`,
         flags: 64,
       });
     }
@@ -564,19 +647,19 @@ async function changeInvestigationAccess(interaction, action) {
 
     const embed = new Discord.EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('🔐 Investigation Channel Access')
+      .setTitle(`${EMOJIS.PERMISSIONS} Investigation Channel Access`)
       .setDescription([
         `**Member:** ${target}`,
         '',
-        `✅ ${actionText}`,
+        `${EMOJIS.SUCCESS} ${actionText}`,
         '',
-        '**Currently Allowed**',
+        '**Legacy Additional Access**',
         allowedText,
         '',
         'Select another normal server channel below to continue managing access.',
       ].join('\n'))
       .setFooter({
-        text: 'Goliath • Investigation Isolation',
+        text: 'Private Investigation',
       })
       .setTimestamp();
 
@@ -594,21 +677,21 @@ async function changeInvestigationAccess(interaction, action) {
       new Discord.ButtonBuilder()
         .setCustomId(`mod_invroom_access_allow:${targetId}`)
         .setLabel('Allow Access')
-        .setEmoji('➕')
+        .setEmoji(EMOJIS.ADD)
         .setStyle(Discord.ButtonStyle.Success)
         .setDisabled(true),
 
       new Discord.ButtonBuilder()
         .setCustomId(`mod_invroom_access_remove:${targetId}`)
         .setLabel('Remove Access')
-        .setEmoji('➖')
+        .setEmoji(EMOJIS.REMOVE)
         .setStyle(Discord.ButtonStyle.Danger)
         .setDisabled(true),
 
       new Discord.ButtonBuilder()
         .setCustomId(`mod_invroom_access_clear:${targetId}`)
         .setLabel('Room Only')
-        .setEmoji('🔒')
+        .setEmoji(EMOJIS.RESTRICTIONS)
         .setStyle(Discord.ButtonStyle.Secondary)
         .setDisabled(allowedIds.length === 0)
     );
@@ -622,7 +705,7 @@ async function changeInvestigationAccess(interaction, action) {
     });
   } catch (error) {
     return safeReply(interaction, {
-      content: `❌ I couldn't change that investigation access: ${error.message}`,
+      content: `${EMOJIS.ERROR} I couldn't change that investigation access: ${error.message}`,
       flags: 64,
     });
   }
@@ -630,11 +713,11 @@ async function changeInvestigationAccess(interaction, action) {
 
 async function openInvestigationNoteModal(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
-  if (!snapshot) return safeReply(interaction, { content: '⚠️ This investigation is no longer active.', flags: 64 });
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) return safeReply(interaction, { content: '❌ Only the lead investigator or server owner can use this room control.', flags: 64 });
+  if (!snapshot) return safeReply(interaction, { content: `${EMOJIS.WARNING} This investigation is no longer active.`, flags: 64 });
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) return safeReply(interaction, { content: `${EMOJIS.ERROR} Only authorised management can use this room control.`, flags: 64 });
   const modal = new Discord.ModalBuilder().setCustomId(`mod_invroom_note_submit:${targetId}`).setTitle('Add Investigation Note').addComponents(
     new Discord.ActionRowBuilder().addComponents(
-      new Discord.TextInputBuilder().setCustomId('note').setLabel('Staff-only note').setStyle(Discord.TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(1000).setPlaceholder('Record an observation, update, evidence lead or next step.')
+      new Discord.TextInputBuilder().setCustomId('note').setLabel('Management note').setStyle(Discord.TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(1000).setPlaceholder('Record an observation, update, evidence lead or next step.')
     )
   );
   await interaction.showModal(modal);
@@ -643,31 +726,109 @@ async function openInvestigationNoteModal(interaction, targetId) {
 
 async function submitInvestigationRoomNote(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
-  if (!snapshot) return safeReply(interaction, { content: '⚠️ This investigation is no longer active.', flags: 64 });
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) return safeReply(interaction, { content: '❌ Only the lead investigator or server owner can add room notes.', flags: 64 });
+  if (!snapshot) return safeReply(interaction, { content: `${EMOJIS.WARNING} This investigation is no longer active.`, flags: 64 });
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) return safeReply(interaction, { content: `${EMOJIS.ERROR} Only authorised management can add room notes.`, flags: 64 });
   const note = fieldValue(interaction, 'note').slice(0, 1000);
-  if (!note) return safeReply(interaction, { content: '❌ The note cannot be empty.', flags: 64 });
+  if (!note) return safeReply(interaction, { content: `${EMOJIS.ERROR} The note cannot be empty.`, flags: 64 });
   if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   if (snapshot.caseId) {
     recordCaseAudit({ guildId: interaction.guild.id, caseId: snapshot.caseId, actorId: interaction.user.id, event: 'case.investigation.room_note_added', before: null, after: { note }, metadata: { targetId: String(targetId), interviewChannelId: snapshot.interviewChannelId || null, staffOnly: true } });
   }
   recordModerationSystemEvent({ interaction, event: 'moderation.investigation.room_note_added', action: 'investigation_note', targetId: String(targetId), after: { note }, metadata: { caseId: snapshot.caseId || null, interviewChannelId: snapshot.interviewChannelId || null } });
-  return safeEditReply(interaction, { content: `✅ Staff note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
+  return safeEditReply(interaction, { content: `${EMOJIS.SUCCESS} Note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
 }
 
-async function removeQuarantine(interaction, targetId) {
+function investigationNotice(interaction, title, description, color, fields = [], emoji = `${EMOJIS.FOLDER}`) {
+  const { buildMemberNotice } = require('../../../core/ui/memberNotice');
+  const payload = buildMemberNotice(interaction.guild, { module: 'Moderation', moduleEmoji: emoji,
+    title, description, color, fields, compactModerationLayout: true });
+  payload.embeds[0].setFooter({ text: 'Private Moderation Review' });
+  return { ...payload, content: null, flags: Discord.MessageFlags.Ephemeral };
+}
+
+async function deliverFinalInvestigationTranscript(interaction, targetId, channelId, transcript) {
+  const engine = require('../../security/protection/quarantine');
+  const state = engine.getQuarantineState(interaction.guild.id);
+  const record = (state.archivedRooms || []).find(room => room.channelId === channelId && room.memberId === targetId);
+  if (!record || !transcript) return { sent: false, reason: 'No saved transcript is available for delivery.' };
+  const previous = record.transcriptDelivery;
+  if (previous?.sent && previous.recipientId === targetId && previous.jsonPath === transcript.jsonPath) return { ...previous, reused: true };
+  let delivery;
+  try {
+    require('../../../modules/feedbackStudio/tickets/ticketsTranscripts').buildTranscriptArchive(transcript,
+      { guildId: interaction.guild.id, channelId, memberId: targetId });
+    const user = await (interaction.client || interaction.guild.client).users.fetch(targetId);
+    const payload = investigationNotice(interaction, 'Your Investigation Transcript',
+      'Your investigation has closed. Use **Download Transcript** below to get your copy of the conversation.\n\nExtract the ZIP file and open **Investigation-Transcript.html** to read it. If you have any questions, please contact server management.', 0x5865F2,
+      [{ name: `${EMOJIS.USER_HOME} Server`, value: interaction.guild.name || 'Discord Server', inline: true },
+        ...(record.caseId ? [{ name: `${EMOJIS.FOLDER} Case reference`, value: `#${record.caseId}`, inline: true }] : [])]);
+    delete payload.flags; delete payload.content;
+    payload.components = [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
+      .setCustomId(`inv_transcript_download:${interaction.guild.id}:${channelId}:${targetId}`)
+      .setLabel('Download Transcript').setEmoji(EMOJIS.STATS_JOINS).setStyle(Discord.ButtonStyle.Primary))];
+    const message = await user.send(payload);
+    delivery = { sent: true, sentAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath,
+      messageId: message.id, channelId: message.channelId, format: 'download-button-v1' };
+  } catch (error) {
+    delivery = { sent: false, attemptedAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath,
+      reason: Number(error.code) === 50007 ? 'The member’s DMs are unavailable.' : String(error.message || error).slice(0, 200) };
+  }
+  const latest = engine.getQuarantineState(interaction.guild.id);
+  const current = latest.archivedRooms?.find(room => room.channelId === channelId && room.memberId === targetId);
+  if (current) { current.transcriptDelivery = delivery; engine.saveQuarantineState(interaction.guild, latest); }
+  recordModerationSystemEvent({ interaction, event: 'moderation.investigation.transcript_dm', targetId,
+    metadata: { channelId, sent: delivery.sent, reason: delivery.reason || null } });
+  return delivery;
+}
+
+async function handleInvestigationTranscriptDownload(interaction) {
+  if (!String(interaction.customId || '').startsWith('inv_transcript_download:')) return false;
+  const client = interaction.client;
+  const parts = String(interaction.customId).split(':');
+  const [, guildId, channelId, memberId] = parts;
+  if (!interaction.isButton?.() || interaction.guildId || parts.length !== 4
+    || ![guildId, channelId, memberId].every(id => /^\d{15,25}$/.test(id || ''))
+    || interaction.user?.id !== memberId || interaction.message?.author?.id !== client?.user?.id) {
+    await interaction.reply({ content: 'This transcript download is only available to its recipient in their private message.', flags: Discord.MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+    return true;
+  }
+  await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  try {
+    const engine = require('../../security/protection/quarantine');
+    const record = engine.getQuarantineState(guildId).archivedRooms?.find(room => room.channelId === channelId && room.memberId === memberId);
+    if (!record?.roomTranscript || !record.transcriptDelivery?.sent || record.transcriptDelivery.messageId !== interaction.message.id
+      || record.transcriptDelivery.recipientId !== memberId || record.transcriptDelivery.jsonPath !== record.roomTranscript.jsonPath) {
+      throw Error('This copy is no longer available. Please use your latest transcript message or contact server management.');
+    }
+    const archive = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts').buildTranscriptArchive(record.roomTranscript,
+      { guildId, channelId, memberId });
+    await interaction.editReply({ content: `${EMOJIS.JOIN} Download the ZIP below, extract it and open **Investigation-Transcript.html**.`,
+      files: [new Discord.AttachmentBuilder(archive, { name: 'Investigation-Transcript.zip' })], allowedMentions: { parse: [] } });
+  } catch (error) {
+    console.warn('[InvestigationTranscript] Download unavailable:', error.message);
+    await interaction.editReply({ content: 'Your transcript could not be downloaded. Please try your latest transcript message or contact server management.', files: [], allowedMentions: { parse: [] } });
+  }
+  return true;
+}
+
+function transcriptDeliveryText(delivery) {
+  return delivery?.sent ? 'The final transcript was sent to the member by DM.'
+    : 'The transcript could not be delivered by DM. The saved copy is retained for management.';
+}
+
+async function removeQuarantine(interaction, targetId, options = {}) {
   if (!interaction.deferred && !interaction.replied) {
     await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   }
 
   const target = await resolveTarget(interaction, targetId, 'remove_quarantine');
   if (!target) {
-    await safeEditReply(interaction, { content: '❌ Unable to resolve or authorise the member for isolation release.', flags: 64 });
+    await safeEditReply(interaction, { content: `${EMOJIS.ERROR} Unable to resolve or authorise the member for isolation release.`, flags: 64 });
     return true;
   }
   const snapshot = currentSnapshot(interaction, target.id);
   if (!snapshot) {
-    return safeEditReply(interaction, { content: `⚠️ **${target.user.tag}** is not currently isolated.`, flags: 64 });
+    return safeEditReply(interaction, { content: `${EMOJIS.WARNING} **${target.user.tag}** is not currently isolated.`, flags: 64 });
   }
   const mode = getQuarantineMode(snapshot);
 
@@ -681,9 +842,19 @@ async function removeQuarantine(interaction, targetId) {
       metadata: { containmentMode: mode, caseId: snapshot.caseId || null },
     });
     return safeEditReply(interaction, {
-      content: '🚨 **Full Security Isolation can only be cleared from `/admin` by the server owner.**',
+      content: `${EMOJIS.SECURITY_SIREN} **Full Security Isolation can only be cleared from \`/admin\` by the server owner.**`,
       flags: 64,
     });
+  }
+
+  if (snapshot.investigationGroupId && !options.roomControl) {
+    try {
+      const channel = await interaction.guild.channels.fetch(snapshot.interviewChannelId, { force: true });
+      const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
+      if (!channel?.permissionsFor(actor)?.has([Discord.PermissionFlagsBits.ViewChannel, Discord.PermissionFlagsBits.ReadMessageHistory])) throw Error('You need access to the investigation conversation before releasing this member.');
+      const exported = await exportInvestigationTranscript(interaction, { channel, active: snapshot }, targetId);
+      snapshot.roomTranscript = exported.transcript;
+    } catch (error) { return safeEditReply(interaction, { content: `${EMOJIS.WARNING} ${error.message} The investigation remains active.`, flags: 64 }); }
   }
 
   const result = await restoreQuarantinedMember(interaction.guild, target, {
@@ -703,7 +874,7 @@ async function removeQuarantine(interaction, targetId) {
 
   if (!result.success) {
     return safeEditReply(interaction, {
-      content: `❌ Failed to clear Investigation Isolation from **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`,
+      content: `${EMOJIS.ERROR} Failed to clear Investigation Isolation from **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`,
       flags: 64,
     });
   }
@@ -721,7 +892,7 @@ async function removeQuarantine(interaction, targetId) {
         metadata: { interviewArchive: result.archive || null },
       });
     } catch (error) {
-      console.error(`❌ Failed to update investigation case #${snapshot.caseId}:`, error);
+      console.error(`${EMOJIS.ERROR} Failed to update investigation case #${snapshot.caseId}:`, error);
       recordModerationSystemEvent({
         interaction,
         event: 'moderation.quarantine.case_release_update_failed',
@@ -733,22 +904,158 @@ async function removeQuarantine(interaction, targetId) {
     }
   }
 
+  const delivery = snapshot.roomTranscript && result.archive?.archived
+    ? await deliverFinalInvestigationTranscript(interaction, targetId, result.archive.channelId, snapshot.roomTranscript) : null;
+  if (options.roomControl) {
+    return safeEditReply(interaction, { ...investigationNotice(interaction, 'Investigation Closed',
+      result.archive?.shared ? 'The member has been released. This room remains open for the other investigated members.' : 'The member has been released and the room has been archived.', 0x57F287,
+      [{ name: `${EMOJIS.DOCUMENT} Final transcript`, value: delivery ? transcriptDeliveryText(delivery) : 'The saved transcript is retained for management.' }]), components: [] });
+  }
   const archiveText = result.archive?.archived && result.archive?.channelId
-    ? ` • Interview room archived: <#${result.archive.channelId}>`
+    ? result.archive.shared ? ` • Room remains open: <#${result.archive.channelId}>` : ` • Interview room archived: <#${result.archive.channelId}>`
     : '';
   await safeEditReply(interaction, {
-    content: `🔓 **Investigation cleared** for **${target.user.tag}** • restored **${result.restoredRoles || 0}** role(s)${archiveText}.`,
+    content: `${EMOJIS.UNLOCK} **Investigation cleared** for **${target.user.tag}** • restored **${result.restoredRoles || 0}** role(s)${archiveText}.`,
     flags: 64,
   });
   await refreshDashboard(Discord, interaction, target, { view: 'actions' });
   return true;
 }
 
+const roomOperations = new Set();
+const managementNotifications = new Map();
+
+async function investigationRoomContext(interaction, targetId, channelId, action = 'quarantine') {
+  if (!interaction.guild || interaction.channelId !== channelId) throw Error('Use this control inside its investigation room.');
+  const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
+  const state = getQuarantineState(interaction.guild.id);
+  if (state.users?.[actor.id] || actor.id === targetId || !canUseModAction(actor, interaction.guild, action)) throw Error('You do not have permission to manage this investigation room.');
+  const active = state.users?.[targetId];
+  const archived = (state.archivedRooms || []).find(room => room.channelId === channelId && room.memberId === targetId);
+  if (!(active?.interviewChannelId === channelId && getQuarantineMode(active) === QUARANTINE_MODES.INVESTIGATION) && !archived) throw Error('This room is no longer linked to this investigation.');
+  const channel = await interaction.guild.channels.fetch(channelId, { force: true });
+  if (!channel || !channel.permissionsFor(actor)?.has([Discord.PermissionFlagsBits.ViewChannel, Discord.PermissionFlagsBits.ReadMessageHistory])) throw Error('You no longer have access to this room.');
+  return { actor, channel, active: active?.interviewChannelId === channelId ? active : null, archived };
+}
+
+async function exportInvestigationTranscript(interaction, context, targetId, roomDeletionCopy = false) {
+  const transcripts = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts');
+  const transcript = await transcripts.createTranscript(interaction.client || interaction.guild.client, {
+    guildId: interaction.guild.id, channelId: context.channel.id, ticketId: `investigation-${context.channel.id}-${targetId}${roomDeletionCopy ? '-room-final' : ''}`,
+    displayId: `investigation-${context.channel.id}-${targetId}${roomDeletionCopy ? '-room-final' : ''}`, type: 'investigation', status: context.active ? 'open' : 'closed',
+    creatorId: targetId, metadata: { caseId: context.active?.caseId || context.archived?.caseId || null }, createdAt: context.active?.quarantinedAt ? new Date(context.active.quarantinedAt).toISOString() : null,
+  }, { generatedBy: interaction.user.id, limit: 10000, requireComplete: true });
+  const fs = require('node:fs');
+  const maxBytes = interaction.guild.maximumFileSize || 8_000_000;
+  if ([transcript.htmlPath, transcript.jsonPath].some(file => fs.statSync(file).size > maxBytes)) throw Error('The transcript was saved, but is too large to send here. This room has been kept for management review.');
+  const engine = require('../../security/protection/quarantine');
+  const latest = engine.getQuarantineState(interaction.guild.id);
+  const record = latest.users?.[targetId]?.interviewChannelId === context.channel.id
+    ? latest.users[targetId] : (latest.archivedRooms || []).find(room => room.channelId === context.channel.id && room.memberId === targetId);
+  if (!record) throw Error('Investigation changed during the export; no room was removed.');
+  if (roomDeletionCopy) record.finalRoomTranscript = transcript; else record.roomTranscript = transcript;
+  engine.saveQuarantineState(interaction.guild, latest);
+  recordModerationSystemEvent({ interaction, event: 'moderation.investigation.transcript_saved', targetId, metadata: { channelId: context.channel.id, messageCount: transcript.messageCount } });
+  return { transcript, files: [new Discord.AttachmentBuilder(transcript.htmlPath, { name: transcript.htmlFileName }), new Discord.AttachmentBuilder(transcript.jsonPath, { name: transcript.jsonFileName })] };
+}
+
+async function handleInvestigationRoomControl(interaction) {
+  const [prefix, targetId, channelId] = String(interaction.customId).split(':');
+  const action = prefix.replace('mod_invroom_', '');
+  if (!['transcript', 'notify', 'close', 'close_confirm', 'delete', 'delete_confirm'].includes(action)) return false;
+  const key = `${interaction.guildId || interaction.guild?.id}:${channelId}`;
+  if (roomOperations.has(key)) return safeReply(interaction, { content: `${EMOJIS.TIMEOUT} Another room action is in progress. Please try again shortly.`, flags: 64 });
+  roomOperations.add(key);
+  try {
+    await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+    const deleting = action.startsWith('delete');
+    const permission = deleting ? 'manage_evidence' : action.startsWith('close') ? 'remove_quarantine' : 'quarantine';
+    const context = await investigationRoomContext(interaction, targetId, channelId, permission);
+    interaction.member = context.actor;
+    if (deleting && !context.actor.permissions.has(Discord.PermissionFlagsBits.ManageChannels)) throw Error('Deleting a closed room requires Manage Channels.');
+    if (action === 'close' || action === 'delete') {
+      if (action === 'close' && !context.active) throw Error('This investigation is already closed.');
+      if (deleting && context.active) throw Error('Close the investigation before deleting its room.');
+      return safeEditReply(interaction, {
+        ...investigationNotice(interaction, deleting ? 'Delete This Room?' : context.active?.investigationGroupId ? 'Release This Member?' : 'Close Investigation?',
+          deleting ? 'This investigation is closed. Deleting the room will permanently remove its messages.\n\n**This cannot be undone.**'
+            : context.active?.investigationGroupId ? 'Only this member will be released. The room stays open while another member is under investigation.' : 'The member’s quarantine restrictions will be lifted and this room will be archived.',
+          deleting ? 0xED4245 : 0xFEE75C,
+          [{ name: `${EMOJIS.DOCUMENT} Final transcript`, value: deleting
+            ? '**Case record:** The transcript remains saved.\n**Member copy:** Sent by DM where possible.'
+            : 'Saved automatically and sent to the member by DM.' }], deleting ? `${EMOJIS.DELETE}` : `${EMOJIS.UNLOCK}`),
+        components: [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
+          .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Confirm Delete' : context.active?.investigationGroupId ? 'Confirm Release' : 'Confirm Close').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
+      });
+    }
+    if (action === 'notify') {
+      if (!context.active) throw Error('This investigation is already closed.');
+      const last = managementNotifications.get(key) || 0;
+      if (Date.now() - last < 60000) throw Error('Management was notified recently. Please wait a minute before sending another reminder.');
+      for (const [id, at] of managementNotifications) if (Date.now() - at >= 60000) managementNotifications.delete(id);
+      managementNotifications.set(key, Date.now());
+      await require('../../security/protection/quarantine/investigationRooms').notifyInvestigationManagement(context.channel, targetId, context.active.quarantinedBy, context.active);
+      recordModerationSystemEvent({ interaction, event: 'moderation.investigation.management_notified', targetId, metadata: { channelId } });
+      return safeEditReply(interaction, { content: context.active.invitationSelection === true
+        ? `${EMOJIS.BELL} The selected room participants have been notified where possible.`
+        : `${EMOJIS.BELL} Management has been notified and authorised management roles have access to this room.`, flags: 64 });
+    }
+    if (action === 'close_confirm' && !context.active) throw Error('This investigation is already closed.');
+    if (action === 'delete_confirm') {
+      const state = getQuarantineState(interaction.guild.id);
+      if ((state.pendingRoomCleanups || []).some(record => record.channelId === channelId)) throw Error('A case record is still being saved. Keep this room until recovery completes.');
+      if (Object.values(state.users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation still uses this room. It cannot be deleted.');
+      const sessions = require('../../../modules/securityStudio/verification/verificationStore').getVerificationSection(interaction.guild.id).sessions || {};
+      if (Object.values(sessions).some(session => ['quarantined', 'review'].includes(session.state) && session.quarantineChannelId === channelId)) throw Error('An active Verification case still uses this room. It cannot be deleted.');
+    }
+    const transcripts = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts');
+    const saved = context.archived?.finalRoomTranscript || context.archived?.roomTranscript;
+    const ignoredMessageIds = [context.archived?.closureMessageId].filter(Boolean);
+    const transcriptCheck = { ignoredMessageIds, allowLegacyClosureNotice: true, caseId: context.archived?.caseId };
+    const existing = action === 'delete_confirm'
+      ? await transcripts.checkTranscriptCurrent(context.channel, saved, transcriptCheck) : { current: false };
+    const exported = existing.current ? { transcript: saved } : await exportInvestigationTranscript(interaction, context, targetId, action === 'delete_confirm' && Boolean(context.archived?.investigationGroupId));
+    if (!existing.current) {
+      await interaction.editReply({ content: `${EMOJIS.DOCUMENT} **Investigation transcript saved** • ${exported.transcript.messageCount} messages. Attachment links are recorded; the original attachment files are not copied.`, files: exported.files, components: [], flags: 64 });
+    }
+    if (action === 'close_confirm') {
+      // The normal release path rechecks authority, hierarchy and original-role restoration.
+      const fresh = await investigationRoomContext(interaction, targetId, channelId, 'remove_quarantine');
+      interaction.member = fresh.actor;
+      return removeQuarantine(interaction, targetId, { roomControl: true });
+    }
+    if (action === 'delete_confirm') {
+      await investigationRoomContext(interaction, targetId, channelId, 'manage_evidence');
+      const engine = require('../../security/protection/quarantine');
+      if ((engine.getQuarantineState(interaction.guild.id).pendingRoomCleanups || []).some(record => record.channelId === channelId)) throw Error('A case record is still being saved. The room was kept.');
+      if (Object.values(engine.getQuarantineState(interaction.guild.id).users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation now uses this room. It was not deleted.');
+      const delivery = await deliverFinalInvestigationTranscript(interaction, targetId, channelId, context.archived?.investigationGroupId ? context.archived.roomTranscript : exported.transcript);
+      await interaction.editReply({ ...investigationNotice(interaction, 'Deleting Closed Room',
+        'The room will be removed. Its saved transcript will remain in the case record.', 0xED4245,
+        [{ name: `${EMOJIS.DOCUMENT} Member copy`, value: transcriptDeliveryText(delivery) }]), components: [] });
+      const checked = await transcripts.checkTranscriptCurrent(context.channel, exported.transcript, transcriptCheck);
+      if (!checked.current) throw Error('The conversation changed while deletion was being prepared. The room has been kept. Please try deleting it again.');
+      await context.channel.delete(`Closed investigation room deleted by ${interaction.user.id}; transcript saved`);
+      const latest = engine.getQuarantineState(interaction.guild.id);
+      // Retain the archive/transcript record as evidence even after Discord deletion.
+      for (const record of latest.archivedRooms || []) if (record.channelId === channelId) record.deletedAt = Date.now();
+      engine.saveQuarantineState(interaction.guild, latest);
+      recordModerationSystemEvent({ interaction, event: 'moderation.investigation.closed_room_deleted', targetId, metadata: { channelId, transcriptSaved: true } });
+    }
+    return true;
+  } catch (error) {
+    await safeEditReply(interaction, { content: `${EMOJIS.WARNING} ${error.message}`, components: [], flags: 64 });
+    return true;
+  } finally { roomOperations.delete(key); }
+}
+
 async function handleQuarantineInteraction(interaction) {
-  const id = String(interaction?.customId || '');
+  const id = String(interaction?.__goliathLegacyRoleBase || interaction?.customId || '');
   if (!id) return false;
 
   if (interaction.isButton?.()) {
+    if (/^mod_invroom_invite_(start|cancel):/.test(id)) return handleInvestigationInvites(interaction);
+    if (/^mod_invroom_(transcript|notify|close|close_confirm|delete|delete_confirm):/.test(id)) return handleInvestigationRoomControl(interaction);
     if (id.startsWith('mod_open_quarantine:')) return openQuarantine(interaction, targetIdFrom(id));
     if (id.startsWith('mod_quarantine_investigation:')) return openInvestigationModal(interaction, targetIdFrom(id));
     if (id.startsWith('mod_quarantine_security:')) return securityMovedToAdmin(interaction, targetIdFrom(id), false);
@@ -761,6 +1068,9 @@ async function handleQuarantineInteraction(interaction) {
     return false;
   }
 
+  if ((interaction.isUserSelectMenu?.() && /^mod_invroom_invite_(users|subjects):/.test(id))
+    || (interaction.isRoleSelectMenu?.() && id.startsWith('mod_invroom_invite_roles:'))) return handleInvestigationInvites(interaction);
+
   if (interaction.isChannelSelectMenu?.()) {
     if (id.startsWith('mod_invroom_access_channel:')) {
       return selectInvestigationAccessChannel(interaction);
@@ -770,14 +1080,14 @@ async function handleQuarantineInteraction(interaction) {
   if (interaction.isModalSubmit?.()) {
     if (id.startsWith('mod_invroom_note_submit:')) return submitInvestigationRoomNote(interaction, targetIdFrom(id));
     if (id.startsWith('mod_submit_quarantine_investigation:')) {
-      return submitQuarantine(interaction, targetIdFrom(id), QUARANTINE_MODES.INVESTIGATION, false);
+      return prepareInvestigationInvites(interaction, targetIdFrom(id), false);
     }
     if (id.startsWith('mod_submit_quarantine_security:')) {
       return securityMovedToAdmin(interaction, targetIdFrom(id), true);
     }
     // Legacy quarantine modal submissions are deliberately downgraded to Investigation Isolation.
     if (id.startsWith('mod_submit_quarantine:')) {
-      return submitQuarantine(interaction, targetIdFrom(id), QUARANTINE_MODES.INVESTIGATION, true);
+      return prepareInvestigationInvites(interaction, targetIdFrom(id), true);
     }
   }
 
@@ -786,6 +1096,7 @@ async function handleQuarantineInteraction(interaction) {
 
 module.exports = {
   handleQuarantineInteraction,
+  handleInvestigationTranscriptDownload,
   ensureInitiatorInterviewAccess,
   isGuildOwner,
 };

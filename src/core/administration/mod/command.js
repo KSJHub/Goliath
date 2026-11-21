@@ -1,10 +1,11 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 
 // Moderation panel layout contract: feature rows first; the final row is navigation,
 // with Back first and Export immediately after it when export is available.
 const express = require('express');
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const security = require('../../security/protection/core');
+const { SlashCommandBuilder } = require('discord.js');
+const { resolveGuildAccess } = require('../../../server/middleware/dashboardAccess');
 const { enforceCommandAccess } = require('../../commands/commandAccess');
 const { errorEmbed } = require('../../ui/embeds');
 const { safeEditReply } = require('../../ui/interactionResponse');
@@ -103,6 +104,7 @@ function safeAppealCase(req, modCase, userId) {
   return {
     guildId: String(modCase.guildId),
     guildName: getGuildName(req, modCase.guildId),
+    guildIconUrl: req.client?.guilds?.cache?.get?.(String(modCase.guildId))?.iconURL?.({ size: 128 }) || null,
     caseId: Number(modCase.caseId),
     action: effectiveAction,
     actionLabel: effectiveAction.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
@@ -120,33 +122,13 @@ function safeAppealCase(req, modCase, userId) {
 async function requireModerationGuildAccess(req, res, next) {
   try {
     const userId = String(req.session?.user?.id || '').trim();
-    if (!/^\d{16,20}$/.test(userId)) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
-
+    if (!/^\d{16,20}$/.test(userId)) return res.status(401).json({ error: 'Authentication required.' });
     const guildId = String(req.params.guildId || '').trim();
-    if (!/^\d{16,20}$/.test(guildId)) {
-      return res.status(400).json({ error: 'Invalid guild ID.' });
+    if (!/^\d{16,20}$/.test(guildId)) return res.status(400).json({ error: 'Invalid guild ID.' });
+    const access = await resolveGuildAccess(req.client, userId, guildId);
+    if (!access.allowed || !access.permissions.some((permission) => permission === '*' || permission === 'mod.cases.view')) {
+      return res.status(403).json({ error: 'Case viewing permission required.' });
     }
-
-    if (security.isBotOwner(userId)) return next();
-
-    const client = req.client;
-    const guild = client?.guilds?.cache?.get(guildId)
-      || await client?.guilds?.fetch(guildId).catch(() => null);
-
-    if (!guild) return res.status(403).json({ error: 'Guild unavailable.' });
-
-    const member = guild.members.cache.get(userId)
-      || await guild.members.fetch(userId).catch(() => null);
-
-    const permitted = Boolean(
-      member?.permissions?.has(PermissionFlagsBits.Administrator)
-      || member?.permissions?.has(PermissionFlagsBits.ManageGuild)
-    );
-
-    if (!permitted) return res.status(403).json({ error: 'Manage Server permission required.' });
-
     return next();
   } catch (error) {
     console.error('[Moderation dashboard access]', error);
@@ -193,6 +175,57 @@ router.get('/:guildId/warnings', requireModerationGuildAccess, (req, res) => {
   } catch (error) {
     console.error('[Moderation dashboard warnings]', error);
     return res.status(500).json({ error: 'Unable to load warnings.' });
+  }
+});
+
+// Member-only summary: never return staff notes, evidence, role snapshots or internal security metadata.
+router.get('/member/me', requireAppealSession, (req, res) => {
+  try {
+    const userId = req.appealUserId;
+    const guildIds = new Set(db.prepare('SELECT DISTINCT guild_id FROM cases WHERE user_id = ?').all(userId).map(row => String(row.guild_id)));
+    const { getQuarantineState } = require('../../security/protection/quarantine/state');
+    for (const guild of req.client?.guilds?.cache?.values?.() || []) guildIds.add(String(guild.id));
+    const cases = [];
+    const restrictions = [];
+    for (const guildId of guildIds) {
+      const guild = req.client?.guilds?.cache?.get?.(guildId);
+      const guildName = getGuildName(req, guildId);
+      for (const record of getCasesForUser(guildId, userId) || []) {
+        const safe = safeAppealCase(req, record, userId);
+        if (safe) {
+          cases.push(safe);
+        } else if (String(record.action || '').toLowerCase() === 'quarantine') {
+          // Quarantine details are intentionally generic: security triggers and internal evidence stay private.
+          cases.push({
+            guildId, guildName, guildIconUrl: guild?.iconURL?.({ size: 128 }) || null,
+            caseId: Number(record.caseId), action: 'quarantine', actionLabel: 'Account Restriction',
+            status: String(record.status || 'active'), createdAt: record.createdAt || null,
+            decisionAt: record.createdAt || null, publicSummary: 'An account restriction was recorded for management review.',
+            eligible: false, eligibilityMessage: null, appeals: [],
+          });
+        }
+      }
+      const snapshot = getQuarantineState(guildId).users?.[userId];
+      // A restriction snapshot may outlive its moderation case. Never expose a
+      // deleted or archived case through the member portal's restriction feed.
+      const snapshotCaseId = Number(snapshot?.caseId);
+      const snapshotCaseVisible = Number.isSafeInteger(snapshotCaseId) && snapshotCaseId > 0
+        ? Boolean(getCaseById(guildId, snapshotCaseId))
+        : true;
+      if (snapshot && snapshotCaseVisible) restrictions.push({
+        guildId, guildName, guildIconUrl: guild?.iconURL?.({ size: 128 }) || null,
+        mode: snapshot.mode === 'investigation' ? 'investigation' : 'security',
+        status: 'active', caseId: Number(snapshot.caseId) || null,
+        startedAt: snapshot.quarantinedAt || null,
+        // Internal detection details and investigator identities are intentionally excluded.
+      });
+    }
+    cases.sort((a, b) => (Date.parse(b.decisionAt || b.createdAt) || 0) - (Date.parse(a.decisionAt || a.createdAt) || 0));
+    res.set('Cache-Control', 'private, no-store');
+    return res.json({ ok: true, cases, restrictions });
+  } catch (error) {
+    console.error('[Member Portal] Unable to load member summary:', error);
+    return res.status(500).json({ error: 'Could not load your member portal.' });
   }
 });
 
@@ -260,11 +293,11 @@ router.post('/appeals/:guildId/:caseId', requireAppealSession, requireSameOrigin
 
 const command = {
   category: 'Moderation',
-  help: { name: 'mod', description: '🔐 Open Goliath’s moderation hub and management tools.', usage: '/mod' },
+  help: { name: 'mod', description: emojiLabel('MODERATOR', 'Open Goliath’s moderation hub and management tools.'), usage: '/mod' },
   access: { level: 'mod', permissionKey: 'mod.panel.view', ownerOnly: false },
   data: new SlashCommandBuilder()
     .setName('mod')
-    .setDescription('🔑 Open Goliath’s moderation hub and management tools'),
+    .setDescription(emojiLabel('MOD_COMMAND', 'Open Goliath’s moderation hub and management tools')),
   async execute(interaction) {
     const denied = await enforceCommandAccess(interaction, command);
     if (denied) {
@@ -282,7 +315,7 @@ const command = {
       return openModPanel(interaction);
     } catch (error) {
       if (error?.code === 10062 || error?.code === 40060) return;
-      console.error('❌ Mod command failed:', error);
+      console.error(`${EMOJIS.ERROR} Mod command failed:`, error);
       recordModerationSystemEvent({ interaction, event: 'moderation.command.failed', action: 'view_dashboard', reason: error?.message || error, metadata: { stack: String(error?.stack || '').slice(0, 1500) } });
       return safeEditReply(interaction, {
         embeds: [errorEmbed('Failed to open the moderation hub. Please try again.')],

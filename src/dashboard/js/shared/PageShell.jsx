@@ -1,6 +1,40 @@
 import React, { memo } from 'react';
 
 /**
+ * Browser-safe dashboard icon palette. Keep shared glyphs aligned with core EMOJIS.
+ * Intentional legacy differences (do not silently change displayed icons):
+ * INACTIVE: dashboard ⚫ / Discord ⚪; REPAIR: dashboard 🔧 / Discord 🩹;
+ * BUILDER: dashboard 🛠 / Discord 🛠️ (variation selector).
+ * This module must remain browser-safe; core/guild/goliathNavigation.js imports discord.js.
+ * Guild-configured emojis and saved module content must not be overwritten by defaults.
+ */
+export const DASHBOARD_EMOJIS = Object.freeze({
+  CHANNEL_PREVIOUS: '◀',
+  GAME_NEW: '🆕',
+  WELCOME_INHERIT_TEXT: '↩',
+  MEMBERS: '👥', ACTIVE: '🟢', INACTIVE: '⚫', ROLES: '🎭', VOICE: '🔊',
+  FOLDER: '📁', ROLE_TAG: '🏷️', DATE: '📅', TIMER: '⏳',
+  MESSAGES: '💬', MICROPHONE: '🎙️', JOIN: '📥', LEAVE: '📤',
+  BOOST: '🚀', EMOJI: '😀', DND: '⛔', IDLE: '🌙',
+  REFRESH: '🔄', TEXT_CHANNEL: '#️⃣', CHART: '📊', HEALTH: '🩺',
+  REPAIR: '🔧', DELETE: '🗑️', SUGGESTIONS: '💡', UPVOTE: '👍',
+  DOWNVOTE: '👎', BIRTHDAY: '🎂',
+  SOCIAL: '📣', LINK: '🔗', ANNOUNCEMENT: '📢', DESIGN: '🎨', FEED: '📡',
+  CHANNELS: '📂', SETTINGS: '⚙️', AUTOMATION: '⚡', TEST: '🧪', DATA: '🗄️',
+  USER: '👤', LIVE: '🔴', GOODBYE: '👋',
+  BOT: '🤖', BUILDER: '🛠', PRESET: '📦', DIRECT_MESSAGE: '📨', PREVIEW: '👁',
+  TICKETS: '🎫', DOCUMENT: '📄', SECURITY: '🛡️', SAVE: '💾',
+  SYSTEM: '🧩', HISTORY: '🕘', LOCK: '🔒', UNLOCK: '🔓', SETTINGS_PLAIN: '⚙', COLOURS: '🌈',
+  ENV_DEV: '🔵', ENV_BETA: '🟡', ENV_PRODUCTION: '🟢', CROWN: '👑', FREE: '🆓',
+  STATUS_ALERT: '🔴', STATUS_UNKNOWN: '⚪', PERMISSIONS: '🔐',
+  DIAMOND: '💎', HOME: '🏠', JUSTICE: '⚖️', COMMUNITIES: '🏘️',
+  TV: '📺', NOTE: '📝', SUCCESS: '✅', ERROR: '❌', CLIPBOARD: '📋',
+  WARNING: '⚠️', INFO: 'ℹ️', RSVP_MAYBE: '❔', SPARKLES: '✨', GAMEPAD: '🎮', JOYSTICK: '🕹️', COMPUTER: '💻', ADD: '➕', PLAY: '▶️', PAUSE: '⏸️', BELL: '🔔',
+  GLOBE: '🌍', FILM: '🎞️', PREMIUM_TICKET: '🎟️', RESTORE: '♻️', TREND: '📈',
+});
+
+
+/**
  * Shared dashboard page shell + reusable UI system.
  * Keeps page titles readable while still showing selected guild context.
  */
@@ -31,6 +65,10 @@ function PageShell({
         style={{
           position: 'relative',
           overflow: 'hidden',
+          height: 'auto',
+          minHeight: 'clamp(140px, 12vw, 180px)',
+          boxSizing: 'border-box',
+          flexShrink: 0,
           background:
             'linear-gradient(135deg, rgba(17,24,39,0.98) 0%, rgba(9,18,40,0.98) 45%, rgba(15,23,42,0.98) 100%)',
           border: `1px solid ${theme.cardBorder}`,
@@ -215,6 +253,7 @@ function PageShell({
 
 export const SectionCard = memo(function SectionCard({
   theme,
+  themed = false,
   title,
   subtitle,
   actions = null,
@@ -225,13 +264,13 @@ export const SectionCard = memo(function SectionCard({
   return (
     <section
       style={{
-        background: 'linear-gradient(180deg, rgba(8,15,30,0.98), rgba(6,12,24,0.98))',
+        background: themed ? theme.cardBgSolid || theme.cardBg : 'linear-gradient(180deg, rgba(8,15,30,0.98), rgba(6,12,24,0.98))',
         border: `1px solid ${theme.cardBorder}`,
         borderRadius: 22,
         padding,
         minHeight,
         boxShadow:
-          '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)',
+          themed ? theme.softShadow : '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)',
         display: 'grid',
         gap: 16,
         width: '100%',
@@ -257,9 +296,9 @@ export const SectionCard = memo(function SectionCard({
                 style={{
                   margin: 0,
                   fontSize: 'clamp(18px, 2vw, 20px)',
-                  fontWeight: 900,
+                  fontWeight: themed ? 650 : 900,
                   letterSpacing: '-0.03em',
-                  color: '#ffffff',
+                  color: themed ? theme.cardText : '#ffffff',
                   overflowWrap: 'break-word',
                 }}
               >

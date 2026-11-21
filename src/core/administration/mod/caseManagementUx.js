@@ -1,6 +1,7 @@
 'use strict';
 
 const { MessageFlags } = require('discord.js');
+const { EMOJIS } = require('../../guild/goliathNavigation');
 const panel = require('./panel');
 const caseProceeding = require('./caseProceeding');
 const storage = require('./storage');
@@ -93,9 +94,9 @@ else {
     if (caseIdMatch) {
       const modCase = getCase(guildId, caseIdMatch[1]);
       const display = caseDisplayTitle(modCase, liveSubjectName(interaction, modCase?.userId, modCase?.metadata?.proceeding?.subjectName));
-      if (display && (title.startsWith('📂') || title.includes('Case #'))) {
-        const icon = title.startsWith('📂') ? '📂 ' : title.startsWith('⚖️') ? '⚖️ ' : title.startsWith('👁️') ? '👁️ ' : '';
-        if (title.startsWith('📂')) applyEmbedTitle(embed, `${icon}${display}`);
+      if (display && (title.startsWith(EMOJIS.MOD_CASE_OPEN) || title.includes('Case #'))) {
+        const icon = title.startsWith(EMOJIS.MOD_CASE_OPEN) ? `${EMOJIS.MOD_CASE_OPEN} ` : title.startsWith(EMOJIS.JUSTICE) ? `${EMOJIS.JUSTICE} ` : title.startsWith(EMOJIS.WELCOME_PREVIEW) ? `${EMOJIS.WELCOME_PREVIEW} ` : '';
+        if (title.startsWith(EMOJIS.MOD_CASE_OPEN)) applyEmbedTitle(embed, `${icon}${display}`);
       }
     }
 
@@ -112,7 +113,7 @@ else {
             const value = cases.map((entry) => {
               const proceeding = caseProceeding.parseProceeding(entry);
               const display = caseDisplayTitle(entry, liveSubjectName(interaction, targetId, entry?.metadata?.proceeding?.subjectName));
-              const stage = proceeding.stage === 'review' ? '⚖️ Awaiting Review' : proceeding.stage === 'published' ? '📜 Published' : proceeding.stage === 'closed' ? '🔒 Closed' : proceeding.stage === 'decided' ? '👨‍⚖️ Decision Recorded' : '🔎 Under Investigation';
+              const stage = proceeding.stage === 'review' ? `${EMOJIS.JUSTICE} Awaiting Review` : proceeding.stage === 'published' ? `${EMOJIS.SCROLL} Published` : proceeding.stage === 'closed' ? `${EMOJIS.LOCK} Closed` : proceeding.stage === 'decided' ? `${EMOJIS.JUSTICE} Decision Recorded` : `${EMOJIS.INVESTIGATE} Under Investigation`;
               const severity = ['Low', 'Medium', 'High', 'Severe', 'Critical'][Math.max(0, Math.min(4, Number(proceeding.severity || 1) - 1))];
               return `**${display}**\n${stage} • Severity **${severity}**`;
             }).join('\n\n').slice(0, 1024);
@@ -127,12 +128,12 @@ else {
   function proceedingStageText(stage) {
     if (typeof caseProceeding.stageText === 'function') return caseProceeding.stageText(stage);
     return ({
-      investigation: '🔎 Under Investigation',
-      review: '⚖️ Awaiting Review',
-      decided: '👨‍⚖️ Decision Recorded',
-      published: '📜 Published',
-      closed: '🔒 Closed',
-    })[String(stage || 'investigation')] || '🔎 Under Investigation';
+      investigation: `${EMOJIS.INVESTIGATE} Under Investigation`,
+      review: `${EMOJIS.JUSTICE} Awaiting Review`,
+      decided: `${EMOJIS.JUSTICE} Decision Recorded`,
+      published: `${EMOJIS.SCROLL} Published`,
+      closed: `${EMOJIS.LOCK} Closed`,
+    })[String(stage || 'investigation')] || `${EMOJIS.INVESTIGATE} Under Investigation`;
   }
 
   function proceedingSeverityText(value) {
@@ -180,7 +181,7 @@ else {
     if (Array.isArray(payload.embeds)) for (const embed of payload.embeds) decorateEmbed(embed, interaction);
     decorateComponents(payload.components, interaction);
 
-    if (stripMemberSelector && payloadTitle(payload).startsWith('📂 Case Management') && Array.isArray(payload.components)) {
+    if (stripMemberSelector && payloadTitle(payload).startsWith(`${EMOJIS.MOD_CASE_OPEN} Case Management`) && Array.isArray(payload.components)) {
       payload.components = payload.components.filter((row) => !isUserSelectRow(row));
     }
     return payload;
@@ -239,7 +240,7 @@ else {
     const id = String(interaction?.customId || '');
     if (id.startsWith('mod_case_new_submit:') && interaction.isModalSubmit?.()) {
       if (!canUseModAction(interaction.member, interaction.guild, 'proceeding_manage', interaction)) {
-        await interaction.reply({ content: '❌ Case-management authority is required to open a case.', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: `${EMOJIS.ERROR} Case-management authority is required to open a case.`, flags: MessageFlags.Ephemeral });
         return true;
       }
 
@@ -248,7 +249,7 @@ else {
       const severityMap = { '1': 1, low: 1, '2': 2, medium: 2, moderate: 2, '3': 3, high: 3, '4': 4, severe: 4, '5': 5, critical: 5 };
       const severity = severityMap[rawSeverity] || null;
       if (!severity) {
-        await interaction.reply({ content: '❌ Severity must be Low, Medium, High, Severe, or Critical.', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: `${EMOJIS.ERROR} Severity must be Low, Medium, High, Severe, or Critical.`, flags: MessageFlags.Ephemeral });
         return true;
       }
 
@@ -288,7 +289,7 @@ else {
       });
 
       if (!created) {
-        await interaction.reply({ content: '❌ Failed to create the case.', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: `${EMOJIS.ERROR} Failed to create the case.`, flags: MessageFlags.Ephemeral });
         return true;
       }
 

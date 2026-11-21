@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../ui/emojis');
 
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
@@ -11,11 +12,11 @@ const AUTOMOD_MODULE = 'automod';
 const spamWindows = new Map();
 
 const DEFAULT_DM_MESSAGES = {
-  antiSpam: '⚠️ **{server} AutoMod**\nSpam Protection triggered: {reason}',
-  antiLinks: '⚠️ **{server} AutoMod**\nLink Protection triggered: {reason}',
-  badWords: '⚠️ **{server} AutoMod**\nBad Word Filter triggered: {reason}',
-  caps: '⚠️ **{server} AutoMod**\nCaps Protection triggered: {reason}',
-  mentions: '⚠️ **{server} AutoMod**\nMention Protection triggered: {reason}',
+  antiSpam: `${EMOJIS.WARNING} **{server} AutoMod**\nSpam Protection triggered: {reason}`,
+  antiLinks: `${EMOJIS.WARNING} **{server} AutoMod**\nLink Protection triggered: {reason}`,
+  badWords: `${EMOJIS.WARNING} **{server} AutoMod**\nBad Word Filter triggered: {reason}`,
+  caps: `${EMOJIS.WARNING} **{server} AutoMod**\nCaps Protection triggered: {reason}`,
+  mentions: `${EMOJIS.WARNING} **{server} AutoMod**\nMention Protection triggered: {reason}`,
 };
 
 function readAutomodSection(guildId) {
@@ -167,7 +168,7 @@ async function sendAutoModLog(message, ruleName, reason, actions, result) {
 
   const embed = new EmbedBuilder()
     .setColor('#ED4245')
-    .setTitle(`🤖 AutoMod · ${ruleName}`)
+    .setTitle(`${EMOJIS.AUTOMOD} AutoMod · ${ruleName}`)
     .addFields(
       { name: 'User', value: `${message.author} (\`${message.author.id}\`)`, inline: false },
       { name: 'Channel', value: `${message.channel}`, inline: true },

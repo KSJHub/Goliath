@@ -7,6 +7,7 @@ const { syncQuarantineIsolation } = require('./isolation');
 const { ensureInvestigationRoomForSnapshot } = require('./investigationRooms');
 const { enforceQuarantineOnMember, recoverGuildQuarantine, recoverQuarantines } = require('./enforcementRecovery');
 const { startQuarantineExpiryScheduler } = require('./expiryScheduler');
+const { isQuarantineReleaseInProgress } = require('./releaseLifecycle');
 const { ensureInitiatorInterviewAccess } = require('../../../administration/mod/quarantineInteractions');
 
 function hasActiveQuarantine(guildId) { return Object.keys(getQuarantineState(guildId)?.users || {}).length > 0; }
@@ -36,6 +37,8 @@ module.exports = [
       const result = await recoverQuarantines(client);
       console.log(`[QuarantineSystem] Startup recovery: ${result.guilds} guild(s), ${result.active} active, ${result.reapplied} re-applied, ${result.restored} restored, ${result.failed} failed.`);
       for (const guild of client.guilds.cache.values()) {
+        const audit = require('../../../../modules/securityStudio/verification/verificationQuarantine').auditLegacyQuarantineSessions(guild.id);
+        if (audit.needsReview) console.warn(`[QuarantineSystem] ${audit.needsReview} legacy Verification case(s) need manual reconciliation in guild ${guild.id}.`);
         const access = await recoverInvestigationInitiatorAccess(guild);
         if (access.checked) console.log(`[InvestigationIsolation] Initiator access recovery in ${guild.id}: ${access.restored}/${access.checked} restored, ${access.failed} failed.`);
       }
@@ -44,7 +47,95 @@ module.exports = [
   } },
   { name: Events.ChannelCreate, async execute(channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
-    try { await syncQuarantineIsolation(channel.guild); } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
+    try {
+      const result = await syncQuarantineIsolation(channel.guild);
+      if (!result.success) console.warn(`[QuarantineSystem] New channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
+      for (const snapshot of Object.values(getQuarantineState(channel.guild.id)?.users || {})) {
+        if (String(snapshot.interviewChannelId || '') === String(channel.id) && getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION) continue;
+        const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+        if (!member) continue;
+        const { PermissionFlagsBits } = require('discord.js');
+        if (channel.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
+          console.warn(`[QuarantineSystem] New channel ${channel.id} exposes quarantined member ${member.id}; attempting containment recovery.`);
+          const recovery = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+          if (!recovery.success) console.warn(`[QuarantineSystem] Failed to contain member ${member.id} after channel creation: ${recovery.reason || recovery.error || 'Unknown failure'}`);
+        }
+      }
+    } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
+  } },
+  { name: Events.ThreadCreate, async execute(thread) {
+    if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
+    const state = getQuarantineState(thread.guild.id);
+    for (const snapshot of Object.values(state.users || {})) {
+      const member = await thread.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+      if (!member) continue;
+      const roleId = state.roleId;
+      if (!roleId || !member.roles.cache.has(roleId)) {
+        const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+        if (!result.success) console.warn(`[QuarantineSystem] Thread isolation recovery failed for ${member.id}: ${result.reason || result.error || 'Unknown failure'}`);
+      }
+      const { PermissionFlagsBits } = require('discord.js');
+      if (thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
+        const recovery = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+        if (!recovery.success || thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
+          console.warn(`[QuarantineSystem] Thread ${thread.id} remains visible to quarantined member ${member.id}; manual intervention required.`);
+        }
+      }
+    }
+  } },
+  { name: Events.ThreadUpdate, async execute(previous, thread) {
+    if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
+    const { PermissionFlagsBits } = require('discord.js');
+    for (const snapshot of Object.values(getQuarantineState(thread.guild.id)?.users || {})) {
+      const member = await thread.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+      if (!member || !thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) continue;
+      const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+      if (!result.success || thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel))
+        console.warn(`[QuarantineSystem] Updated thread ${thread.id} may expose quarantined member ${member.id}; manual review required.`);
+    }
+  } },
+  { name: Events.ThreadMembersUpdate, async execute(addedMembers, removedMembers, thread) {
+    if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
+    const additions = addedMembers?.values?.() || [];
+    for (const threadMember of additions) {
+      const memberId = String(threadMember?.id || threadMember?.userId || '');
+      if (isQuarantineReleaseInProgress(thread.guild.id, memberId)) continue;
+      if (!memberId || !getQuarantineState(thread.guild.id)?.users?.[memberId]) continue;
+      const member = await thread.guild.members.fetch(memberId).catch(() => null);
+      if (!member) continue;
+      const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+      if (!result.success) console.warn(`[QuarantineSystem] Thread member recovery failed for ${memberId}: ${result.reason || result.error || 'Unknown failure'}`);
+      if (thread.members?.remove) {
+        try { await thread.members.remove(memberId, 'Goliath quarantine isolation'); }
+        catch (error) { console.warn(`[QuarantineSystem] Could not remove quarantined member ${memberId} from thread ${thread.id}: ${error.message}`); }
+      }
+    }
+  } },
+  { name: Events.ChannelUpdate, async execute(previous, channel) {
+    if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
+    const roleId = getQuarantineState(channel.guild.id)?.roleId;
+    if (!roleId) return;
+    const { PermissionFlagsBits } = require('discord.js');
+    const before = previous?.permissionOverwrites?.cache?.get(roleId);
+    const after = channel.permissionOverwrites?.cache?.get(roleId);
+    const deniedBefore = Boolean(before?.deny?.has(PermissionFlagsBits.ViewChannel));
+    const deniedAfter = Boolean(after?.deny?.has(PermissionFlagsBits.ViewChannel));
+    const state = getQuarantineState(channel.guild.id);
+    const exposed = [];
+    for (const snapshot of Object.values(state.users || {})) {
+      if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION && String(snapshot.interviewChannelId || '') === String(channel.id)) continue;
+      const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+      if (member && channel.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) exposed.push(member);
+    }
+    if (deniedAfter && !exposed.length) return;
+    try {
+      const result = await syncQuarantineIsolation(channel.guild);
+      if (!result.success) console.warn(`[QuarantineSystem] Updated channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
+      for (const member of exposed) {
+        const recovery = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+        if (!recovery.success) console.warn(`[QuarantineSystem] Member ${member.id} remains exposed after channel update: ${recovery.reason || recovery.error || 'Unknown failure'}`);
+      }
+    } catch (error) { console.warn('[QuarantineSystem] Updated channel isolation failed:', error.message); }
   } },
   { name: Events.ChannelDelete, async execute(channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
@@ -54,7 +145,9 @@ module.exports = [
       const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
       if (!member) continue;
       try {
-        const room = await recoverInvestigationRoom(channel.guild, member, { ...snapshot, interviewChannelId: null });
+        const result = await enforceQuarantineOnMember(member);
+        if (!result.success || result.expired) continue;
+        const room = result.interviewChannelId ? { id: result.interviewChannelId } : null;
         if (room && snapshot.quarantinedBy) {
           const access = await ensureInitiatorInterviewAccess(channel.guild, room.id, snapshot.quarantinedBy);
           if (!access.success) console.warn(`[InvestigationIsolation] Failed to restore initiator access after room recreation for ${member.id}: ${access.reason}`);
@@ -68,6 +161,7 @@ module.exports = [
     try {
       const result = await enforceQuarantineOnMember(member);
       if (!result.success) { console.warn(`[QuarantineSystem] Failed to reapply quarantine to ${member.id}: ${result.error || result.reason}`); return; }
+      if (result.expired) return;
       if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION) {
         const room = await recoverInvestigationRoom(member.guild, member, snapshot);
         const roomId = room?.id || result.interviewChannelId;
@@ -77,6 +171,15 @@ module.exports = [
         }
       }
     } catch (error) { console.warn(`[QuarantineSystem] Failed join enforcement for ${member.id}:`, error.message); }
+  } },
+  { name: Events.GuildMemberUpdate, async execute(before, member) {
+    if (!member?.guild || isQuarantineReleaseInProgress(member.guild.id, member.id) || !getQuarantineState(member.guild.id)?.users?.[member.id]) return;
+    const quarantineRoleId = getQuarantineState(member.guild.id)?.roleId;
+    if (!quarantineRoleId) return;
+    const roles = member.roles?.cache;
+    if (!roles || (roles.has(quarantineRoleId) && roles.filter(role => role.id !== member.guild.id && role.id !== quarantineRoleId).size === 0)) return;
+    const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+    if (!result.success) console.warn(`[QuarantineSystem] Member role recovery incomplete for ${member.id}: ${result.reason || result.error || 'Unknown failure'}`);
   } },
   { name: Events.GuildRoleDelete, async execute(role) {
     if (!role?.guild || !hasActiveQuarantine(role.guild.id)) return;

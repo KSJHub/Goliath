@@ -2,9 +2,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const Database = require('better-sqlite3');
 const { resolveRuntimePath } = require('../../../config/runtimePaths');
+const { navigationButton, linkButton, EMOJIS } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { emitGuildUpdate } = require('../../../server/sockets/socketHub');
 
@@ -163,7 +164,7 @@ function migrateStoredCaseMetadata() {
 }
 
 const migratedStoredCaseMetadata = migrateStoredCaseMetadata();
-if (migratedStoredCaseMetadata > 0) console.log(`✅ Migrated ${migratedStoredCaseMetadata} saved case metadata record(s) to the current schema.`);
+if (migratedStoredCaseMetadata > 0) console.log(`${EMOJIS.SUCCESS} Migrated ${migratedStoredCaseMetadata} saved case metadata record(s) to the current schema.`);
 function serializeAuditValue(value) {
   if (value === undefined || value === null) return null;
   if (typeof value === 'string') return value;
@@ -788,13 +789,13 @@ async function logModerationAction({ guild, action, user = null, target = null, 
     if (reason) fields.push({ name: 'Reason', value: String(reason).slice(0, 1024), inline: false });
     if (duration) fields.push({ name: 'Duration', value: String(duration).slice(0, 1024), inline: false });
     if (caseId) fields.push({ name: 'Case ID', value: `#${caseId}`, inline: false });
-    if (metadata?.dmSent !== undefined) fields.push({ name: 'DM Status', value: metadata.dmSent ? 'Sent ✅' : 'Failed ❌', inline: true });
+    if (metadata?.dmSent !== undefined) fields.push({ name: 'DM Status', value: metadata.dmSent ? `Sent ${EMOJIS.SUCCESS}` : `Failed ${EMOJIS.ERROR}`, inline: true });
     if (metadata?.punishmentReport) {
       fields.push({ name: 'Punishments Applied', value: metadata.punishmentReport.actionText || 'none', inline: true });
       if (metadata.punishmentReport.failedText && metadata.punishmentReport.failedText !== 'none') fields.push({ name: 'Punishments Failed', value: metadata.punishmentReport.failedText, inline: true });
     }
     fields.push(...normalizeDetails(details));
-    const embed = new EmbedBuilder().setColor(color).setTitle(String(title || `🔐 ${formatModerationAction(action) || 'Moderation Action'}`).slice(0, 256)).setTimestamp();
+    const embed = new EmbedBuilder().setColor(color).setTitle(String(title || `${EMOJIS.PERMISSIONS} ${formatModerationAction(action) || 'Moderation Action'}`).slice(0, 256)).setTimestamp();
     if (fields.length) embed.addFields(fields.slice(0, 25));
     const avatarTarget = (targetUser || moderator)?.user || targetUser || moderator;
     if (avatarTarget && typeof avatarTarget.displayAvatarURL === 'function') embed.setThumbnail(avatarTarget.displayAvatarURL({ dynamic: true }));
@@ -839,7 +840,7 @@ async function sendCaseAppealNotice({ guild, target = null, user = null, caseId 
     const reason = String(modCase.reason || 'No reason provided').slice(0, 900);
     const embed = new EmbedBuilder()
       .setColor('#5865F2')
-      .setTitle('⚖️ Moderation Decision')
+      .setTitle(`${EMOJIS.JUSTICE} Moderation Decision`)
       .setDescription(`A moderation action has been recorded for you in **${String(guild.name || 'this server').slice(0, 120)}**.\n\nYou can review the details below and appeal if you believe the decision should be reconsidered.`)
       .addFields(
         { name: 'Action', value: action.slice(0, 1024), inline: true },
@@ -853,9 +854,9 @@ async function sendCaseAppealNotice({ guild, target = null, user = null, caseId 
     await recipient.send({
       embeds: [embed],
       components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`mod_appeal_external:${guild.id}:${modCase.caseId}`).setLabel('Appeal This Case').setEmoji('⚖️').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setLabel('Appeal Online').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(appealWebUrl),
-        new ButtonBuilder().setCustomId('mod_appeal_lookup').setLabel('Appeal Another Case').setStyle(ButtonStyle.Secondary)
+        navigationButton(`mod_appeal_external:${guild.id}:${modCase.caseId}`, 'Appeal This Case', ButtonStyle.Primary).setEmoji(EMOJIS.JUSTICE),
+        linkButton('Appeal Online', appealWebUrl, { emoji: EMOJIS.FEED }),
+        navigationButton('mod_appeal_lookup', 'Appeal Another Case', ButtonStyle.Secondary)
       )],
     });
     sent = true;

@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { dashboardPath } from './dashboardPath.js';
 
 let socket = null;
 
@@ -78,6 +79,7 @@ function getSocket() {
         : undefined;
 
     socket = io(socketUrl, {
+      path: dashboardPath('/socket.io/'),
       transports: ['websocket'],
       withCredentials: true,
       autoConnect: true,

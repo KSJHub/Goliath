@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
@@ -10,6 +9,8 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
+const { emojiButton } = require('../../guild/goliathNavigation');
+const { EMOJIS } = require('../../ui/emojis');
 const translationStore = require('../../../modules/utilityStudio/translation/translationStore');
 const translation = require('../../../modules/utilityStudio/translation/translation');
 const guildManager = require('../../guild/guildManager');
@@ -21,11 +22,7 @@ const HIDDEN_HELP_COMMANDS = new Set(['owner', 'commandcenter']);
 
 function backRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('user:home')
-      .setLabel('Back to User Panel')
-      .setEmoji('⬅️')
-      .setStyle(ButtonStyle.Secondary),
+    emojiButton('user:home', 'Back to User Panel', EMOJIS.BACK, ButtonStyle.Secondary),
   );
 }
 
@@ -37,10 +34,10 @@ async function replaceComponent(interaction, payload) {
 }
 
 function latencyHealth(clientLatency, apiLatency) {
-  if (clientLatency < 100 && apiLatency < 100) return '🟢 Excellent';
-  if (clientLatency < 200 && apiLatency < 200) return '🟡 Stable';
-  if (clientLatency < 400 && apiLatency < 400) return '🟠 Slower than usual';
-  return '🔴 Needs attention';
+  if (clientLatency < 100 && apiLatency < 100) return `${EMOJIS.ACTIVE} Excellent`;
+  if (clientLatency < 200 && apiLatency < 200) return `${EMOJIS.HEALTH_STABLE} Stable`;
+  if (clientLatency < 400 && apiLatency < 400) return `${EMOJIS.HEALTH_SLOW} Slower than usual`;
+  return `${EMOJIS.STATUS_ALERT} Needs attention`;
 }
 
 function latencyBar(ms) {
@@ -68,7 +65,7 @@ async function showPing(interaction) {
   const health = latencyHealth(clientLatency, apiLatency);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🏓 Goliath Status')
+    .setTitle(`${EMOJIS.STATUS_PING} Goliath Status`)
     .setDescription([
       `**Status:** ${health}`, '', '**Bot Latency**', `\`${clientLatency}ms\``, latencyBar(clientLatency),
       '', '**Discord API**', `\`${apiLatency}ms\``, latencyBar(apiLatency), '', '**Uptime**',
@@ -90,7 +87,7 @@ async function showServerInfo(interaction) {
   const bots = guild.members.cache.filter((member) => member.user.bot).size;
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🏰 Server Overview')
+    .setTitle(`${EMOJIS.SERVER_CASTLE} Server Overview`)
     .setThumbnail(guild.iconURL({ size: 256 }))
     .setDescription([
       `**${guild.name}**`, '', `**Owner:** ${owner ? `<@${owner.id}>` : 'Unknown'}`,
@@ -154,7 +151,7 @@ async function showHelp(interaction, options = {}) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('❓ Goliath Help')
+    .setTitle(`${EMOJIS.HELP_QUESTION} Goliath Help`)
     .setDescription(description)
     .setFooter({ text: 'Goliath Help' })
     .setTimestamp();
@@ -181,7 +178,7 @@ function buildTranslateModal(interaction) {
 
 async function showTranslate(interaction) {
   if (!guildManager.isModuleEnabled(interaction.guildId, 'translation')) {
-    return replaceComponent(interaction, { embeds: [new EmbedBuilder().setColor(0xFEE75C).setTitle('🌐 Translation Unavailable').setDescription('Translation is not enabled for this server. An administrator can enable it from the Admin panel.')] });
+    return replaceComponent(interaction, { embeds: [new EmbedBuilder().setColor(0xFEE75C).setTitle(`${EMOJIS.USER_TRANSLATE} Translation Unavailable`).setDescription('Translation is not enabled for this server. An administrator can enable it from the Admin panel.')] });
   }
   await interaction.showModal(buildTranslateModal(interaction));
   return true;
@@ -203,7 +200,7 @@ async function submitTranslate(interaction) {
     await interaction.editReply({ embeds: [translation.buildProviderNotConnectedEmbed({ text, targetLanguage, sourceLanguage, result })] });
     return true;
   }
-  await interaction.editReply({ content: [`🌐 **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`, '', result.translatedText].join('\n') });
+  await interaction.editReply({ content: [`${EMOJIS.USER_TRANSLATE} **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`, '', result.translatedText].join('\n') });
   return true;
 }
 

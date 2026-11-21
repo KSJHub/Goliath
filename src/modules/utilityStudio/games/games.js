@@ -1,0 +1,756 @@
+'use strict';
+const guildManager = require('../../../core/guild/guildManager');
+const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
+const { STORES, TYPES, CURRENCIES } = require('./gamesProviders');
+// Keep the established section key so the Games rename preserves all guild data and authority bindings.
+const MODULE_KEY = 'freeGames';
+const MODULE_NAME = 'Games';
+const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, destinations: [], destinationsConfigured: false, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
+function getConfig(guildId) {
+  const section = getModuleSection(guildId, MODULE_KEY, DEFAULTS);
+  return { ...DEFAULTS, ...section, state: { ...structuredClone(DEFAULTS.state), ...section.state }, enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
+}
+function update(guildId, fn) { return updateModuleSection(guildId, MODULE_KEY, fn, DEFAULTS); }
+function filterOffers(offers, config, now = Date.now()) { return offers.filter((offer) => config.types.includes(offer.type) && offer.stores.some((store) => config.stores.includes(store)) && (!offer.endsAt || offer.endsAt > now)); }
+function normalizeDestinations(value) {
+  if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten Free Games destinations.');
+  const seen = new Set();
+  return value.map((item) => {
+    if (!item || typeof item !== 'object' || !/^\d{16,20}$/.test(item.channelId || '') || seen.has(item.channelId)) throw new Error('Choose unique valid destination channels.');
+    seen.add(item.channelId);
+    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error('Destination enabled must be true or false.');
+    if (item.alerts !== undefined && typeof item.alerts !== 'boolean') throw new Error('Destination alerts must be true or false.');
+    const stores = item.stores === undefined ? null : item.stores;
+    const types = item.types === undefined ? null : item.types;
+    for (const [key, values, known] of [['stores', stores, STORES], ['types', types, TYPES]]) {
+      if (values !== null && (!Array.isArray(values) || values.length > Object.keys(known).length || values.some(v => !Object.hasOwn(known, v)))) throw new Error('Invalid destination ' + key + '.');
+    }
+    if (item.roleId != null && !/^\d{16,20}$/.test(item.roleId)) throw new Error('Invalid destination role.');
+    return { channelId: item.channelId, enabled: item.enabled !== false, alerts: item.alerts === true, roleId: item.roleId || null,
+      stores: stores === null ? null : [...new Set(stores)], types: types === null ? null : [...new Set(types)] };
+  });
+}
+function effectiveDestinations(config) {
+  return config.destinationsConfigured ? (config.destinations || []) : config.channelId ? [{ channelId: config.channelId, enabled: true, alerts: config.alerts, roleId: config.roleId, stores: null, types: null }] : [];
+}
+function validateSettings(input, previous) {
+  const result = {};
+  for (const key of ['enabled', 'alerts', 'showTimestamps', 'showExpiry', 'showPlatforms', 'showNew', 'showOfferCount']) if (Object.hasOwn(input, key)) { if (typeof input[key] !== 'boolean') throw new Error(`${key} must be true or false.`); result[key] = input[key]; }
+  for (const [key, known] of [['stores', STORES], ['types', TYPES]]) if (Object.hasOwn(input, key)) {
+    if (!Array.isArray(input[key]) || input[key].length > Object.keys(known).length || input[key].some((value) => !Object.hasOwn(known, value))) throw new Error(`Invalid ${key} selection.`);
+    result[key] = [...new Set(input[key])];
+  }
+  if (Object.hasOwn(input, 'destinations')) { result.destinations = normalizeDestinations(input.destinations); result.destinationsConfigured = true; }
+  for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
+    const id = input[key];
+    if (id !== null && id !== '' && (typeof id !== 'string' || !/^\d{16,20}$/.test(id))) throw new Error(`Invalid ${key}.`);
+    result[key] = id || null;
+  }
+  if (Object.hasOwn(input, 'featuredMode')) {
+    if (!['auto', 'manual', 'off'].includes(input.featuredMode)) throw new Error('Choose automatic, selected game or no featured game.');
+    result.featuredMode = input.featuredMode;
+  }
+  if (Object.hasOwn(input, 'featuredArtwork')) {
+    if (!['thumbnail', 'hidden'].includes(input.featuredArtwork)) throw new Error('Choose thumbnail or hidden featured artwork.');
+    result.featuredArtwork = input.featuredArtwork;
+  }
+  if (Object.hasOwn(input, 'featuredOfferId')) {
+    if (input.featuredOfferId !== null && !/^gamerpower:\d+$/.test(input.featuredOfferId)) throw new Error('Invalid featured game.');
+    result.featuredOfferId = input.featuredOfferId;
+  }
+  if (Object.hasOwn(input, 'layout')) {
+    if (!['columns', 'list'].includes(input.layout)) throw new Error('Choose platform columns or stacked lists.');
+    result.layout = input.layout;
+  }
+  if (Object.hasOwn(input, 'currency')) {
+    if (!CURRENCIES.includes(input.currency)) throw new Error('Choose a supported currency.');
+    result.currency = input.currency;
+  }
+  if (Object.hasOwn(input, 'priceMode')) {
+    if (!['converted', 'source', 'hidden'].includes(input.priceMode)) throw new Error('Invalid price display.');
+    result.priceMode = input.priceMode;
+  }
+  if (Object.hasOwn(input, 'locale')) {
+    if (typeof input.locale !== 'string' || input.locale.length > 40) throw new Error('Invalid formatting locale.');
+    try { result.locale = Intl.getCanonicalLocales(input.locale)[0]; if (!result.locale || !Intl.DateTimeFormat.supportedLocalesOf([result.locale]).length) throw new Error(); } catch { throw new Error('Choose a supported formatting locale, such as en-GB.'); }
+  }
+  if (Object.hasOwn(input, 'timeZone')) {
+    try { if (typeof input.timeZone !== 'string' || !input.timeZone || input.timeZone.length > 80) throw new Error(); result.timeZone = new Intl.DateTimeFormat('en', { timeZone: input.timeZone }).resolvedOptions().timeZone; } catch { throw new Error('Choose a valid timezone, such as Europe/London.'); }
+  }
+  if (Object.hasOwn(input, 'region')) {
+    if (typeof input.region !== 'string' || (!/^[A-Z]{2}$/.test(input.region) || input.region === 'ZZ')) throw new Error('Use a two-letter region code, such as GB.');
+    try { if (!new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }).of(input.region)) throw new Error(); } catch { throw new Error('Choose a recognised region code.'); }
+    result.region = input.region;
+  }
+  const next = { ...previous, ...result };
+  // Delivery journal is persisted per destination and must never be supplied
+  // by dashboard/Discord clients. Retain it when editing subscription settings.
+  next.routeDeliveries = previous.routeDeliveries && typeof previous.routeDeliveries === 'object' && !Array.isArray(previous.routeDeliveries)
+    ? structuredClone(previous.routeDeliveries) : {};
+  if (next.enabled && (!effectiveDestinations(next).some(route => route.enabled) || !next.stores.length || !next.types.length)) throw new Error('Choose a channel, at least one store and one offer type before enabling Free Games.');
+  return result;
+}
+function saveSettings(guildId, patch) {
+  return update(guildId, (current) => {
+    const config = getConfig(guildId);
+    const changes = validateSettings(patch, config);
+    const state = { ...config.state };
+    if (Object.hasOwn(changes, 'channelId') && changes.channelId !== config.channelId && !config.destinations?.length) {
+      state.retired = [...state.retired, ...state.deliveries]; state.deliveries = [];
+    }
+    if (Object.hasOwn(changes, 'destinations') && JSON.stringify(changes.destinations) !== JSON.stringify(effectiveDestinations(config))) state.initialized = false;
+    if (['stores', 'types', 'alerts', 'enabled'].some((key) => Object.hasOwn(changes, key) && JSON.stringify(changes[key]) !== JSON.stringify(config[key]))) state.initialized = false;
+    return { ...current, ...changes, state };
+  });
+}
+
+
+const PANEL_PREFIX = 'admin:module:freeGames:';
+const DISPLAY_OPTIONS = Object.freeze({
+  showTimestamps: 'Footer timestamps',
+  showPlatforms: 'Additional platforms', showNew: 'NEW markers', showOfferCount: 'Offer counts',
+});
+const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Source USD', hidden: 'Hide original prices' });
+function componentRow(...components) { return { type: 1, components }; }
+function panelButton(action, label, style = 2, disabled = false) {
+  // Discord renders component emojis separately from button labels.
+  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶', '🩺'];
+  const leading = icons.find(icon => label.startsWith(icon + ' '));
+  const trailing = label.endsWith(' ▶') ? '▶' : null;
+  const emoji = leading || trailing;
+  return { type: 2, custom_id: PANEL_PREFIX + action,
+    label: emoji ? (leading ? label.slice(leading.length).trim() : label.slice(0, -2).trim()) : label,
+    ...(emoji ? { emoji: { name: emoji } } : {}), style, disabled };
+}
+// Shared Back / Settings row is always the final row of Games panels.
+function gamesNavigation(backAction, settingsAction = 'display') {
+  const { goliathNavigation } = require('../../../core/guild/goliathNavigation');
+  return goliathNavigation(PANEL_PREFIX + backAction, PANEL_PREFIX + settingsAction).toJSON();
+}
+function choiceMenu(action, placeholder, choices, selected = [], multi = false) {
+  return componentRow({ type: 3, custom_id: PANEL_PREFIX + action, placeholder, min_values: multi ? 0 : 1,
+    max_values: multi ? choices.length : 1,
+    options: choices.map(([value, label]) => ({ value, label, default: selected.includes(value) })) });
+}
+function statusTime(value) { return value ? '<t:' + Math.floor(value / 1000) + ':f>' : 'Never'; }
+function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.id)) {
+  const { escape, SECTIONS } = require('./gamesEmbeds');
+  const back = gamesNavigation(page === 'home' ? 'studio' : page === 'settings' ? 'home' : 'settings', 'settings');
+  const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
+    panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
+  const embed = { title: page === 'home' ? '🎮 Games' : '🎮 Games · Free Games', color: SECTIONS[0].color,
+    description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
+    fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
+  let controls = [];
+  if (page === 'settings') {
+    embed.title = '⚙️ Games · Settings';
+    embed.description = [notice && escape(notice), 'Manage module availability, delivery and diagnostics. Changes sync with the dashboard.'].filter(Boolean).join('\n\n');
+    const updates = getGameUpdates(guild.id);
+    embed.fields = [
+      { name: '🎁 Free Games', value: c.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
+      { name: '📰 Game Updates', value: updates.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
+      { name: '🩺 Health', value: [
+        'Delivery: ' + (c.channelId ? '<#' + c.channelId + '>' : '⚠️ Channel not set'),
+        'Last success: ' + statusTime(c.state.lastSuccess),
+        'Last check: ' + statusTime(c.state.lastCheck),
+        'Offers: ' + c.state.offerCount + ' · Published messages: ' + c.state.deliveries.length,
+        c.state.error ? '❌ Error: ' + escape(String(c.state.error)).slice(0, 400) : c.state.warning ? '⚠️ Warning: ' + escape(String(c.state.warning)).slice(0, 400) : 'No reported provider error',
+      ].join('\n'), inline: false },
+    ];
+    controls = [
+      componentRow(panelButton('enabled', c.enabled ? '⏸ Disable Free Games' : '▶ Enable Free Games', c.enabled ? 2 : 3),
+        panelButton('updates:home:0', '📰 Game Updates'), panelButton('delivery', '📨 Delivery')),
+      componentRow(panelButton('health', '🩺 Health'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+    ];
+  } else if (page === 'health') {
+    embed.title = '🩺 Games · Health';
+    const updates = getGameUpdates(guild.id);
+    embed.description = [notice && escape(notice), '**Free Games:** ' + (c.enabled ? 'Enabled' : 'Disabled'), '**Game Updates:** ' + (updates.enabled ? 'Enabled' : 'Disabled')].filter(Boolean).join('\n');
+    embed.fields = [
+      { name: 'Free Games delivery', value: (c.channelId ? '<#' + c.channelId + '>' : 'No channel configured') + '\nAlerts: ' + (c.alerts ? 'Enabled' : 'Disabled') + '\nLast check: ' + statusTime(c.state.lastCheck) + '\nLast success: ' + statusTime(c.state.lastSuccess), inline: false },
+      { name: 'Catalogue', value: c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' published messages', inline: false },
+      { name: 'Provider status', value: escape(String(c.state.error || c.state.warning || 'No reported error')).slice(0, 1024), inline: false },
+    ];
+    controls = [];
+  } else if (page === 'delivery') {
+    embed.title += ' · Delivery';
+    embed.description += '\nChanges save immediately. Pausing keeps existing listing messages.';
+    embed.fields = [
+      { name: 'Listing destinations', value: effectiveDestinations(c).length
+        ? effectiveDestinations(c).map(route => '<#' + route.channelId + '> · ' + (route.enabled ? 'On' : 'Paused') +
+          ' · ' + (route.stores?.join(', ') || 'All platforms') + ' · ' + (route.types?.join(', ') || 'All types')).join('\\n').slice(0, 1024)
+        : 'Not configured', inline: false },
+      { name: 'Notifications', value: c.alerts ? 'New offers' : 'Off', inline: true },
+      { name: 'Notification role', value: c.roleId ? '<@&' + c.roleId + '>' : 'No role ping', inline: true },
+    ];
+    const routes = effectiveDestinations(c);
+    controls = [
+      ...(routes.length ? [componentRow({ type: 3, custom_id: PANEL_PREFIX + 'routeSelect', min_values: 1, max_values: 1,
+        placeholder: 'Configure one destination',
+        options: routes.map(route => ({ label: guild.channels.cache.get(route.channelId)?.name?.slice(0, 95) || route.channelId,
+          value: route.channelId, description: (route.enabled ? 'Enabled' : 'Paused') + ' · ' + (route.alerts ? 'Alerts on' : 'Alerts off') })) })] : []),
+      componentRow({ type: 8, custom_id: PANEL_PREFIX + 'destinations', channel_types: [0, 5], min_values: 0, max_values: 10,
+        placeholder: 'Choose up to 10 listing channels',
+        ...(effectiveDestinations(c).length ? { default_values: effectiveDestinations(c).map(route => ({ id: route.channelId, type: 'channel' })) } : {}) }),
+      componentRow({ type: 6, custom_id: PANEL_PREFIX + 'role', min_values: 0, max_values: 1,
+        placeholder: 'Notification role (clear for no ping)', ...(c.roleId ? { default_values: [{ id: c.roleId, type: 'role' }] } : {}) }),
+      componentRow(panelButton('alerts', c.alerts ? 'Alerts: on' : 'Alerts: off')),
+    ];
+  } else if (page.startsWith('route:')) {
+    const id = page.slice(6);
+    const route = effectiveDestinations(c).find(item => item.channelId === id);
+    if (!route) throw new Error('Destination not found.');
+    embed.title = '📨 Free Games · Channel Rules';
+    embed.description = '<#' + id + '> · Configure this destination independently.';
+    embed.fields = [
+      { name: 'Status', value: route.enabled ? 'Enabled' : 'Paused', inline: true },
+      { name: 'Notifications', value: route.alerts ? 'Enabled' : 'Off', inline: true },
+      { name: 'Role', value: route.roleId ? '<@&' + route.roleId + '>' : 'No ping', inline: true },
+    ];
+    controls = [
+      choiceMenu('routeStores:' + id, 'Platforms for this channel', Object.entries(STORES), route.stores ?? c.stores, true),
+      choiceMenu('routeTypes:' + id, 'Offer types for this channel', Object.entries(TYPES), route.types ?? c.types, true),
+      componentRow({ type: 6, custom_id: PANEL_PREFIX + 'routeRole:' + id, min_values: 0, max_values: 1,
+        placeholder: 'Notification role for this channel',
+        ...(route.roleId ? { default_values: [{ id: route.roleId, type: 'role' }] } : {}) }),
+      componentRow(panelButton('routeToggle:' + id, route.enabled ? '⏸ Pause channel' : '▶ Enable channel'),
+        panelButton('routeAlerts:' + id, route.alerts ? '🔕 Disable alerts' : '🔔 Enable alerts')),
+    ];
+  } else if (page === 'filters') {
+    embed.title += ' · Offers';
+    embed.description += '\nChoose platforms and offer types. Each offer appears once. Changing filters establishes a quiet notification baseline.';
+    controls = [
+      choiceMenu('stores', 'Stores and platforms', Object.entries(STORES), c.stores, true),
+      choiceMenu('types', 'Offer types', Object.entries(TYPES), c.types, true),
+    ];
+  } else if (page === 'pricing') {
+    embed.title += ' · Currency & Region';
+    embed.description += '\nCurrency and regional settings are shared with the dashboard. Converted values are estimates of the provider’s USD values, marked ≈; availability must be checked with the store.';
+    embed.fields = [
+      { name: 'Currency / prices', value: c.currency + ' · ' + PRICE_MODES[c.priceMode], inline: false },
+      { name: 'Formatting', value: escape(c.locale) + ' · ' + escape(c.timeZone) + ' · ' + escape(c.region), inline: false },
+    ];
+    controls = [
+      choiceMenu('priceMode', 'Price display', Object.entries(PRICE_MODES), [c.priceMode]),
+      componentRow(panelButton('regional', 'Edit currency & region')),
+    ];
+  } else if (page === 'display') {
+    embed.title += ' · Display';
+    embed.description += '\nChoose the public listing presentation. Provider credit is retained; currency explanations stay in management settings.';
+    controls = [
+      componentRow(panelButton('featured:0', '⭐ Featured main game')),
+      choiceMenu('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']], [c.layout]),
+      choiceMenu('displayOptions', 'Visible details (clear to hide all)', Object.entries(DISPLAY_OPTIONS),
+        Object.keys(DISPLAY_OPTIONS).filter(key => c[key] !== false), true),
+    ];
+  } else {
+    embed.description = [
+      notice && escape(notice),
+      '**🎁 Free Games** ' + (c.enabled ? '🟢 On' : '⏸ Off') + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? '🟢 On' : '⏸ Off'),
+      '**📨 Delivery** ' + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
+      '**🎮 Catalogue** ' + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
+      '**🕒 Synced** ' + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
+    ].filter(Boolean).join('\n');
+    embed.fields = [];
+    if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
+    controls = [
+      componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', '👁 Preview'),
+        panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'), panelButton('pricing', '💱 Currency')),
+      componentRow(panelButton('display', '🎨 Display'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+      gamesNavigation('studio', 'settings'),
+    ];
+  }
+  return { content: null, embeds: [embed], components: page === 'home' ? controls : [...controls, back], allowedMentions: { parse: [] } };
+}
+function regionalModal(guild, c = getConfig(guild.id)) {
+  return { custom_id: PANEL_PREFIX + 'regionalSubmit', title: 'Free Games · Currency & Region',
+    components: [['currency', 'Currency code (GBP, EUR, USD…)', 3], ['locale', 'Formatting locale (en-GB)', 40],
+      ['timeZone', 'Timezone (Europe/London)', 80], ['region', 'Region code (GB)', 2]].map(([key, label, max_length]) =>
+      componentRow({ type: 4, custom_id: key, label, style: 1, required: true, max_length, value: c[key] })) };
+}
+
+async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
+  const c = getConfig(guild.id);
+  const { getOffers } = require('./gamesProviders');
+  const { featuredCandidates, selectFeaturedOffer, shortTitle, escape } = require('./gamesEmbeds');
+  const feed = await getOffers();
+  const offers = filterOffers(feed.offers, c);
+  const candidates = featuredCandidates(offers, c);
+  const selected = selectFeaturedOffer(offers, c);
+  const totalPages = Math.max(1, Math.ceil(candidates.length / 25));
+  const page = Math.min(Math.max(0, requestedPage), totalPages - 1);
+  const payload = buildAdminPanel(guild, 'display', notice, c);
+  payload.embeds[0].title = '🎁 Free Games · Featured main game';
+  payload.embeds[0].description = [notice && escape(notice),
+    'One main game above the compact list, in the same embed. Automatic selection follows GamerPower’s popularity order among full games on the selected major stores. DLC, loot, demos and trials are excluded.',
+    selected ? '**Current feature:** ' + escape(shortTitle(selected.title)) : 'No eligible main game is available.',
+    'If a selected title expires or is filtered out, another eligible game is featured automatically.'].filter(Boolean).join('\n\n');
+  const rows = [choiceMenu('featuredMode', 'Featured game selection', [['auto', 'Automatic main game'], ['manual', 'Selected main game'], ['off', 'No featured game']], [c.featuredMode])];
+  if (candidates.length) rows.push(choiceMenu('featuredOfferId', 'Choose a main game · ' + (page + 1) + '/' + totalPages,
+    candidates.slice(page * 25, page * 25 + 25).map(offer => [offer.id, shortTitle(offer.title).slice(0, 100)]), [c.featuredOfferId]));
+  rows.push(choiceMenu('featuredArtwork', 'Featured artwork', [['thumbnail', 'Top-right artwork thumbnail'], ['hidden', 'Hide artwork']], [c.featuredArtwork]));
+  if (totalPages > 1) rows.push(componentRow(panelButton('featured:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
+    panelButton('featured:' + (page + 1), 'Next ▶', 2, page === totalPages - 1)));
+  rows.push(gamesNavigation('display', 'display'));
+  return { ...payload, components: rows };
+}
+
+async function applySettings(guild, patch) {
+  const monitor = require('./gamesMonitor');
+  return monitor.withGuildLock(guild.id, async () => {
+    const previous = getConfig(guild.id);
+    const changes = validateSettings(patch, previous);
+    const next = { ...previous, ...changes };
+    if (next.enabled) for (const route of effectiveDestinations(next).filter(item => item.enabled)) {
+      await monitor.validateDestination(guild, { ...next, ...route });
+    }
+    return saveSettings(guild.id, changes);
+  });
+}
+async function handleAdminInteraction(interaction) {
+  const id = String(interaction.customId || '');
+  if (!id.startsWith(PANEL_PREFIX)) return false;
+  const action = id.slice(PANEL_PREFIX.length);
+  const guild = interaction.guild;
+  const modalOpen = action === 'regional' || ['updates:add', 'updates:choose', 'updates:quiet'].includes(action) || /^updates:keywords:\d+$/.test(action);
+  if (!modalOpen && !interaction.deferred && !interaction.replied) {
+    if (interaction.isModalSubmit?.() && !interaction.isFromMessage?.()) await interaction.deferReply({ flags: 64 });
+    else await interaction.deferUpdate();
+  }
+  const reply = async payload => {
+    if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
+    else await interaction.update(payload);
+  };
+  try {
+    if (!guild) throw new Error('Open Free Games inside a server.');
+    const security = require('../../../core/security/protection/core');
+    const member = await guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+    if (!security.isBotOwner(interaction.user.id) && !member?.permissions.has(require('discord.js').PermissionFlagsBits.ManageGuild)) {
+      const denied = { content: 'Manage Server permission is required to configure Free Games.', embeds: [], components: [], allowedMentions: { parse: [] } };
+      if (modalOpen) await interaction.reply({ ...denied, flags: 64 }); else await reply(denied);
+      return true;
+    }
+    if (action === 'regional') { await interaction.showModal(regionalModal(guild)); return true; }
+    if (action.startsWith('updates:')) return await handleGameUpdatesInteraction(interaction, action.slice(8), reply);
+    if (action === 'studio') { await reply(require('../../../core/administration/admin/modules').buildStudioPanel('utilityStudio', member?.displayName || interaction.user.username)); return true; }
+    if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
+    if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action) || /^route:\d{16,20}$/.test(action)) { await reply(buildAdminPanel(guild, action)); return true; }
+    if (/^preview:\d+$/.test(action)) {
+      const { getOffers, getPricing } = require('./gamesProviders');
+      const { buildListing, loadPlatformPresentation } = require('./gamesEmbeds');
+      const c = getConfig(guild.id);
+      const feed = await getOffers();
+      const pricing = await getPricing(c);
+      const pages = buildListing(filterOffers(feed.offers, c), { ...c, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), await loadPlatformPresentation(guild.client, guild.id));
+      const page = Math.min(Number(action.split(':')[1]), pages.length - 1);
+      await reply({ ...pages[page], content: 'Preview only · saved server settings · no listing or notifications posted',
+        components: [componentRow(panelButton('preview:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
+          panelButton('preview:' + (page + 1), 'Next ▶', 2, page === pages.length - 1)),
+          gamesNavigation('home', 'display')] });
+      return true;
+    }
+    if (action === 'refresh') {
+      const result = await require('./gamesMonitor').processGuild(guild);
+      await reply(buildAdminPanel(guild, 'home', result.skipped ? 'Updates are paused.' : 'Listing refreshed.'));
+      return true;
+    }
+    const c = getConfig(guild.id);
+    let patch, page = 'home';
+    if (action === 'routeSelect' && interaction.isStringSelectMenu?.()) {
+      const channelId = interaction.values?.[0];
+      if (!effectiveDestinations(c).some(route => route.channelId === channelId)) throw new Error('Unknown destination.');
+      await reply(buildAdminPanel(guild, 'route:' + channelId)); return true;
+    } else if (/^route(?:Stores|Types|Role|Toggle|Alerts):\d{16,20}$/.test(action)) {
+      const [kind, channelId] = action.split(':');
+      const routes = effectiveDestinations(c).map(route => ({ ...route }));
+      const route = routes.find(item => item.channelId === channelId);
+      if (!route) throw new Error('Unknown destination.');
+      if (kind === 'routeStores' || kind === 'routeTypes') {
+        if (!interaction.isStringSelectMenu?.()) throw new Error('Choose a valid filter.');
+        route[kind === 'routeStores' ? 'stores' : 'types'] = interaction.values;
+      } else if (kind === 'routeRole') {
+        if (!interaction.isRoleSelectMenu?.()) throw new Error('Choose a role.');
+        route.roleId = interaction.values?.[0] || null;
+      } else {
+        if (!interaction.isButton?.()) throw new Error('Use the channel controls.');
+        if (kind === 'routeToggle') route.enabled = !route.enabled;
+        else route.alerts = !route.alerts;
+      }
+      await applySettings(guild, { destinations: routes });
+      await reply(buildAdminPanel(guild, 'route:' + channelId, 'Channel settings saved.')); return true;
+    } else if (action === 'regionalSubmit' && interaction.isModalSubmit?.()) {
+      patch = Object.fromEntries(['currency', 'locale', 'timeZone', 'region'].map(key => [key, interaction.fields.getTextInputValue(key).trim()]));
+      patch.currency = patch.currency.toUpperCase(); patch.region = patch.region.toUpperCase(); page = 'pricing';
+    } else if (action === 'destinations' && interaction.isChannelSelectMenu?.()) {
+      const selected = [...new Set(interaction.values || [])];
+      const existing = effectiveDestinations(c);
+      patch = { destinations: selected.map(channelId => existing.find(route => route.channelId === channelId) ||
+        { channelId, enabled: true, alerts: false, roleId: null, stores: null, types: null }) };
+      // Empty selection intentionally disables delivery destinations without deleting saved messages.
+      page = 'delivery';
+    } else if (['channel', 'role'].includes(action) && (interaction.isChannelSelectMenu?.() || interaction.isRoleSelectMenu?.())) {
+      patch = { [action === 'channel' ? 'channelId' : 'roleId']: interaction.values?.[0] || null }; page = 'delivery';
+      if (patch.roleId) {
+        const role = await guild.roles.fetch(patch.roleId);
+        if (!role || role.id === guild.id || role.managed) throw new Error('Choose a regular notification role.');
+      }
+    } else if (['stores', 'types', 'layout', 'priceMode', 'displayOptions', 'featuredMode', 'featuredOfferId', 'featuredArtwork'].includes(action) && interaction.isStringSelectMenu?.()) {
+      if (action === 'displayOptions') {
+        if ((interaction.values || []).some(key => !Object.hasOwn(DISPLAY_OPTIONS, key))) throw new Error('Invalid display option.');
+        patch = Object.fromEntries(Object.keys(DISPLAY_OPTIONS).map(key => [key, interaction.values.includes(key)]));
+      } else patch = { [action]: ['stores', 'types'].includes(action) ? interaction.values : interaction.values[0] };
+      page = ['stores', 'types'].includes(action) ? 'filters' : action === 'priceMode' ? 'pricing' : 'display';
+    } else if (['enabled', 'alerts'].includes(action) && interaction.isButton?.()) {
+      // Read the latest value inside the delivery lock so concurrent toggles cannot overwrite each other.
+      const monitor = require('./gamesMonitor');
+      await monitor.withGuildLock(guild.id, async () => {
+        const current = getConfig(guild.id), changes = validateSettings({ [action]: !current[action] }, current);
+        const next = { ...current, ...changes };
+        if (next.enabled) for (const route of effectiveDestinations(next).filter(item => item.enabled)) {
+          await monitor.validateDestination(guild, { ...next, ...route });
+        }
+        saveSettings(guild.id, changes);
+      });
+      await reply(buildAdminPanel(guild, action === 'alerts' ? 'delivery' : 'settings', 'Settings saved.')); return true;
+    } else throw new Error('This control is unavailable. Reopen Free Games from Utility Studio.');
+    if (action === 'featuredOfferId') patch.featuredMode = 'manual';
+    await applySettings(guild, patch);
+    if (action.startsWith('featured')) { await reply(await buildFeaturedPanel(guild, 0, 'Settings saved.')); return true; }
+    await reply(buildAdminPanel(guild, page, 'Settings saved. The listing updates within five minutes.'));
+  } catch (error) {
+    const { escape } = require('./gamesEmbeds');
+    if (modalOpen && !interaction.deferred && !interaction.replied) await interaction.reply({ content: escape(error.message).slice(0, 1500), flags: 64, allowedMentions: { parse: [] } });
+    else if (guild) await reply(buildAdminPanel(guild, 'home', 'Unable to apply change: ' + error.message));
+    else await reply({ content: 'Open Free Games inside a server.', embeds: [], components: [] });
+  }
+  return true;
+}
+module.exports = { MODULE_KEY, MODULE_NAME, DEFAULTS, DISPLAY_OPTIONS, PRICE_MODES, getConfig, update, filterOffers, validateSettings, saveSettings,
+  applySettings, buildAdminPanel, buildFeaturedPanel, regionalModal, handleAdminInteraction, normalizeDestinations, effectiveDestinations };
+
+
+const UPDATE_DEFAULTS = Object.freeze({ enabled: false, quietStart: null, quietEnd: null, subscriptions: {}, history: [] });
+function getGameUpdates(guildId) {
+  const raw = getModuleSection(guildId, MODULE_KEY, DEFAULTS).gameUpdates || {};
+  return { ...structuredClone(UPDATE_DEFAULTS), ...raw, subscriptions: { ...(raw.subscriptions || {}) }, history: Array.isArray(raw.history) ? raw.history : [] };
+}
+function updateGameUpdates(guildId, fn) {
+  let result;
+  update(guildId, current => {
+    result = fn(getGameUpdates(guildId));
+    return { ...current, gameUpdates: result };
+  });
+  return result;
+}
+function validateUpdateSettings(input, current) {
+  const next = { ...current };
+  if (Object.hasOwn(input, 'enabled')) {
+    if (typeof input.enabled !== 'boolean') throw new Error('Updates enabled must be true or false.');
+    next.enabled = input.enabled;
+  }
+  for (const key of ['quietStart', 'quietEnd']) if (Object.hasOwn(input, key)) {
+    if (input[key] !== null && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input[key])) throw new Error('Use 24-hour quiet-hour times, such as 22:00.');
+    next[key] = input[key];
+  }
+  if (Boolean(next.quietStart) !== Boolean(next.quietEnd) || (next.quietStart && next.quietStart === next.quietEnd)) throw new Error('Choose different start and end times, or clear both.');
+  return next;
+}
+function keywordList(value) {
+  if (typeof value === 'string') { if (value.length > 500) throw new Error('Keyword list is too long.'); value = value.split(','); }
+  if (!Array.isArray(value) || value.length > 10 || value.some(word => typeof word !== 'string' || word.length > 50)) throw new Error('Use up to ten keywords, separated by commas.');
+  return [...new Set(value.map(word => word.trim().toLowerCase()).filter(Boolean))];
+}
+// Each subscription may deliver independently to up to ten channels.
+// Legacy channelId remains the fallback for existing subscriptions.
+function normalizeUpdateDestinations(value) {
+  if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten update destinations.');
+  const seen = new Set();
+  return value.map(entry => {
+    if (!entry || typeof entry !== 'object' || !/^\d{16,20}$/.test(entry.channelId || '') || seen.has(entry.channelId)) {
+      throw new Error('Choose unique valid update destination channels.');
+    }
+    seen.add(entry.channelId);
+    if (entry.roleId != null && !/^\d{16,20}$/.test(entry.roleId)) throw new Error('Choose a valid update notification role.');
+    if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') throw new Error('Update destination enabled must be true or false.');
+    return { channelId: entry.channelId, roleId: entry.roleId || null, enabled: entry.enabled !== false };
+  });
+}
+function effectiveUpdateDestinations(subscription) {
+  return subscription.destinationsConfigured
+    ? (subscription.destinations || [])
+    : subscription.channelId
+      ? [{ channelId: subscription.channelId, roleId: subscription.roleId || null, enabled: true }]
+      : [];
+}
+function normalizeUpdateSubscription(input, previous = {}) {
+  const { steamAppId, UPDATE_CATALOG } = require('./gamesProviders');
+  const appId = steamAppId(input.appId || previous.appId);
+  const next = { appId, name: UPDATE_CATALOG.find(game => game.appId === appId)?.name || 'Steam game ' + appId,
+    channelId: null, roleId: null, enabled: false, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: [], excludeWords: [],
+    seenIds: [], pending: [], routeDeliveries: {}, initialized: false, lastCheck: null, lastSuccess: null, error: null, ...previous, appId };
+  if (Object.hasOwn(input, 'destinations')) {
+    next.destinations = normalizeUpdateDestinations(input.destinations);
+    next.destinationsConfigured = true;
+  }
+  if (Object.hasOwn(input, 'name')) {
+    if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 100) throw new Error('Use a game name between 1 and 100 characters.');
+    next.name = input.name.trim();
+  }
+  for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
+    if (input[key] !== null && (typeof input[key] !== 'string' || !/^\d{16,20}$/.test(input[key]))) throw new Error('Choose a valid channel or role.');
+    next[key] = input[key];
+  }
+  if (Object.hasOwn(input, 'enabled')) {
+    if (typeof input.enabled !== 'boolean') throw new Error('Subscription enabled must be true or false.');
+    next.enabled = input.enabled;
+  }
+  for (const [key, values] of Object.entries({ filter: ['all', 'patches', 'announcements'], artwork: ['banner', 'thumbnail', 'hidden'], detail: ['compact', 'detailed'] })) {
+    if (Object.hasOwn(input, key)) { if (!values.includes(input[key])) throw new Error('Invalid ' + key + ' selection.'); next[key] = input[key]; }
+  }
+  for (const key of ['includeWords', 'excludeWords']) if (Object.hasOwn(input, key)) next[key] = keywordList(input[key]);
+  if (next.enabled && !next.channelId) throw new Error('Choose the primary destination channel before enabling this subscription.');
+  if (next.enabled && !effectiveUpdateDestinations(next).some(route => route.enabled)) throw new Error('Choose an enabled destination channel before enabling this subscription.');
+  return next;
+}
+function matchesGameUpdate(item, subscription) {
+  if (subscription.filter !== 'all' && item.kind !== subscription.filter) return false;
+  const text = (item.title + ' ' + item.description).toLowerCase();
+  return (!subscription.includeWords.length || subscription.includeWords.some(word => text.includes(word))) &&
+    !subscription.excludeWords.some(word => text.includes(word));
+}
+Object.assign(module.exports, { UPDATE_DEFAULTS, getGameUpdates, updateGameUpdates, validateUpdateSettings, normalizeUpdateSubscription, normalizeUpdateDestinations, effectiveUpdateDestinations, matchesGameUpdate });
+
+
+// Pure catalogue selector shared by Discord and the offline regression audit.
+function visibleSteamUpdateCatalog(catalogue, subscriptions = {}) {
+  const subscribedIds = new Set(Object.keys(subscriptions));
+  return catalogue.filter(game => !game.catalogueType || game.catalogueType === 'game' || subscribedIds.has(game.appId))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+function buildUpdatesPanel(guild, page = 0, notice = '') {
+  const config = getGameUpdates(guild.id), { escape, SECTIONS } = require('./gamesEmbeds');
+  const subscriptions = Object.values(config.subscriptions).sort((a, b) => a.name.localeCompare(b.name));
+  const pages = Math.max(1, Math.ceil(subscriptions.length / 25)); page = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const embed = { title: '📰 Games · Game Updates', color: SECTIONS[2].color,
+    description: [notice && escape(notice), config.enabled ? '🟢 Automatic updates enabled' : '⏸ Automatic updates paused',
+      'Follow Steam publisher announcements. Choose a game, its destination and the updates you want. New subscriptions start with the next announcement.'].filter(Boolean).join('\n\n'),
+    fields: [{ name: 'Subscriptions', value: subscriptions.length + ' games · ' + subscriptions.filter(sub => sub.enabled).length + ' active', inline: true },
+      { name: 'Quiet hours', value: config.quietStart ? config.quietStart + '–' + config.quietEnd + ' · ' + getConfig(guild.id).timeZone : 'Off', inline: true }],
+    footer: { text: 'Games · Game Updates · ' + (page + 1) + '/' + pages }, timestamp: new Date().toISOString() };
+  const rows = [componentRow(panelButton('updates:toggle', config.enabled ? 'Pause updates' : 'Enable updates', config.enabled ? 2 : 3),
+    panelButton('updates:check', 'Check now'), panelButton('updates:quiet', 'Quiet hours'), panelButton('updates:history:0', 'Delivery history'))];
+  if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? '▶ ' : '⏸ ') + sub.name])));
+  rows.push(componentRow(panelButton('updates:catalog', 'Browse games'), panelButton('updates:add', 'Add Steam game')));
+  if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0), panelButton('updates:home:' + (page + 1), 'Next ▶', 2, page === pages - 1)));
+  rows.push(gamesNavigation('home', 'display'));
+  return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
+}
+function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
+  const sub = getGameUpdates(guild.id).subscriptions[appId];
+  if (!sub) return buildUpdatesPanel(guild, 0, 'Game subscription no longer exists.');
+  const { escape, SECTIONS } = require('./gamesEmbeds');
+  const heldCount = sub.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching').length;
+  const updateRoutes = effectiveUpdateDestinations(sub);
+  const queuedCount = sub.pending.length - heldCount;
+  const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
+    description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
+      'Steam announcements can be delivered to up to ten channels, with independent role notifications.',
+      sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
+    fields: [{ name: 'Destinations', value: updateRoutes.length ? updateRoutes.map(route => (route.enabled ? '▶ ' : '⏸ ') + '<#' + route.channelId + '>' + (route.roleId ? ' · <@&' + route.roleId + '>' : '')).join('\n').slice(0, 1024) : 'Choose a channel', inline: false },
+      { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
+      { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + queuedCount + '\nHeld for review: ' + heldCount, inline: false }],
+    footer: { text: 'Games · Steam publisher announcements' }, timestamp: new Date().toISOString() };
+  const actions = componentRow(panelButton('updates:preview:' + appId, 'Preview'),
+    panelButton('updates:send:' + appId, 'Send latest'), panelButton('updates:routes:' + appId, 'Destinations'));
+  const back = gamesNavigation('updates:home:0', 'updates:' + (more ? 'game:' : 'more:') + appId);
+  const rows = more ? [
+    choiceMenu('updates:artwork:' + appId, 'Artwork', [['banner', 'Large artwork'], ['thumbnail', 'Thumbnail'], ['hidden', 'No artwork']], [sub.artwork]),
+    choiceMenu('updates:detail:' + appId, 'Text length', [['compact', 'Compact summary'], ['detailed', 'Detailed summary']], [sub.detail]),
+    componentRow(panelButton('updates:keywords:' + appId, 'Keyword filters'), panelButton('updates:retry-view:' + appId, 'Retry held', 2, heldCount === 0)),
+    actions,
+    back,
+  ] : [
+    componentRow(panelButton('updates:enabled:' + appId, sub.enabled ? 'Pause' : 'Enable', sub.enabled ? 2 : 3), panelButton('updates:remove-view:' + appId, 'Unsubscribe', 4)),
+    componentRow({ type: 8, custom_id: PANEL_PREFIX + 'updates:channel:' + appId, placeholder: 'Destination channel', channel_types: [0, 5], min_values: 0, max_values: 1, ...(sub.channelId ? { default_values: [{ id: sub.channelId, type: 'channel' }] } : {}) }),
+    componentRow({ type: 6, custom_id: PANEL_PREFIX + 'updates:role:' + appId, placeholder: 'Optional notification role', min_values: 0, max_values: 1, ...(sub.roleId ? { default_values: [{ id: sub.roleId, type: 'role' }] } : {}) }),
+    choiceMenu('updates:filter:' + appId, 'Announcement filter', [['patches', 'Patch / update titles'], ['all', 'All publisher announcements'], ['announcements', 'Other announcements']], [sub.filter]),
+    back,
+  ];
+  return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
+}
+function buildGameUpdateHistoryPanel(guild, page = 0, status = 'all') {
+  const config = getGameUpdates(guild.id);
+  const { escape, SECTIONS } = require('./gamesEmbeds');
+  const statuses = ['all', 'delivered', 'recovered', 'failed', 'needs_review'];
+  if (!statuses.includes(status)) status = 'all';
+  const records = (config.history || []).filter(record => status === 'all' || record.status === status);
+  const pages = Math.max(1, Math.ceil(records.length / 8));
+  page = Number.isSafeInteger(Number(page)) ? Math.min(Math.max(0, Number(page)), pages - 1) : 0;
+  const shown = records.slice(page * 8, (page + 1) * 8);
+  const fields = shown.map(record => ({
+    name: escape(String(record.title || 'Steam announcement').slice(0, 180)),
+    value: [escape(String(record.status || 'unknown').replace(/_/g, ' ')),
+      'App ID: ' + escape(String(record.appId || 'unknown')),
+      record.at && Number.isFinite(Number(record.at)) ? '<t:' + Math.floor(Number(record.at) / 1000) + ':R>' : null,
+      record.detail ? escape(String(record.detail).slice(0, 180)) : null].filter(Boolean).join(' · ').slice(0, 1024),
+    inline: false
+  }));
+  const embed = { title: '📰 Games · Delivery history', color: SECTIONS[2].color,
+    description: records.length ? 'Recent Steam announcement outcomes. Uncertain deliveries must be reviewed from their game subscription.' : 'No matching delivery records.',
+    fields, footer: { text: 'Games · Delivery history · ' + (page + 1) + '/' + pages + ' · ' + records.length + ' records' } };
+  const filterOptions = statuses.map(value => [value, value === 'all' ? 'All outcomes' : value.replace(/_/g, ' ')]);
+  return { content: null, embeds: [embed], allowedMentions: { parse: [] }, components: [
+    choiceMenu('updates:history-filter', 'Filter delivery outcomes', filterOptions, [status]),
+    componentRow(panelButton('updates:history:' + Math.max(0, page - 1) + ':' + status, '◀ Previous', 2, page === 0),
+      panelButton('updates:history:' + Math.min(pages - 1, page + 1) + ':' + status, 'Next ▶', 2, page === pages - 1)),
+    gamesNavigation('updates:home:0', 'home')
+  ] };
+}
+async function handleGameUpdatesInteraction(i, action, reply) {
+  const guild = i.guild, monitor = require('./gamesMonitor'), providers = require('./gamesProviders');
+  const [kind, argument] = action.split(':');
+  if (kind === 'home') { await reply(buildUpdatesPanel(guild, Number(argument || 0))); return true; }
+  if (kind === 'history') { const [, page, status] = action.split(':'); await reply(buildGameUpdateHistoryPanel(guild, page || 0, status || 'all')); return true; }
+  if (kind === 'history-filter') { await reply(buildGameUpdateHistoryPanel(guild, 0, i.values?.[0] || 'all')); return true; }
+  if (kind === 'game' || kind === 'more') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(argument), '', kind === 'more')); return true; }
+  if (kind === 'select') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(i.values[0]))); return true; }
+  if (kind === 'catalog') {
+    const catalogue = visibleSteamUpdateCatalog(providers.UPDATE_CATALOG, getGameUpdates(guild.id).subscriptions);
+    const pageCount = Math.max(1, Math.ceil(catalogue.length / 25));
+    const requestedPage = Number(argument);
+    const page = Number.isSafeInteger(requestedPage) ? Math.max(0, Math.min(requestedPage, pageCount - 1)) : 0;
+    const payload = buildUpdatesPanel(guild);
+    payload.embeds[0].description = 'Choose a game, or use Add Steam game for another App ID. Software and DLC are excluded from new catalogue suggestions; existing subscriptions remain listed as legacy. Sources are Steam publisher announcements; titles outside Steam need another verified source.';
+    payload.embeds[0].footer = { text: 'Games · Catalogue · ' + (page + 1) + '/' + pageCount };
+    payload.components = [
+      choiceMenu('updates:choose', 'Game catalogue · page ' + (page + 1), catalogue.slice(page * 25, page * 25 + 25).map(game => [game.appId, game.name + (game.catalogueType && game.catalogueType !== 'game' ? ' (' + game.catalogueType.toUpperCase() + ' - legacy)' : '')])),
+      ...(pageCount > 1 ? [componentRow(
+        panelButton('updates:catalog:' + (page - 1), '◀ Previous', 2, page === 0),
+        panelButton('updates:catalog:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
+      )] : []),
+      componentRow(panelButton('updates:publishers:0', 'Publisher games'), panelButton('updates:add', 'Add Steam game')),
+      gamesNavigation('updates:home:0', 'home')
+    ];
+    await reply(payload); return true;
+  }
+  if (kind === 'publishers') {
+    const catalogue = [...providers.PUBLISHER_UPDATE_CATALOG].sort((a, b) => a.name.localeCompare(b.name));
+    const pageCount = Math.max(1, Math.ceil(catalogue.length / 25));
+    const requestedPage = Number(argument);
+    const page = Number.isSafeInteger(requestedPage) ? Math.max(0, Math.min(requestedPage, pageCount - 1)) : 0;
+    const payload = buildUpdatesPanel(guild);
+    payload.embeds[0].description = 'Publisher games are listed for discovery only. Automatic updates and subscriptions are not available until their publisher feeds have been integrated and verified.';
+    payload.embeds[0].footer = { text: 'Games · Publisher catalogue · ' + (page + 1) + '/' + pageCount };
+    payload.components = [
+      choiceMenu('updates:publisher-info', 'Publisher games · page ' + (page + 1), catalogue.slice(page * 25, page * 25 + 25).map(game => [game.id, game.name])),
+      ...(pageCount > 1 ? [componentRow(
+        panelButton('updates:publishers:' + (page - 1), '◀ Previous', 2, page === 0),
+        panelButton('updates:publishers:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
+      )] : []),
+      componentRow(panelButton('updates:catalog:0', 'Steam games')),
+      gamesNavigation('updates:home:0', 'home')
+    ];
+    await reply(payload); return true;
+  }
+  if (kind === 'publisher-info') {
+    const game = providers.PUBLISHER_UPDATE_CATALOG.find(entry => entry.id === i.values?.[0]);
+    if (!game) { await reply(buildUpdatesPanel(guild, 0, 'Publisher game not found.')); return true; }
+    const payload = buildUpdatesPanel(guild);
+    payload.embeds[0].description = '**' + game.name + '** · ' + game.publisher + '\n\nSource integration pending. This game cannot be subscribed to yet.\n\nPublisher news: ' + game.newsUrl;
+    payload.components = [gamesNavigation('updates:publishers:0', 'home')];
+    await reply(payload); return true;
+  }
+  if (kind === 'add' || kind === 'choose') {
+    const selected = providers.UPDATE_CATALOG.find(game => game.appId === i.values?.[0]);
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:add-submit', title: 'Follow a Steam game', components: [
+      componentRow({ type: 4, custom_id: 'appId', label: 'Steam App ID or Steam store URL', style: 1, required: true, max_length: 180, ...(selected ? { value: selected.appId } : {}) }),
+      componentRow({ type: 4, custom_id: 'name', label: 'Game name', style: 1, required: true, max_length: 100, ...(selected ? { value: selected.name } : {}) }),
+    ] }); return true;
+  }
+  if (kind === 'add-submit') {
+    const appId = providers.steamAppId(i.fields.getTextInputValue('appId'));
+    if (getGameUpdates(guild.id).subscriptions[appId]) { await reply(buildUpdateSubscriptionPanel(guild, appId, 'This game is already followed.')); return true; }
+    await monitor.saveGameSubscription(guild, { appId, name: i.fields.getTextInputValue('name'), enabled: false });
+    await reply(buildUpdateSubscriptionPanel(guild, appId, 'Game added. Choose a channel, then enable the subscription.')); return true;
+  }
+  if (kind === 'toggle') {
+    await monitor.configureGameUpdates(guild, { enabled: !getGameUpdates(guild.id).enabled }); await reply(buildUpdatesPanel(guild)); return true;
+  }
+  if (kind === 'check') {
+    const result = await monitor.processGameUpdates(guild);
+    await reply(buildUpdatesPanel(guild, 0, result.skipped ? 'Automatic updates are paused.' : 'Check complete. Delivered ' + result.delivered + ' updates.')); return true;
+  }
+  if (kind === 'quiet') {
+    const c = getGameUpdates(guild.id);
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:quiet-submit', title: 'Quiet hours', components: [
+      componentRow({ type: 4, custom_id: 'start', label: 'Start (HH:mm); clear both to disable', style: 1, required: false, max_length: 5, ...(c.quietStart ? { value: c.quietStart } : {}) }),
+      componentRow({ type: 4, custom_id: 'end', label: 'End (HH:mm), using server timezone', style: 1, required: false, max_length: 5, ...(c.quietEnd ? { value: c.quietEnd } : {}) }),
+    ] }); return true;
+  }
+  if (kind === 'quiet-submit') {
+    await monitor.configureGameUpdates(guild, { quietStart: i.fields.getTextInputValue('start').trim() || null, quietEnd: i.fields.getTextInputValue('end').trim() || null });
+    await reply(buildUpdatesPanel(guild, 0, 'Quiet hours saved.')); return true;
+  }
+  const appId = providers.steamAppId(argument), sub = getGameUpdates(guild.id).subscriptions[appId];
+  if (!sub) throw new Error('Choose a current game subscription.');
+  if (kind === 'preview') {
+    const { payload } = await monitor.previewGameUpdate(guild, appId);
+    await reply({ ...payload, content: 'Preview only · no announcement or role notification posted',
+      components: [...payload.components, gamesNavigation('updates:game:' + appId, 'updates:more:' + appId)] }); return true;
+  }
+  if (kind === 'send') {
+    const result = await monitor.sendLatestGameUpdate(guild, appId);
+    await reply(buildUpdateSubscriptionPanel(guild, appId, result.alreadyDelivered ? 'The latest matching update was already delivered.' : 'Latest update processed without a role ping.')); return true;
+  }
+  if (kind === 'remove-view' || kind === 'retry-view') {
+    const payload = buildUpdateSubscriptionPanel(guild, appId);
+    payload.embeds[0].description = kind === 'remove-view' ? 'Unsubscribe from this game? Existing messages and delivery history will be kept. Resolve any held or uncertain deliveries before unsubscribing.' :
+      'Inspect the destination channel first. Retry held checks for an existing message, then retries unresolved deliveries without a role ping.';
+    payload.components = [componentRow(panelButton('updates:' + (kind === 'remove-view' ? 'remove:' : 'retry:') + appId, kind === 'remove-view' ? 'Confirm unsubscribe' : 'Retry held', 4),
+      panelButton('updates:game:' + appId, 'Cancel'))]; await reply(payload); return true;
+  }
+  if (kind === 'remove') { await monitor.removeGameSubscription(guild, appId); await reply(buildUpdatesPanel(guild, 0, 'Game unsubscribed.')); return true; }
+  if (kind === 'retry') {
+    const result = await monitor.retryHeldGameUpdates(guild, appId);
+    const notice = ['Recovery check complete: ' + result.recovered + ' existing message(s) recovered, ' + result.delivered + ' announcement(s) sent without role pings.',
+      result.held ? result.held + (result.held === 1 ? ' delivery still needs review.' : ' deliveries still need review.') : 'No uncertain deliveries remain.'].join(' ');
+    await reply(buildUpdateSubscriptionPanel(guild, appId, notice)); return true;
+  }
+  if (kind === 'routes') {
+    const rows = effectiveUpdateDestinations(sub).map(route => route.channelId + ',' + (route.roleId || '') + ',' + (route.enabled ? 'on' : 'off'));
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:routes-submit:' + appId, title: 'Steam update destinations', components: [
+      componentRow({ type: 4, custom_id: 'routes', label: 'Channel ID, role ID, on/off (one per line)', style: 2, required: true,
+        min_length: 16, max_length: 500, value: rows.join('\n').slice(0, 500) || '' })
+    ] }); return true;
+  }
+  if (kind === 'routes-submit') {
+    const raw = i.fields.getTextInputValue('routes');
+    const routes = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+      const [channelId, roleId = '', enabled = 'on', extra] = line.split(',').map(value => value.trim());
+      if (extra !== undefined || !['on', 'off'].includes(enabled)) throw new Error('Use channel ID, optional role ID, and on/off per line.');
+      return { channelId, roleId: roleId || null, enabled: enabled === 'on' };
+    });
+    const first = routes.find(route => route.enabled);
+    if (!first) throw new Error('Choose at least one enabled destination.');
+    await monitor.saveGameSubscription(guild, { appId, destinations: routes, channelId: first.channelId, roleId: first.roleId });
+    await reply(buildUpdateSubscriptionPanel(guild, appId, 'Destinations saved. New announcements will use the selected channels.', true)); return true;
+  }
+  if (kind === 'keywords') {
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:keywords-submit:' + appId, title: 'Announcement keyword filters', components: [
+      componentRow({ type: 4, custom_id: 'include', label: 'Include any of these (comma-separated)', style: 2, required: false, max_length: 500, ...(sub.includeWords.length ? { value: sub.includeWords.join(', ') } : {}) }),
+      componentRow({ type: 4, custom_id: 'exclude', label: 'Exclude any of these (comma-separated)', style: 2, required: false, max_length: 500, ...(sub.excludeWords.length ? { value: sub.excludeWords.join(', ') } : {}) }),
+    ] }); return true;
+  }
+  let patch = { appId };
+  if (kind === 'keywords-submit') { patch.includeWords = i.fields.getTextInputValue('include'); patch.excludeWords = i.fields.getTextInputValue('exclude'); }
+  else if (kind === 'enabled') patch.enabled = !sub.enabled;
+  else if (kind === 'channel' || kind === 'role') {
+    if (sub.destinationsConfigured) throw new Error('Use Destinations to edit channels and roles for a multi-channel subscription.');
+    patch[kind === 'channel' ? 'channelId' : 'roleId'] = i.values?.[0] || null;
+  }
+  else if (['filter', 'artwork', 'detail'].includes(kind)) patch[kind] = i.values[0];
+  else throw new Error('Unknown Game Updates control.');
+  await monitor.saveGameSubscription(guild, patch);
+  await reply(buildUpdateSubscriptionPanel(guild, appId, 'Settings saved.', ['keywords-submit', 'artwork', 'detail'].includes(kind))); return true;
+}
+Object.assign(module.exports, { buildUpdatesPanel, buildUpdateSubscriptionPanel, buildGameUpdateHistoryPanel, visibleSteamUpdateCatalog });

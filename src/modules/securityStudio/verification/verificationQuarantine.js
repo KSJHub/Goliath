@@ -1,14 +1,16 @@
 'use strict';
 
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonStyle } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const verificationStore = require('./verificationStore');
-const guildManager = require('../../core/guild/guildManager');
+const guildManager = require('../../../core/guild/guildManager');
+const { auditQuarantineSnapshots } = require('../../../core/security/protection/quarantine/state');
 const {
   QUARANTINE_MODES,
   quarantineMember,
   getQuarantineState,
   getQuarantineMode,
-} = require('../../core/security/protection/quarantine');
+} = require('../../../core/security/protection/quarantine');
 
 const cleanIds = value => [...new Set((Array.isArray(value) ? value : value ? [value] : []).map(String).filter(Boolean))];
 
@@ -22,23 +24,27 @@ function safeChannelName(member) {
   return `verification-${base}`.slice(0, 90);
 }
 
-function caseSummary(member, reason, session, history) {
-  const failures = history.filter(entry => entry?.type === 'security_failed');
-  const flags = Array.isArray(session?.flags) ? session.flags : [];
-  const lines = [
-    '## 🚨 Verification Quarantine',
-    `**Member:** <@${member.id}> (\`${member.id}\`)`,
-    `**Reason:** ${String(reason || 'Verification security policy').slice(0, 800)}`,
-    `**Failed attempts:** ${Number(session?.failedAttempts || failures.length || 0)}`,
-    `**Completed security:** ${(session?.completedSecurity || []).join(', ') || 'None'}`,
-    `**Flags:** ${flags.length ? flags.map(flag => typeof flag === 'string' ? flag : flag?.reason || flag?.type || 'flag').join(', ') : 'None recorded'}`,
-  ];
-  if (failures.length) {
-    lines.push('', '**Recent failures:**');
-    for (const failure of failures.slice(-5)) lines.push(`- ${failure.step || 'security'} — ${String(failure.reason || 'Failed').slice(0, 300)}`);
-  }
-  lines.push('', 'Use the Goliath Mod Hub to review or escalate this member.');
-  return lines.join('\n').slice(0, 1900);
+function caseSummary(member) {
+  return [
+    '## 🛡️ Goliath · Security Review',
+    '⏳ **Verification on hold**',
+    '',
+    `Hello <@${member.id}>, your server access is temporarily restricted because Verification could not be completed.`,
+    'This does not necessarily mean you have broken any server rules.',
+    '',
+    '**What happens next?**',
+    'Management can review your case and allow you to retry Verification.',
+    'You may send a message here to explain the situation or ask for help.',
+    '',
+    '🔒 This channel is intended for you and authorised management.',
+    'Use **Request Review** once to notify staff, or **View Status** to check your current state.'
+  ].join('\n');
+}
+function memberCaseButtons(userId) {
+  return [new ActionRowBuilder().addComponents(
+    navigationButton(`verify:quarantine:request:${userId}`, 'Request Review', ButtonStyle.Primary),
+    navigationButton(`verify:quarantine:status:${userId}`, 'View Status', ButtonStyle.Secondary)
+  )];
 }
 
 async function ensureQuarantineCase(guild, member, reason = 'Verification security policy') {
@@ -48,9 +54,38 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   const settings = verificationStore.normalizeSettings(section?.settings || {});
   if (settings.quarantine?.enabled === false) return { ok: true, skipped: true };
   const session = verificationStore.getSession(guild.id, member.id) || {};
+  const sharedSnapshot = getQuarantineState(guild.id)?.users?.[member.id];
+  if (['quarantined', 'review'].includes(session.state) && !sharedSnapshot) return { ok: false, needsReview: true, message: 'Legacy quarantine has no shared original-role snapshot; manual reconciliation required.' };
+  const sharedRoomId = sharedSnapshot?.interviewChannelId;
+  if (sharedSnapshot && !sharedRoomId) return { ok: false, message: 'Member is in Security Isolation; no Verification interview room may be created.' };
+  if (sharedRoomId) {
+    const room = await guild.channels.fetch(String(sharedRoomId)).catch(() => null);
+    if (!room) return { ok: false, message: 'Shared investigation room is unavailable; Mod Hub recovery required.' };
+    if (session.quarantineChannelId && String(session.quarantineChannelId) !== String(room.id)) {
+      const oldRoom = await guild.channels.fetch(String(session.quarantineChannelId)).catch(() => null);
+      if (oldRoom?.permissionOverwrites?.edit) {
+        try { await oldRoom.permissionOverwrites.edit(member.id, { ViewChannel: false }, { reason: 'Legacy Verification room superseded by shared investigation' }); }
+        catch (error) { return { ok: false, message: 'Legacy case room could not be isolated; staff review required.' }; }
+      }
+      verificationStore.addSecurityHistory(guild.id, member.id, { type: 'legacy_case_room_superseded', previousChannelId: session.quarantineChannelId, sharedChannelId: room.id });
+    }
+    verificationStore.upsertSession(guild.id, member.id, { quarantineChannelId: room.id });
+    return { ok: true, channel: room, existing: true, shared: true };
+  }
   if (session.quarantineChannelId) {
     const existing = guild.channels.cache.get(session.quarantineChannelId) || await guild.channels.fetch(session.quarantineChannelId).catch(() => null);
-    if (existing) return { ok: true, channel: existing, existing: true };
+    if (existing) {
+      const permissions = existing.permissionsFor?.(member);
+      if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages)) {
+        try {
+          await existing.permissionOverwrites.edit(member.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }, { reason: 'Restore Verification case interview access' });
+        } catch (error) {
+          verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_access_repair_failed', channelId: existing.id, reason: String(error?.message || error).slice(0, 300) });
+          return { ok: false, channel: existing, message: 'Existing Verification case access could not be restored.' };
+        }
+      }
+      return { ok: true, channel: existing, existing: true };
+    }
   }
   const parentId = settings.quarantine?.categoryId || null;
   if (parentId) {
@@ -72,10 +107,10 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   verificationStore.upsertSession(guild.id, member.id, { quarantineChannelId: channel.id, quarantineCaseCreatedAt: new Date().toISOString() });
   verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_created', channelId: channel.id, reason });
   const refreshed = verificationStore.getSession(guild.id, member.id) || session;
-  const history = verificationStore.getSecurityHistory?.(guild.id, member.id) || section?.securityHistory?.[member.id] || [];
-  const staffPing = staffRoleIds.map(id => `<@&${id}>`).join(' ');
+  
+  
   try {
-    await channel.send({ content: `${staffPing}${staffPing ? '\n' : ''}${caseSummary(member, reason, refreshed, history)}`, allowedMentions: { roles: staffRoleIds, users: [member.id], parse: [] } });
+    await channel.send({ content: caseSummary(member), allowedMentions: { roles: staffRoleIds, users: [member.id], parse: [] } });
   } catch (error) {
     verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_notification_failed', channelId: channel.id, reason: String(error?.message || error).slice(0, 300) });
     return { ok: false, channel, created: true, message: 'Private quarantine case created, but staff notification failed.' };
@@ -86,6 +121,10 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
 async function closeQuarantineCase(guild, userId, reason = 'Verification quarantine resolved') {
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (!session.quarantineChannelId) return { ok: true, skipped: true };
+  const isolation = getQuarantineState(guild.id)?.users?.[String(userId)];
+  if (isolation?.interviewChannelId === session.quarantineChannelId) {
+    return { ok: false, message: 'Active shared investigation room requires Mod Hub resolution.' };
+  }
   let channel = guild.channels.cache.get(session.quarantineChannelId);
   if (!channel) {
     try { channel = await guild.channels.fetch(session.quarantineChannelId); }
@@ -113,7 +152,12 @@ function activeModerationIsolation(guildId, userId) {
 
 async function escalateToModHub(guild, member, actorId, reason) {
   const existing = activeModerationIsolation(guild.id, member.id);
-  if (existing) return { success: true, existing: true, mode: existing.mode, interviewChannelId: existing.snapshot?.interviewChannelId || null };
+  const session = verificationStore.getSession(guild.id, member.id);
+  if (!existing && ['quarantined', 'review'].includes(session?.state)) return { success: false, needsReview: true, reason: 'Legacy quarantine has no shared original-role snapshot; escalation cannot infer original roles.' };
+  if (existing) {
+    verificationStore.addSecurityHistory(guild.id, member.id, { type: 'existing_isolation_reused', actorId: actorId || null, reason });
+    return { success: true, existing: true, mode: existing.mode, interviewChannelId: existing.snapshot?.interviewChannelId || null };
+  }
   return quarantineMember(guild, member, { reason: reason || 'Escalated from Verification quarantine', quarantinedBy: actorId || guild.client?.user?.id || null, source: 'verification', mode: QUARANTINE_MODES.INVESTIGATION });
 }
 
@@ -154,7 +198,7 @@ async function restorePendingRoles(member, pendingIds, quarantineIds, reason) {
 async function reconcileModerationRelease(guild, userId, actorId, reason = 'Mod Hub investigation cleared') {
   if (!guild || !userId) return { ok: false, message: 'Verification reconciliation target is unavailable.' };
   const session = verificationStore.getSession(guild.id, userId) || {};
-  if (session.state !== 'review') return { ok: true, skipped: true };
+  if (session.state !== 'review' && !(session.state === 'quarantined' && session.moderationIsolationMode)) return { ok: true, skipped: true };
   const member = await guild.members.fetch(userId).catch(() => null);
   const section = verificationStore.getVerificationSection(guild.id);
   const settings = verificationStore.normalizeSettings(section?.settings || {});
@@ -203,6 +247,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   const member = await guild.members.fetch(userId).catch(() => null);
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (session.state !== 'quarantined') return { ok: false, message: 'This member is not in active Verification quarantine. Mod Hub investigations must be resolved through Mod Hub.' };
+  const snapshot = activeModerationIsolation(guild.id, userId)?.snapshot;
+  if (!snapshot || !Array.isArray(snapshot.roles)) return { ok: false, needsReview: true, message: 'Original role snapshot is missing; manual reconciliation required before resolving quarantine.' };
   const quarantineIds = cleanIds(settings.roles?.quarantine);
   const pendingIds = cleanIds(settings.roles?.pending);
   if (resolution === 'escalate') {
@@ -215,13 +261,18 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
     }
     verificationStore.upsertSession(guild.id, userId, { state: 'review', quarantineEscalatedAt: new Date().toISOString(), quarantineEscalatedBy: actorId || null, moderationIsolationMode: result.mode || QUARANTINE_MODES.INVESTIGATION, moderationInterviewChannelId: result.interviewChannelId || null });
     verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_escalated', actorId: actorId || null, reason: escalationReason, moderationIsolationMode: result.mode || QUARANTINE_MODES.INVESTIGATION, interviewChannelId: result.interviewChannelId || null, reusedExistingIsolation: result.existing === true });
-    const closure = await closeQuarantineCase(guild, userId, 'Verification case escalated to Mod Hub').catch(error => ({ ok: false, message: error?.message || 'Case cleanup failed' }));
+    const sharedRoomId = activeModerationIsolation(guild.id, userId)?.snapshot?.interviewChannelId || null;
+    const verificationRoomId = (verificationStore.getSession(guild.id, userId) || {}).quarantineChannelId || null;
+    const closure = sharedRoomId && String(sharedRoomId) === String(verificationRoomId)
+      ? { ok: true, retainedSharedRoom: true }
+      : await closeQuarantineCase(guild, userId, 'Verification case escalated to Mod Hub').catch(error => ({ ok: false, message: error?.message || 'Case cleanup failed' }));
     if (!closure?.ok) {
       verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_escalation_cleanup_failed', actorId: actorId || null, reason: closure?.message || 'Case cleanup failed' });
       return { ok: true, escalated: true, cleanupPending: true, member, interviewChannelId: result.interviewChannelId || null, message: 'Mod Hub escalation succeeded, but the old Verification case channel requires manual cleanup.' };
     }
     return { ok: true, escalated: true, member, interviewChannelId: result.interviewChannelId || null, message: 'Verification quarantine escalated into the Mod Hub investigation workflow.' };
   }
+  if (activeModerationIsolation(guild.id, userId)) return { ok: false, message: 'An active Mod Hub isolation must be resolved through Mod Hub before Verification can release or reject this member.' };
   if (!member) return { ok: false, message: 'Member is unavailable; quarantine roles cannot be reconciled.' };
   if (resolution === 'release') {
     if (!pendingIds.length) return { ok: false, message: 'A Pending role must be configured before releasing quarantine.' };
@@ -257,4 +308,86 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   return { ok: true, rejected: true, member, message: 'Member rejected from Verification quarantine.' };
 }
 
-module.exports = { ensureQuarantineCase, closeQuarantineCase, resolveQuarantineCase, escalateToModHub, reconcileModerationRelease };
+// Explicit maintenance adoption, using two observed role transitions rather than
+// the member's already-stripped roles. Never invoked by startup or Verification.
+async function reconcileLegacyQuarantine(guild, input = {}) {
+  if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') return { ok: false, reason: 'Legacy reconciliation is DEV-only.' };
+  const engine = require('../../../core/security/protection/quarantine');
+  const userId = String(input.userId || '');
+  const roomId = String(input.roomId || '');
+  if (![userId, roomId].every(id => /^\d{15,25}$/.test(id))) return { ok: false, reason: 'Invalid member or room ID.' };
+  if (!engine.tryBeginQuarantineOperation(guild.id, userId)) return { ok: false, reason: 'Quarantine operation already in progress.' };
+  let adopted = false;
+  try {
+    const section = verificationStore.getVerificationSection(guild.id);
+    const session = section.sessions?.[userId];
+    const state = engine.getQuarantineState(guild.id);
+    if (state.users[userId]) return { ok: false, reason: 'Shared snapshot already exists; it was not overwritten.' };
+    if (session?.state !== 'quarantined' || String(session.quarantineChannelId) !== roomId) throw Error('Legacy session or room changed; reconciliation refused.');
+    if (Object.entries(section.sessions || {}).some(([id, value]) => id !== userId && String(value?.quarantineChannelId) === roomId)
+      || Object.values(state.users).some(value => String(value?.interviewChannelId) === roomId)) throw Error('Room is assigned to another case.');
+    const roleIds = cleanIds(verificationStore.normalizeSettings(section.settings || {}).roles?.quarantine);
+    if (roleIds.length !== 1 || (state.roleId && state.roleId !== roleIds[0])) throw Error('Verification and shared quarantine roles must agree.');
+    const quarantineId = roleIds[0];
+    const history = require('../../../owner/auditIntelligence/auditStore').getUser(userId)?.roleHistory || [];
+    const first = history.find(e => e.eventId === input.addEventId && String(e.guildId) === guild.id);
+    const second = history.find(e => e.eventId === input.stripEventId && String(e.guildId) === guild.id);
+    const ids = roles => {
+      if (!Array.isArray(roles) || roles.some(role => !/^\d{15,25}$/.test(String(role?.id || '')))) throw Error('Role history is incomplete.');
+      return [...new Set(roles.map(role => String(role.id)))].sort();
+    };
+    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const at = Date.parse(session.quarantinedAt);
+    const t1 = Date.parse(first?.timestamp), t2 = Date.parse(second?.timestamp);
+    if (!first || !second || first === second || !/^member\.(roles|role|update)/.test(first.type)
+      || !/^member\.(roles|role|update)/.test(second.type) || !Number.isFinite(at) || !Number.isFinite(t1) || !Number.isFinite(t2)
+      || t1 > t2 || t2 > at || at - t1 > 5000) throw Error('Evidence does not match the quarantine transition.');
+    const originals = ids(first.before?.roles);
+    if (originals.includes(quarantineId) || originals.includes(guild.id)
+      || !equal(ids(first.after?.roles), [...originals, quarantineId].sort())
+      || !equal(ids(second.before?.roles), [...originals, quarantineId].sort())
+      || !equal(ids(second.after?.roles), [quarantineId])) throw Error('Role transitions do not prove the complete original role set.');
+    const member = await guild.members.fetch({ user: userId, force: true });
+    const room = await guild.channels.fetch(roomId);
+    await guild.roles.fetch();
+    const role = guild.roles.cache.get(quarantineId);
+    if (!role || role.managed || !role.editable || member.id === guild.ownerId || role.permissions.has(PermissionFlagsBits.Administrator)) throw Error('Quarantine role cannot safely contain this member.');
+    if (!equal([...member.roles.cache.keys()].filter(id => id !== guild.id).sort(), [quarantineId])) throw Error('Current member roles differ from the confirmed quarantine state.');
+    if (originals.some(id => !guild.roles.cache.has(id) || guild.roles.cache.get(id).managed)) throw Error('An evidenced original role is missing or managed.');
+    if (!room || room.type !== ChannelType.GuildText || room.guild?.id !== guild.id
+      || !room.permissionOverwrites.cache.get(guild.id)?.deny.has(PermissionFlagsBits.ViewChannel)) throw Error('Existing case room is unavailable or not private.');
+    // Re-read after Discord awaits so another member's concurrent operation is preserved.
+    const currentSection = verificationStore.getVerificationSection(guild.id);
+    const currentSession = currentSection.sessions?.[userId];
+    if (currentSession?.state !== 'quarantined' || String(currentSession.quarantineChannelId) !== roomId
+      || Date.parse(currentSession.quarantinedAt) !== at
+      || Object.entries(currentSection.sessions || {}).some(([id, value]) => id !== userId && String(value?.quarantineChannelId) === roomId)
+      || !equal(cleanIds(verificationStore.normalizeSettings(currentSection.settings || {}).roles?.quarantine), roleIds)) throw Error('Verification case changed during reconciliation.');
+    const latest = engine.getQuarantineState(guild.id);
+    if ((latest.roleId && latest.roleId !== quarantineId) || latest.users[userId] || Object.values(latest.users).some(value => String(value?.interviewChannelId) === roomId)) throw Error('Shared case changed during reconciliation.');
+    latest.roleId = role.id;
+    latest.roleName = role.name;
+    latest.users[userId] = {
+      memberId: userId, memberTag: member.user?.tag || userId, mode: engine.QUARANTINE_MODES.INVESTIGATION,
+      roles: originals, interviewChannelId: roomId, quarantinedAt: at, quarantinedBy: null,
+      source: 'verification', reason: 'Evidence-backed legacy Verification reconciliation',
+      autoRelease: false, expiresAt: null, memberViewAllowRestores: [],
+      legacyReconciliation: { addEventId: first.eventId, stripEventId: second.eventId, reconciledAt: new Date().toISOString() },
+    };
+    engine.saveQuarantineState(guild, latest);
+    adopted = true; // Keep this evidence if any later persistence/containment check fails.
+    verificationStore.upsertSession(guild.id, userId, { moderationIsolationMode: engine.QUARANTINE_MODES.INVESTIGATION, moderationInterviewChannelId: roomId });
+    verificationStore.addSecurityHistory(guild.id, userId, { type: 'legacy_quarantine_reconciled', channelId: roomId, originalRoles: originals, addEventId: first.eventId, stripEventId: second.eventId });
+  } catch (error) {
+    return { ok: false, adopted, reason: error.message };
+  } finally { engine.endQuarantineOperation(guild.id, userId); }
+  const member = await guild.members.fetch({ user: userId, force: true });
+  const result = await engine.enforceQuarantineOnMember(member, { existingRoomOnly: true });
+  return { ok: result.success === true, adopted, userId, roomId, containment: result, reason: result.success ? 'Legacy case linked and containment verified; original roles remain withheld.' : 'Snapshot preserved, but containment requires attention.' };
+}
+
+function auditLegacyQuarantineSessions(guildId) {
+  return auditQuarantineSnapshots(verificationStore.getVerificationSection(guildId)?.sessions || {}, getQuarantineState(guildId)?.users || {});
+}
+
+module.exports = { reconcileLegacyQuarantine, ensureQuarantineCase, closeQuarantineCase, resolveQuarantineCase, escalateToModHub, reconcileModerationRelease, auditLegacyQuarantineSessions };

@@ -1,4 +1,5 @@
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -114,7 +115,7 @@ export default function Suggestions({ theme, selectedGuild, selectedGuildData })
     return statusOk && searchOk;
   });
 
-  if (!guildId) return <EmptyState theme={theme} icon="💡" title="Select a server" description="Select a server to manage Suggestions." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.SUGGESTIONS} title="Select a server" description="Select a server to manage Suggestions." />;
 
   return <div style={{ display: 'grid', gap: 18 }}>
     <section style={{ ...cardStyle, padding: 24, background: 'linear-gradient(135deg, rgba(250,204,21,0.14), rgba(15,23,42,0.08) 48%, rgba(59,130,246,0.12))' }}>
@@ -169,7 +170,7 @@ export default function Suggestions({ theme, selectedGuild, selectedGuildData })
       {filtered.length ? <div style={{ display: 'grid', gap: 12 }}>{filtered.map((item) => <article key={item.suggestionId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 16, display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><strong>{item.suggestionId}</strong><div style={{ marginTop: 4, color: theme.mutedText, fontSize: 13 }}>{item.authorName || item.authorId || 'Unknown'}{item.anonymous ? ' · hidden publicly' : ''} · {new Date(item.createdAt).toLocaleString()}</div></div><div style={{ fontWeight: 950, textTransform: 'capitalize' }}>{item.status}</div></div>
         <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{item.content}</div>
-        <div style={{ color: theme.mutedText, fontSize: 13 }}>👍 {item.upVoteCount || 0} · 👎 {item.downVoteCount || 0}{item.reviewedBy ? ` · Reviewed by ${item.reviewedBy}` : ''}{item.reviewReason ? ` · ${item.reviewReason}` : ''}</div>
+        <div style={{ color: theme.mutedText, fontSize: 13 }}>{E.UPVOTE} {item.upVoteCount || 0} · {E.DOWNVOTE} {item.downVoteCount || 0}{item.reviewedBy ? ` · Reviewed by ${item.reviewedBy}` : ''}{item.reviewReason ? ` · ${item.reviewReason}` : ''}</div>
         {['pending', 'discussing'].includes(item.status) ? <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><button type="button" onClick={() => reviewSuggestion(item, 'approve')} disabled={saving} style={buttonStyle(theme, 'success')}>Approve</button><button type="button" onClick={() => reviewSuggestion(item, 'deny')} disabled={saving} style={buttonStyle(theme, 'danger')}>Deny</button></div> : null}
       </article>)}</div> : <div style={{ color: theme.mutedText }}>No suggestions match this view.</div>}
     </section>

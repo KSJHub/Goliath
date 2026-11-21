@@ -36,13 +36,14 @@ const Translation = lazy(() => import('../pages/modules/Translation'));
 const ReactionRoles = lazy(() => import('../pages/modules/ReactionRoles'));
 const Leveling = lazy(() => import('../pages/modules/Leveling'));
 const Polls = lazy(() => import('../pages/modules/Polls'));
-const FreeGames = lazy(() => import('../pages/modules/FreeGames'));
+const FreeGames = lazy(() => import('../pages/modules/Games'));
 const Stats = lazy(() => import('../pages/modules/Stats'));
 const Restore = lazy(() => import('../pages/security/Restore'));
 const Security = lazy(() => import('../pages/security/Security'));
 const MediaTools = lazy(() => import('../pages/core/MediaTools'));
 const Logs = lazy(() => import('../pages/core/Logs'));
 const OwnerView = lazy(() => import('../pages/owner/OwnerOverview'));
+const GoliathAI = lazy(() => import('../pages/owner/GoliathAI'));
 const OwnerGlobalServers = lazy(() => import('../pages/owner/GlobalServers'));
 const OwnerRuntimeMonitor = lazy(() => import('../pages/owner/RuntimeMonitor'));
 const OwnerBillingAdmin = lazy(() => import('../pages/owner/BillingAdmin'));
@@ -85,6 +86,7 @@ export const ROUTES = [
   { key: 'billing', label: 'Billing', icon: 'admin', path: '/billing', component: Billing, hidden: true },
   { key: 'notifications', label: 'Notifications', icon: 'logs', path: '/notifications', component: Notifications },
   { key: 'ownerView', label: 'Owner View', icon: 'admin', path: '/owner', component: OwnerView, ownerOnly: true },
+  { key: 'goliathAI', label: 'Goliath AI', icon: 'admin', path: '/owner/ai', component: GoliathAI, ownerOnly: true },
   { key: 'ownerServers', label: 'Global Servers', icon: 'modules', path: '/owner/servers', component: OwnerGlobalServers, ownerOnly: true },
   { key: 'ownerRuntime', label: 'Runtime Monitor', icon: 'admin', path: '/owner/runtime', component: OwnerRuntimeMonitor, ownerOnly: true },
   { key: 'ownerBilling', label: 'Billing Admin', icon: 'admin', path: '/owner/billing', component: OwnerBillingAdmin, ownerOnly: true },
@@ -114,7 +116,7 @@ export const ROUTES = [
   { key: 'forms', label: 'Forms', icon: 'modules', path: '/forms', component: Forms, hidden: true },
   { key: 'giveaways', label: 'Giveaways', icon: 'modules', path: '/giveaways', component: Giveaways, hidden: true },
   { key: 'polls', label: 'Polls', icon: 'modules', path: '/polls', component: Polls, hidden: true },
-  { key: 'freeGames', label: 'Free Games', icon: 'modules', path: '/free-games', component: FreeGames, hidden: true },
+  { key: 'freeGames', label: 'Games', icon: 'modules', path: '/games', component: FreeGames, hidden: true },
   { key: 'stats', label: 'Stats', icon: 'overview', path: '/stats', component: Stats, hidden: true },
   { key: 'social', label: 'Social Studio', icon: 'modules', path: '/social', component: Social, hidden: true },
   { key: 'schedule', label: 'Schedule', icon: 'modules', path: '/schedule', component: Schedule, hidden: true },

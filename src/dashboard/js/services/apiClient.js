@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+import { dashboardBase } from './dashboardPath.js';
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : dashboardBase;
 
 function apiUrl(path = '') {
   return `${API_BASE}${path}`;
@@ -73,6 +74,8 @@ export const api = {
   updateGuildRole: (guildId, roleId, payload) => request(`/api/discord/${guildId}/roles/${encodeURIComponent(roleId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteGuildRole: (guildId, roleId) => request(`/api/discord/${guildId}/roles/${encodeURIComponent(roleId)}`, { method: 'DELETE' }),
   reorderGuildRoles: (guildId, roleIds) => request(`/api/discord/${guildId}/roles/order`, { method: 'PATCH', body: JSON.stringify({ roleIds }) }),
+  getLogConfig: (guildId) => request(`/api/config/logs/${encodeURIComponent(guildId)}`),
+  saveLogConfig: (guildId, payload) => request(`/api/config/logs/${encodeURIComponent(guildId)}`, { method: 'POST', body: JSON.stringify(payload) }),
   getGeneralSettings: (guildId) => request(`/api/config/general/${guildId}`),
   saveGeneralSettings: (guildId, payload) => request(`/api/config/general/${guildId}`, { method: 'POST', body: JSON.stringify(payload) }),
   getGuildModules: (guildId) => request(`/api/modules/${guildId}`),
@@ -140,8 +143,8 @@ export const api = {
     body: JSON.stringify({ channelId: payload.channelId, panelId: payload.panelId, template: payload.template || payload }),
   }),
   refreshVerificationPanel: (guildId, panelId, payload = {}) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}/redeploy`, { method: 'POST', body: JSON.stringify(payload) }),
-  deleteVerificationPanel: (guildId, panelId) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}`, { method: 'DELETE' }),
-  resetVerification: (guildId) => request(`/api/verification/${guildId}/reset`, { method: 'POST' }),
+  deleteVerificationPanel: (guildId, panelId, expectedConfigRevision) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}`, { method: 'DELETE', body: JSON.stringify({ expectedConfigRevision }) }),
+  resetVerification: (guildId, expectedConfigRevision) => request(`/api/verification/${guildId}/reset`, { method: 'POST', body: JSON.stringify({ expectedConfigRevision }) }),
   getVerificationExportUrl: (guildId) => apiUrl(`/api/verification/${guildId}/export`),
   getAutoRoles: (guildId) => request(`/api/modules/${guildId}/auto-roles`),
   setAutoRolesEnabled: (guildId, enabled) => request(`/api/modules/${guildId}/auto-roles/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),

@@ -1,11 +1,16 @@
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events } = require('discord.js');
+const { EMOJIS } = require('../../core/guild/goliathNavigation');
 const { canUseModAction, recordModerationSystemEvent } = require('../../core/administration/mod/permissions');
 const decisioning = require('../../core/administration/mod/memberDecisioning');
 const joinIntelligence = require('../../core/administration/mod/joinIntelligence');
 const intelligence = require('../../core/administration/mod/intelligence');
 const { db } = require('../../core/administration/mod/storage');
+
+// The central router and the legacy event loader may see the same object.
+// Claim it synchronously so listener ordering cannot produce two responses.
+const handledInteractions = new WeakSet();
 
 function parseJson(value, fallback = {}) {
   if (value && typeof value === 'object') return value;
@@ -24,6 +29,48 @@ function currentInvestigationWatch(guildId, userId) {
     }
   } catch {}
   return false;
+}
+
+// Keep the persistent report and its controls in sync with staff actions.
+async function refreshJoinReport(interaction, watched, cleared = false) {
+  const message = interaction.message;
+  if (!message?.edit || !message.embeds?.length) return;
+  const original = message.embeds[0];
+  if (!String(original.title || '').startsWith('🧠 Join Intelligence')) return;
+  const embed = EmbedBuilder.from(original);
+  const fields = (original.fields || []).map(field => ({ ...field }));
+  const risk = fields.find(field => field.name?.includes('Risk'));
+  if (risk) {
+    // New reports show watch status alongside Watchlist; older reports used
+    // a standalone line. Update either format without duplicating the status.
+    const status = watched ? 'ON' : 'OFF';
+    const value = String(risk.value);
+    if (/Investigation Watch: \*\*(?:ON|OFF)\*\*/.test(value)) {
+      risk.value = value.replace(/Investigation Watch: \*\*(?:ON|OFF)\*\*/g, `Investigation Watch: **${status}**`);
+    } else {
+      risk.value = (value + `\nInvestigation Watch: **${status}**`).slice(0, 1024);
+    }
+  }
+  embed.setFields(fields);
+  if (cleared) {
+    embed.setDescription(String(original.description || '').replace(/[^\n]*\*\*Decision: [^\n]+/, '🟢 **Decision: CLEAR**'));
+    embed.setColor(0x57F287);
+  }
+  const rows = (message.components || []).map(row => {
+    const data = typeof row.toJSON === 'function' ? row.toJSON() : row;
+    return new ActionRowBuilder().addComponents((data.components || []).map(button => {
+      const updated = ButtonBuilder.from(button);
+      if (String(button.custom_id || '').startsWith('joinintel:watch:')) {
+        updated.setLabel(watched ? 'Remove Watch' : 'Watch Member')
+          .setStyle(watched ? ButtonStyle.Danger : ButtonStyle.Secondary);
+      }
+      if (cleared && String(button.custom_id || '').startsWith('joinintel:clear:')) {
+        updated.setLabel('Marked Clear').setDisabled(true);
+      }
+      return updated;
+    }));
+  });
+  await message.edit({ embeds: [embed], components: rows, allowedMentions: { parse: [] } });
 }
 
 async function resolveTarget(interaction, userId) {
@@ -91,10 +138,10 @@ async function buildEphemeralIntelligence(interaction, target) {
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji('🔄').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji('🕘').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_intel_guilds:${target.id}`).setLabel('Network').setEmoji('🌐').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(watchOn ? 'Watch On' : 'Watch Off').setEmoji('👁️').setStyle(watchOn ? ButtonStyle.Danger : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji(EMOJIS.REFRESH).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji(EMOJIS.MOD_SCAN_HISTORY).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_intel_guilds:${target.id}`).setLabel('Network').setEmoji(EMOJIS.USER_TRANSLATE).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(watchOn ? 'Watch On' : 'Watch Off').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(watchOn ? ButtonStyle.Danger : ButtonStyle.Secondary),
   );
 
   return { embeds: [embed], components: [row], flags: 64 };
@@ -106,63 +153,81 @@ module.exports = {
     const id = String(interaction?.customId || '');
     if (!id.startsWith('joinintel:')) return;
     if (!interaction.inGuild?.() || !interaction.isButton?.()) return;
+    if (handledInteractions.has(interaction)) return;
+    handledInteractions.add(interaction);
+    try {
+      // Acknowledge immediately. Permission checks and member fetches can exceed
+      // Discord's three-second interaction deadline during busy join events.
+      await interaction.deferReply({ flags: 64 });
+      const [, action, guildId, userId] = id.split(':');
+      if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\d{15,25}$/.test(userId || '')) {
+        await interaction.editReply({ content: '❌ That intelligence action is no longer valid.' });
+        return;
+      }
 
-    const [, action, guildId, userId] = id.split(':');
-    if (String(interaction.guild.id) !== String(guildId) || !userId) {
-      await interaction.reply({ content: '❌ That intelligence action is no longer valid.', flags: 64 }).catch(() => null);
-      return;
-    }
+      const allowed = canUseModAction(interaction.member, interaction.guild, 'scan_run', interaction)
+        || canUseModAction(interaction.member, interaction.guild, 'view_case_detail', interaction);
+      if (!allowed) {
+        await interaction.editReply({ content: '❌ You do not have permission to manage Member Intelligence.' });
+        return;
+      }
 
-    const allowed = canUseModAction(interaction.member, interaction.guild, 'scan_run', interaction)
-      || canUseModAction(interaction.member, interaction.guild, 'view_case_detail', interaction);
-    if (!allowed) {
-      await interaction.reply({ content: '❌ You do not have permission to manage Member Intelligence.', flags: 64 }).catch(() => null);
-      return;
-    }
+      // Mark Clear only updates guild-scoped intelligence state. It does not
+      // need a Discord API member fetch, which can stall on busy join events.
+      if (action === 'clear') {
+        const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
+        await interaction.editReply({
+          content: `✅ <@${userId}> has been reviewed and marked **CLEAR** in Member Intelligence. This does not erase moderation history or watchlist evidence.`,
+          allowedMentions: { parse: [] },
+        });
+        console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
+        await refreshJoinReport(interaction, currentInvestigationWatch(interaction.guild.id, userId), true).catch(error => console.error('[Join Intelligence] Report refresh failed:', error));
+        return;
+      }
 
-    const target = await resolveTarget(interaction, userId);
-    if (!target) {
-      await interaction.reply({ content: '❌ That member is no longer available in this server.', flags: 64 }).catch(() => null);
-      return;
-    }
+      const target = await resolveTarget(interaction, userId);
+      if (!target) {
+        await interaction.editReply({ content: '❌ That member is no longer available in this server.' }).catch(() => null);
+        return;
+      }
 
-    if (action === 'view') {
-      const payload = await buildEphemeralIntelligence(interaction, target);
-      await interaction.reply(payload).catch(async () => {
-        if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
-      });
-      return;
-    }
+      if (action === 'view') {
+        const payload = await buildEphemeralIntelligence(interaction, target);
+        delete payload.flags;
+        await interaction.editReply(payload);
+        return;
+      }
 
-    if (action === 'watch') {
-      const before = currentInvestigationWatch(interaction.guild.id, userId);
-      if (!before) {
-        recordModerationSystemEvent({
+      if (action === 'watch') {
+        const before = currentInvestigationWatch(interaction.guild.id, userId);
+        const audit = recordModerationSystemEvent({
           interaction,
           event: 'moderation.member_scan.watch_updated',
           action: 'member_watch',
           targetId: userId,
-          before: { enabled: false },
-          after: { enabled: true, reason: 'Enabled from persistent Member Intelligence report.' },
+          before: { enabled: before },
+          after: { enabled: !before, reason: 'Toggled from persistent Member Intelligence report.' },
           metadata: { targetId: userId, source: 'join_intelligence_report' },
         });
+        if (!audit) {
+          await interaction.editReply({ content: '❌ Investigation Watch could not be saved. The report was not changed; please try again.' });
+          return;
+        }
+        await interaction.editReply({
+          content: before
+            ? `👁️ ${target.user} has been **removed** from Investigation Watch.`
+            : `👁️ ${target.user} is now on **Investigation Watch**.`,
+        });
+        await refreshJoinReport(interaction, !before).catch(error => console.error('[Join Intelligence] Report refresh failed:', error));
+        return;
       }
-      await interaction.reply({
-        content: before
-          ? `👁️ ${target.user} is already on **Investigation Watch**.`
-          : `👁️ ${target.user} is now on **Investigation Watch**. The channel report has been left in place.`,
-        flags: 64,
-      }).catch(() => null);
-      return;
-    }
 
-    if (action === 'clear') {
-      const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
-      await interaction.reply({
-        content: `✅ ${target.user} has been reviewed and marked **CLEAR** in Goliath Member Intelligence. This does not erase moderation history or watchlist evidence.`,
-        flags: 64,
-      }).catch(() => null);
-      console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
+
+    } catch (error) {
+      console.error('[Join Intelligence] Action failed:', error);
+      const payload = { content: 'Member Intelligence could not complete this action. Please try again.' };
+      if (interaction.deferred || interaction.replied) await interaction.editReply(payload).catch(() => null);
+      else await interaction.reply({ ...payload, flags: 64 }).catch(() => null);
     }
   },
 };

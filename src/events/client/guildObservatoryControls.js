@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
@@ -10,6 +9,7 @@ const {
   MessageFlags,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 const observatory = require('../../owner/auditIntelligence/guildObservatory');
 const security = require('../../core/security/protection/core');
@@ -70,18 +70,18 @@ function previousScan(guildId) {
 function diffLines(scan, guildId) {
   const diff = scan?.diff;
   if (!diff) return ['No comparison available yet.'];
-  if (diff.baseline) return ['📌 First stored baseline. Future scans will be compared against this state.'];
+  if (diff.baseline) return [`${EMOJIS.ADMIN_PIN} First stored baseline. Future scans will be compared against this state.`];
   const previous = previousScan(guildId);
   const labels = { roles: 'Role', channels: 'Channel', members: 'Member', bans: 'Ban', automod: 'AutoMod rule', emojis: 'Emoji', stickers: 'Sticker' };
   const lines = [];
-  if (diff.guildChanged) lines.push('🟠 **Guild settings changed**');
+  if (diff.guildChanged) lines.push(`${EMOJIS.SETUP_REQUIRED} **Guild settings changed**`);
   for (const [key, label] of Object.entries(labels)) {
     const value = diff[key] || {};
-    for (const id of (value.added || []).slice(0, 4)) lines.push(`🟢 **${label} added:** ${findName(scan, key, id)}`);
-    for (const id of (value.removed || []).slice(0, 4)) lines.push(`🔴 **${label} removed:** ${findName(previous, key, id)}`);
-    for (const id of (value.changed || []).slice(0, 4)) lines.push(`🟠 **${label} changed:** ${findName(scan, key, id)}`);
+    for (const id of (value.added || []).slice(0, 4)) lines.push(`${EMOJIS.ACTIVE} **${label} added:** ${findName(scan, key, id)}`);
+    for (const id of (value.removed || []).slice(0, 4)) lines.push(`${EMOJIS.OWNER_RED} **${label} removed:** ${findName(previous, key, id)}`);
+    for (const id of (value.changed || []).slice(0, 4)) lines.push(`${EMOJIS.SETUP_REQUIRED} **${label} changed:** ${findName(scan, key, id)}`);
   }
-  return lines.length ? lines : ['🟢 No structural changes detected since the previous baseline.'];
+  return lines.length ? lines : [`${EMOJIS.ACTIVE} No structural changes detected since the previous baseline.`];
 }
 function auditActionName(action) { return AUDIT_ACTIONS[Number(action)] || `Discord audit action ${action}`; }
 function latestAuditLines(scan) {
@@ -106,7 +106,7 @@ function securityLines(scan) {
     `Bans **${scan.bans?.length ?? 0}** • Invites **${scan.invites?.length ?? 0}** • AutoMod rules **${scan.automod?.length ?? 0}**`,
     `Administrator roles **${adminRoles.length}** • Timed-out members **${timedOut.length}**`,
     `Scan permission/data gaps **${errors.length}**`,
-    errors.length ? errors.slice(0, 6).map((x) => `⚠️ ${String(x).replace(/^[a-z]+:/i, '')}`).join('\n') : '🟢 Full requested scan coverage completed without recorded access errors.',
+    errors.length ? errors.slice(0, 6).map((x) => `${EMOJIS.WARNING} ${String(x).replace(/^[a-z]+:/i, '')}`).join('\n') : `${EMOJIS.ACTIVE} Full requested scan coverage completed without recorded access errors.`,
   ].join('\n').slice(0, 1024);
 }
 function historyLines(guildId) {
@@ -121,7 +121,7 @@ function overviewLines(scan) {
     `Channels **${scan.channels?.length ?? 0}** • Categories **${scan.channels?.filter((x) => x.type === ChannelType.GuildCategory).length ?? 0}**`,
     `Bans **${scan.bans?.length ?? 0}** • Invites **${scan.invites?.length ?? 0}** • AutoMod **${scan.automod?.length ?? 0}**`,
     `Emojis **${scan.emojis?.length ?? 0}** • Stickers **${scan.stickers?.length ?? 0}** • Recoverable audit entries **${scan.auditLogs?.length ?? 0}**`,
-    scan.errors?.length ? `⚠️ **${scan.errors.length}** scan coverage issue(s) — see Security.` : '🟢 Requested scan coverage complete.',
+    scan.errors?.length ? `${EMOJIS.WARNING} **${scan.errors.length}** scan coverage issue(s) — see Security.` : `${EMOJIS.ACTIVE} Requested scan coverage complete.`,
   ].join('\n');
 }
 function payload(client, interaction) {
@@ -131,14 +131,14 @@ function payload(client, interaction) {
   const selected = guilds.find((x) => x.id === state.guildId) || null;
   const scan = selected ? observatory.getLatest(selected.id) : null;
   const collector = collectorFor(selected, client);
-  const title = { overview: '📊 SERVER INTELLIGENCE', changes: '🔄 CHANGE INTELLIGENCE', history: '🕒 SCAN HISTORY', security: '🛡️ SECURITY', audit: '📜 AUDIT HISTORY' }[state.view] || '📊 SERVER INTELLIGENCE';
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🔭 GOLIATH OBSERVATORY • ${title}`)
+  const title = { overview: `${EMOJIS.DASHBOARD} SERVER INTELLIGENCE`, changes: `${EMOJIS.REFRESH} CHANGE INTELLIGENCE`, history: `${EMOJIS.ROLE_CLOCK} SCAN HISTORY`, security: `${EMOJIS.SECURITY} SECURITY`, audit: `${EMOJIS.CASES} AUDIT HISTORY` }[state.view] || `${EMOJIS.DASHBOARD} SERVER INTELLIGENCE`;
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.GUILD_OBSERVATORY} GOLIATH OBSERVATORY • ${title}`)
     .setDescription(['Owner-only cross-environment view of every monitored server.', '**Sentinel collection stays ON at all times.** Observatory scans create persistent server baselines; reporting switches do not stop evidence collection.', state.notice ? `\n**Result:** ${state.notice}` : null].filter(Boolean).join('\n'));
   if (!selected) embed.addFields({ name: 'Guild', value: 'No registered guilds are available.' });
   else {
     embed.addFields(
       { name: 'Selected Guild', value: `**${selected.name}**\n\`${selected.id}\``, inline: true },
-      { name: 'Responsible Collector', value: `**${collector}**\n${client.guilds.cache.has(selected.id) ? '🟢 Connected to this process' : '🌐 Remote collector request'}`, inline: true },
+      { name: 'Responsible Collector', value: `**${collector}**\n${client.guilds.cache.has(selected.id) ? `${EMOJIS.ACTIVE} Connected to this process` : `${EMOJIS.USER_TRANSLATE} Remote collector request`}`, inline: true },
       { name: 'Last Complete Scan', value: scan ? `<t:${unix(scan.scannedAt)}:F>\n<t:${unix(scan.scannedAt)}:R>` : 'Never', inline: true },
     );
     if (state.view === 'changes') embed.addFields({ name: 'Changes Since Previous Baseline', value: diffLines(scan, selected.id).join('\n').slice(0, 1024) });
@@ -155,15 +155,15 @@ function payload(client, interaction) {
   if (guilds.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}guild`).setPlaceholder('Select a monitored guild').addOptions(guilds.map((item) => ({ label: item.name.slice(0, 100), value: item.id, description: `${item.environments.join(' • ') || 'Registry'} • ${item.id}`.slice(0, 100), default: item.id === state.guildId })))));
   if (selected) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}scan`).setLabel('Scan Server').setEmoji('🔎').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`${PREFIX}overview`).setLabel('Intelligence').setEmoji('📊').setStyle(state.view === 'overview' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}changes`).setLabel('Changes').setEmoji('🔄').setStyle(state.view === 'changes' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}history`).setLabel('History').setEmoji('🕒').setStyle(state.view === 'history' ? ButtonStyle.Success : ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}scan`, 'Scan Server', ButtonStyle.Primary).setLabel('Scan Server').setEmoji(EMOJIS.INVESTIGATE),
+      navigationButton(`${PREFIX}overview`, 'Intelligence', state.view === 'overview' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Intelligence').setEmoji(EMOJIS.DASHBOARD),
+      navigationButton(`${PREFIX}changes`, 'Changes', state.view === 'changes' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Changes').setEmoji(EMOJIS.REFRESH),
+      navigationButton(`${PREFIX}history`, 'History', state.view === 'history' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('History').setEmoji(EMOJIS.ROLE_CLOCK),
     ));
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}security`).setLabel('Security').setEmoji('🛡️').setStyle(state.view === 'security' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}audit`).setLabel('Audit History').setEmoji('📜').setStyle(state.view === 'audit' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}refresh`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}security`, 'Security', state.view === 'security' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Security').setEmoji(EMOJIS.SECURITY),
+      navigationButton(`${PREFIX}audit`, 'Audit History', state.view === 'audit' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Audit History').setEmoji(EMOJIS.CASES),
+      navigationButton(`${PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setLabel('Refresh').setEmoji(EMOJIS.REFRESH),
     ));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -209,7 +209,7 @@ async function ensureHomeButton(client) {
   if (!message) return false;
   if (message.components.some((row) => row.components.some((component) => component.customId === `${PREFIX}open`))) return true;
   const rows = message.components.map((row) => ActionRowBuilder.from(row));
-  const button = new ButtonBuilder().setCustomId(`${PREFIX}open`).setLabel('Observatory').setEmoji('🔭').setStyle(ButtonStyle.Primary);
+  const button = navigationButton(`${PREFIX}open`, 'Observatory', ButtonStyle.Primary).setLabel('Observatory').setEmoji(EMOJIS.GUILD_OBSERVATORY);
   const target = rows.find((row) => row.components.length < 5);
   if (target) target.addComponents(button); else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button)); else return false;
   await message.edit({ components: rows });

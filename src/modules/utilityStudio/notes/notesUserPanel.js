@@ -1,9 +1,11 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 function button(customId, label, style = ButtonStyle.Secondary, emoji = null) {
-  const component = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  const component = navigationButton(customId, label, style);
   if (emoji) component.setEmoji(emoji);
   return component;
 }
@@ -12,7 +14,7 @@ function buildPanel(interaction) {
   const memberDisplayName = interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
   const embed = new EmbedBuilder()
     .setColor('#FEE75C')
-    .setTitle('📌 Notes — Development Memo')
+    .setTitle(emojiLabel('ADMIN_PIN', 'Notes — Development Memo'))
     .setDescription([
       '**Purpose**',
       'A lightweight personal notebook built into Goliath.',
@@ -54,7 +56,7 @@ function buildPanel(interaction) {
     embeds: [embed],
     components: [new ActionRowBuilder().addComponents(
       button('user:home', 'Back', ButtonStyle.Secondary, '⬅️'),
-      button('user:home', 'User Panel', ButtonStyle.Secondary, '🏠'),
+      button('user:home', 'User Panel', ButtonStyle.Secondary, EMOJIS.USER_HOME),
     )],
   };
 }

@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
@@ -8,7 +9,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const birthdays = require('./birthdays');
 
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
-const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
 const UPCOMING_DAYS = 60;
 const TIMEZONES = [
   ['🇬🇧 Europe/London', 'Europe/London'],

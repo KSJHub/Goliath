@@ -9,6 +9,7 @@ const {
 const { resolveToken, getRequiredTokenEnvName } = require('../../../config/tokenResolver');
 
 const router = express.Router();
+const { listDashboardGuilds } = require('../../middleware/dashboardAccess');
 
 const DISCORD_API = 'https://discord.com/api/v10';
 const GUILD_CACHE_TTL_MS = 15 * 1000;
@@ -85,7 +86,7 @@ function canAccessGuild(guild, botGuildIds, userId) {
   if (!botGuildIds.has(guildId)) return false;
   if (isBotOwnerUser(userId)) return true;
   if (hasManageGuildPermission(guild)) return true;
-  return isConfiguredDevGuild(guildId);
+  return false;
 }
 
 function buildGuildIconUrl(guild) {
@@ -327,20 +328,7 @@ router.get('/guilds', async (req, res) => {
   try {
     const accessToken = getSessionAccessToken(req);
     if (!req.session?.user || !accessToken) return res.status(401).json({ error: 'Not authenticated' });
-    const userId = req.session.user.id;
-    const cacheKey = `guilds:${userId}`;
-    const cachedGuilds = getCache(guildCache, cacheKey);
-    if (cachedGuilds) return res.json(cachedGuilds);
-    const [userGuilds, botGuilds] = await Promise.all([fetchUserGuilds(accessToken), fetchBotGuilds(req)]);
-    const botGuildIds = new Set(Array.isArray(botGuilds) ? botGuilds.map((guild) => String(guild.id)) : []);
-    if (isBotOwnerUser(userId)) {
-      const ownerGuilds = Array.isArray(botGuilds) ? botGuilds.map(buildGuildPayload).sort((a, b) => a.name.localeCompare(b.name)) : [];
-      setCache(guildCache, cacheKey, ownerGuilds, GUILD_CACHE_TTL_MS);
-      return res.json(ownerGuilds);
-    }
-    const mutualGuilds = Array.isArray(userGuilds) ? userGuilds.filter((guild) => canAccessGuild(guild, botGuildIds, userId)).map(buildGuildPayload).sort((a, b) => a.name.localeCompare(b.name)) : [];
-    setCache(guildCache, cacheKey, mutualGuilds, GUILD_CACHE_TTL_MS);
-    return res.json(mutualGuilds);
+    return res.json(await listDashboardGuilds(getDiscordClient(req), req.session.user.id));
   } catch (error) {
     console.error('❌ Failed to fetch guilds:', error);
     return res.status(500).json({ error: 'Failed to fetch guilds' });
@@ -477,3 +465,4 @@ router.get('/:guildId/emojis', async (req, res) => {
 });
 
 module.exports = router;
+

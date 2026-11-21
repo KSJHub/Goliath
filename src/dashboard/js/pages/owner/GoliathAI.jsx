@@ -1,0 +1,1185 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { api } from '../../services/apiClient.js';
+
+const panel = { border: '1px solid rgba(148,163,184,.24)', borderRadius: 16, background: 'rgba(15,23,42,.65)', padding: 16 };
+const first = [{ role: 'assistant', content: 'Welcome to Goliath AI. This private DEV chat uses your local model when enabled. Responses are suggestions, not verified changes to Discord.' }];
+
+// Render only a small, safe subset of model Markdown as React text nodes.
+// No raw HTML, embedded images or executable links are accepted from the model.
+function renderAIInline(value) {
+  const parts = String(value).split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return <code key={index} style={{ background: 'rgba(148,163,184,.18)', padding: '1px 4px', borderRadius: 4 }}>{part.slice(1, -1)}</code>;
+    }
+    return <React.Fragment key={index}>{part}</React.Fragment>;
+  });
+}
+
+function AIReply({ content }) {
+  return <div style={{ display: 'grid', gap: 4 }}>
+    {String(content).split(/\r?\n/).map((line, index) => {
+      const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+      if (bullet) return <div key={index} style={{ paddingLeft: 16, textIndent: -12 }}>• {renderAIInline(bullet[1])}</div>;
+      if (!line.trim()) return <div key={index} style={{ height: 6 }} />;
+      return <div key={index}>{renderAIInline(line)}</div>;
+    })}
+  </div>;
+}
+export default function GoliathAI({ theme }) {
+  const [status, setStatus] = useState(null);
+  const [recovery, setRecovery] = useState(null);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [health, setHealth] = useState(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
+  const [messages, setMessages] = useState(first);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [guilds, setGuilds] = useState([]);
+  const [personalGuilds, setPersonalGuilds] = useState([]);
+  const [personalGuildsStatus, setPersonalGuildsStatus] = useState('loading');
+  const [guildFilter, setGuildFilter] = useState('all');
+  const [selectedGuild, setSelectedGuild] = useState('');
+  const [deployment,setDeployment]=useState(null);
+  const [deploymentBusy,setDeploymentBusy]=useState(false);
+  const [deploymentError,setDeploymentError]=useState('');
+  const [roleSelection,setRoleSelection]=useState({operational:'',display:''});
+  const [roleApproval,setRoleApproval]=useState(null);
+  const [roleResult,setRoleResult]=useState(null);
+  async function deployRoles(confirm=false){
+    const target=selectedGuild;
+    if(deploymentBusy||!target.startsWith('DEV:')||(confirm&&(!roleApproval||roleApproval.guildId!==target.slice(4)||roleApproval.blockers.length||!roleApproval.steps.length)))return;
+    setDeploymentBusy(true);setDeploymentError('');setRoleApproval(null);setRoleResult(null);setSyncApproval(null);setSyncAcknowledged(false);
+    try{
+      const base='/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4));
+      const result=await api.request(base+'/roles/'+(confirm?'confirm':'preview'),{method:'POST',body:JSON.stringify(confirm?{token:roleApproval.token,confirm:true}:{selected:roleSelection})});
+      if(selectedGuildRef.current===target){if(confirm)setRoleResult({...result,guildId:target.slice(4)});else setRoleApproval(result);}
+      if(confirm){
+        const report=await api.request(base);
+        if(selectedGuildRef.current!==target)return;
+        setDeployment(report);
+        if(result.status==='verified'&&!report.recoveryRequired&&report.sync?.steps?.length){
+          const next=await api.request(base+'/sync/preview',{method:'POST',body:JSON.stringify({})});
+          if(selectedGuildRef.current===target)setSyncApproval(next);
+        }
+      }
+    }catch(error){if(selectedGuildRef.current===target){setDeploymentError(error.message);if(confirm)setDeployment(null);}}
+    finally{setDeploymentBusy(false);}
+  }
+  const [syncApproval,setSyncApproval]=useState(null);
+  const [syncResult,setSyncResult]=useState(null);
+  const [syncAcknowledged,setSyncAcknowledged]=useState(false);
+  async function prepareSync(full=false){
+    const target=selectedGuild;
+    if(!target.startsWith('DEV:')||deploymentBusy)return;
+    setDeploymentBusy(true);setSyncApproval(null);setRoleApproval(null);setSyncResult(null);setSyncAcknowledged(false);setDeploymentError('');
+    try{
+      const result=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4))+'/sync/preview',{method:'POST',body:JSON.stringify({full:full===true})});
+      if(selectedGuildRef.current===target)setSyncApproval(result);
+    }catch(error){if(selectedGuildRef.current===target)setDeploymentError(error.message);}
+    finally{setDeploymentBusy(false);}
+  }
+  async function confirmSync(){
+    const target=selectedGuild;
+    if(deploymentBusy||!syncAcknowledged||!syncApproval?.steps?.length||target!=='DEV:'+syncApproval.guildId)return;
+    const token=syncApproval.token;
+    setDeploymentBusy(true);setSyncApproval(null);setSyncAcknowledged(false);setDeploymentError('');
+    try{
+      const base='/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4));
+      const result=await api.request(base+'/sync/confirm',{method:'POST',body:JSON.stringify({token,confirm:true})});
+      if(selectedGuildRef.current===target)setSyncResult({...result,guildId:target.slice(4)});
+      const report=await api.request(base);
+      if(selectedGuildRef.current===target)setDeployment(report);
+    }catch(error){if(selectedGuildRef.current===target){setDeployment(null);setDeploymentError(error.message+' Refresh and inspect recovery before retrying.');}}
+    finally{setDeploymentBusy(false);}
+  }
+  async function scanDeployment(){
+    const target=selectedGuild;
+    if(!target.startsWith('DEV:'))return;
+    setDeploymentBusy(true);setDeployment(null);setDeploymentError('');setRoleApproval(null);setSyncApproval(null);setSyncAcknowledged(false);
+    try{
+      const report=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4)));
+      if(selectedGuildRef.current===target)setDeployment(report);
+    }catch(error){if(selectedGuildRef.current===target)setDeploymentError(error?.message||'Deployment scan failed.');}
+    finally{setDeploymentBusy(false);}
+  }
+
+  const [environments, setEnvironments] = useState([]);
+  const [audit, setAudit] = useState(null);
+  const [auditing, setAuditing] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [planning, setPlanning] = useState(false);
+  const [blueprintText, setBlueprintText] = useState('');
+  const [blueprintPlan, setBlueprintPlan] = useState(null);
+  const [blueprintBusy, setBlueprintBusy] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newChannelLines, setNewChannelLines] = useState('');
+  const [targetCategoryIndex, setTargetCategoryIndex] = useState('0');
+  const [newSingleChannel, setNewSingleChannel] = useState('');
+  const [newSingleType, setNewSingleType] = useState('text');
+  const [aiLayoutRequest, setAiLayoutRequest] = useState('');
+  const [aiDraftBusy, setAiDraftBusy] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState([]);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
+  const [readiness, setReadiness] = useState(null);
+  const [readinessBusy, setReadinessBusy] = useState(false);
+  const [operationReviews, setOperationReviews] = useState(null);
+  const [operationReviewBusy, setOperationReviewBusy] = useState(false);
+  const [renameCandidate, setRenameCandidate] = useState(null);
+  const [renameConfirmation, setRenameConfirmation] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameJournal, setRenameJournal] = useState([]);
+  const [renameJournalBusy, setRenameJournalBusy] = useState(false);
+  const recoveryRequestRef = useRef(0);
+  const refreshRecovery = () => {
+    const requestId = ++recoveryRequestRef.current;
+    return api.request('/api/owner/ai/permission-recovery')
+      .then(value => {
+        if (requestId !== recoveryRequestRef.current) return;
+        if (!value || !Array.isArray(value.entries) || !value.entries.every(item =>
+          ['role', 'channel'].includes(item.kind) && ['pending', 'verified'].includes(item.status))) {
+          throw new Error('Invalid permission recovery response.');
+        }
+        setRecovery(value);
+        setRecoveryError('');
+      })
+      .catch(error => {
+        if (requestId !== recoveryRequestRef.current) return;
+        setRecovery(null);
+        setRecoveryError(error.message);
+      });
+  };
+  useEffect(() => {
+    refreshRecovery();
+    const interval = setInterval(refreshRecovery, 30000);
+    return () => { clearInterval(interval); recoveryRequestRef.current += 1; };
+  }, []);
+  const bottom = useRef(null);
+  const selectedGuildRef = useRef(selectedGuild);
+  const blueprintRevisionRef = useRef(0);
+  const draftRefreshRevisionRef = useRef(0);
+  const guildRefreshRevisionRef = useRef(0);
+  selectedGuildRef.current = selectedGuild;
+  useEffect(() => {
+    let mounted = true;
+    api.request('/api/owner/ai/status').then((value) => { if (mounted) setStatus(value); })
+      .catch((err) => { if (mounted) setError(err.message); });
+    const initialDraftRefresh = ++draftRefreshRevisionRef.current;
+    api.request('/api/owner/ai/drafts').then(value => {
+      if (mounted && draftRefreshRevisionRef.current === initialDraftRefresh)
+        setSavedDrafts(value.drafts || []);
+    })
+      .catch(() => { /* The draft library is optional until DEV deployment is verified. */ });
+    const initialGuildRefresh = ++guildRefreshRevisionRef.current;
+    api.request('/api/owner/ai/guilds').then((value) => {
+      if (mounted && guildRefreshRevisionRef.current === initialGuildRefresh) {
+      setGuilds(value.guilds || []);
+      setPersonalGuilds(value.personalGuilds || []);
+      setPersonalGuildsStatus(value.personalGuildsStatus || 'unavailable');
+      setEnvironments(value.environments || []);
+      setSelectedGuild(value.guilds?.[0] ? (value.guilds[0].environment + ':' + value.guilds[0].id) :
+        value.personalGuilds?.[0] ? 'PERSONAL:' + value.personalGuilds[0].id : '');
+    } })
+      .catch((err) => {
+        if (mounted && guildRefreshRevisionRef.current === initialGuildRefresh) setError(err.message);
+      });
+    return () => { mounted = false; };
+  }, []);
+  useEffect(() => { bottom.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' }); }, [messages]);
+  const checkAIHealth = async () => {
+    if (checkingHealth) return;
+    setCheckingHealth(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/health');
+      setHealth(result);
+    } catch (err) { setError(err.message); }
+    finally { setCheckingHealth(false); }
+  };
+  const refreshGuilds = async () => {
+    const revision = ++guildRefreshRevisionRef.current;
+    setError('');
+    try {
+      const payload = await api.request('/api/owner/ai/guilds');
+      if (guildRefreshRevisionRef.current !== revision) return;
+      const next = payload.guilds || [];
+      setGuilds(next);
+      setPersonalGuilds(payload.personalGuilds || []);
+      setPersonalGuildsStatus(payload.personalGuildsStatus || 'unavailable');
+      setEnvironments(payload.environments || []);
+      // Refresh can remove a guild or change its environment availability.
+      // Never retain a stale selected server or its previous audit/plan.
+      setSelectedGuild(previous => {
+        const valid = [
+          ...next.map(guild => guild.environment + ':' + guild.id),
+          ...(payload.personalGuilds || []).map(guild => 'PERSONAL:' + guild.id)
+        ];
+        return valid.includes(previous) ? previous : (valid[0] || '');
+      });
+      setAudit(null); setPreview(null); replaceBlueprintText(''); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
+    } catch (err) {
+      if (guildRefreshRevisionRef.current === revision) setError(err.message);
+    }
+  };
+  const connectedOptions = guilds.map(guild => ({
+    value: guild.environment + ':' + guild.id,
+    label: guild.environment + ' — ' + guild.name + (guild.auditAvailable ? ' · Audit ready' : ' · Audit pending'),
+    id: guild.id
+  }));
+  const botStatusUnverified = environments.some(item => item.botStatus !== 'verified');
+  const personalOptions = personalGuilds.map(guild => {
+    const linked = guilds.find(item => item.id === guild.id);
+    return {
+      value: linked ? linked.environment + ':' + linked.id : 'PERSONAL:' + guild.id,
+      label: guild.name + (linked ? ' (Goliath ' + linked.environment +
+        (linked.auditAvailable ? ', audit ready)' : ', audit pending)') :
+        botStatusUnverified ? ' (Goliath presence unverified)' : ' (Goliath not detected)') +
+        (guild.owner ? ' · Owner' : ' · Manager'),
+      id: guild.id
+    };
+  });
+  const availableOptions = guildFilter === 'connected' ? connectedOptions
+    : guildFilter === 'mine' ? personalOptions
+    : [...connectedOptions, ...personalOptions.filter(item => !connectedOptions.some(connected => connected.id === item.id))];
+  const selectedConnected = guilds.find(guild => guild.environment + ':' + guild.id === selectedGuild);
+  useEffect(() => {
+    if (availableOptions.some(item => item.value === selectedGuild)) return;
+    setSelectedGuild(availableOptions[0]?.value || '');
+    // Filter-driven selection changes must clear the same server-specific
+    // editor state as an explicit server switch.
+    setAudit(null); setPreview(null); replaceBlueprintText('');
+    setDraftNotice(''); setError('');
+  }, [guildFilter, guilds, personalGuilds, selectedGuild]);
+  const runAudit = async () => {
+    if (!selectedConnected?.auditAvailable || auditing) return;
+    const requestedGuild = selectedGuild;
+    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null);
+    try {
+      const [environment, guildId] = selectedGuild.split(':');
+      if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
+      const result = await api.request('/api/owner/ai/audit/' + environment + '/' + guildId);
+      // Ignore late responses after the owner switches servers or refreshes
+      // the inventory; never display an audit under the wrong guild.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result?.environment !== environment || String(result?.guild?.id || '') !== guildId ||
+          result?.readOnly !== true) throw new Error('Audit response did not match the selected server.');
+      setAudit(result);
+    }
+    catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
+    finally { setAuditing(false); }
+  };
+  const buildPlan = async () => {
+    if (!audit || planning) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
+    setPlanning(true); setError(''); setPreview(null);
+    try {
+      const environment = String(audit.environment);
+      const guildId = String(audit.guild.id);
+      if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId)) throw new Error('Invalid selected server.');
+      const result = await api.request('/api/owner/ai/plan/' + environment + '/' + guildId);
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.environment !== environment || String(result.guild?.id || '') !== guildId ||
+          result.executable !== false) throw new Error('Preview validation failed.');
+      setPreview(result);
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
+    finally { setPlanning(false); }
+  };
+  // Changing editor content invalidates previews and saved-plan diagnostics immediately.
+  const replaceBlueprintText = value => {
+    // Invalidate any in-flight preview as soon as the editor changes.
+    blueprintRevisionRef.current += 1;
+    setBlueprintText(value);
+    setBlueprintPlan(null);
+    setReadiness(null);
+    setOperationReviews(null);
+  };
+  const loadBlueprint = async () => {
+    if (!audit || blueprintBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
+    setBlueprintBusy(true); setError(''); setBlueprintPlan(null);
+    const editorRevision = blueprintRevisionRef.current;
+    try {
+      const environment = String(audit.environment);
+      const guildId = String(audit.guild.id);
+      const result = await api.request('/api/owner/ai/blueprint/' + environment + '/' + guildId);
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
+      if (result.readOnly !== true || result.environment !== environment ||
+          String(result.guild?.id || '') !== guildId) throw new Error('Blueprint target mismatch.');
+      replaceBlueprintText(JSON.stringify(result.blueprint, null, 2));
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    }
+    finally { setBlueprintBusy(false); }
+  };
+  const generateLayoutDraft = async () => {
+    if (!status?.enabled || !aiLayoutRequest.trim() || aiDraftBusy) return;
+    const editorRevision = blueprintRevisionRef.current;
+    const requestedGuild = selectedGuildRef.current;
+    setAiDraftBusy(true); setError(''); setBlueprintPlan(null);
+    try {
+      const result = await api.request('/api/owner/ai/blueprint/ai-draft', {
+        method: 'POST', body: JSON.stringify({ description: aiLayoutRequest.trim() })
+      });
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
+      if (!result.readOnly || result.executable !== false || !Array.isArray(result.categories)) throw new Error('AI draft verification failed.');
+      const raw = blueprintText.trim() ? JSON.parse(blueprintText) : { name: 'AI-assisted Discord rebuild', categories: [] };
+      if (!Array.isArray(raw.categories)) throw new Error('Invalid current blueprint.');
+      const existingNames = new Set(raw.categories.map(category => String(category.name || '').toLowerCase()));
+      let added = 0;
+      for (const category of result.categories) {
+        if (existingNames.has(category.name.toLowerCase())) continue;
+        existingNames.add(category.name.toLowerCase());
+        raw.categories.push(category); added += 1;
+      }
+      if (!added) throw new Error('The AI only suggested categories already in your blueprint. No changes were made.');
+      replaceBlueprintText(JSON.stringify(raw, null, 2));
+      setAiLayoutRequest('');
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    } finally { setAiDraftBusy(false); }
+  };
+  const categoriesForEditor = (() => {
+    try {
+      const parsed = JSON.parse(blueprintText);
+      return Array.isArray(parsed?.categories) ? parsed.categories : [];
+    } catch { return []; }
+  })();
+  const addChannelToExistingCategory = () => {
+    setError(''); setBlueprintPlan(null);
+    try {
+      const name = newSingleChannel.trim();
+      if (!name || name.length > 100) throw new Error('Enter a channel name of up to 100 characters.');
+      const parsed = JSON.parse(blueprintText);
+      const index = Number(targetCategoryIndex);
+      if (!Array.isArray(parsed.categories) || !Number.isInteger(index) || index < 0 ||
+          index >= parsed.categories.length) throw new Error('Select a valid category.');
+      const category = parsed.categories[index];
+      if (!Array.isArray(category.channels)) throw new Error('Selected category has an invalid channels list.');
+      if (category.channels.some(item => item.name === name && (item.type || 'text') === newSingleType)) {
+        throw new Error('A channel with that name and type is already in this category.');
+      }
+      category.channels.push({ name, type: newSingleType });
+      replaceBlueprintText(JSON.stringify(parsed, null, 2));
+      setNewSingleChannel('');
+    } catch (err) { setError(err.message); }
+  };
+  const addCategoryToBlueprint = () => {
+    setError(''); setBlueprintPlan(null);
+    try {
+      const name = newCategoryName.trim();
+      if (!name || name.length > 100) throw new Error('Enter a category name of up to 100 characters.');
+      const raw = blueprintText.trim() ? JSON.parse(blueprintText) : { name: 'Discord rebuild', categories: [] };
+      if (!Array.isArray(raw.categories)) throw new Error('Blueprint categories must be an array.');
+      if (raw.categories.some(category => category.name?.toLowerCase() === name.toLowerCase())) throw new Error('That category is already in your blueprint.');
+      const channels = newChannelLines.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+        const parts = line.split('|').map(part => part.trim());
+        if (parts.length > 2) throw new Error('Use one channel per line in the format: name | type.');
+        const [channelName, channelType = 'text'] = parts;
+        if (!channelName || channelName.length > 100) throw new Error('Channel names must be 1–100 characters.');
+        if (!['text', 'voice', 'forum', 'announcement', 'stage'].includes(channelType)) throw new Error('Unsupported channel type: ' + channelType);
+        return { name: channelName, type: channelType };
+      });
+      raw.categories.push({ name, channels });
+      replaceBlueprintText(JSON.stringify(raw, null, 2));
+      setNewCategoryName(''); setNewChannelLines('');
+    } catch (err) { setError(err.message); }
+  };
+  const importBlueprint = async (file) => {
+    if (!file) return;
+    const editorRevision = blueprintRevisionRef.current;
+    const requestedGuild = selectedGuildRef.current;
+    setError(''); setBlueprintPlan(null);
+    try {
+      if (file.size > 256000) throw new Error('Blueprint file is too large (256 KB maximum).');
+      const raw = JSON.parse(await file.text());
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
+      if (!raw || !Array.isArray(raw.categories)) throw new Error('Selected file is not a valid Goliath blueprint.');
+      replaceBlueprintText(JSON.stringify(raw, null, 2));
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    }
+  };
+  const exportBlueprint = () => {
+    setError('');
+    try {
+      const parsed = JSON.parse(blueprintText);
+      if (!parsed || !Array.isArray(parsed.categories)) throw new Error('A valid blueprint is required before export.');
+      const json = JSON.stringify(parsed, null, 2);
+      const file = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'goliath-ai-blueprint-' + (audit?.environment || 'dev').toLowerCase() + '-' + (audit?.guild?.id || 'guild') + '.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) { setError(err.message); }
+  };
+  const previewBlueprint = async () => {
+    if (!audit || !blueprintText.trim() || blueprintBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
+    setBlueprintBusy(true); setBlueprintPlan(null); setError('');
+    const editorRevision = blueprintRevisionRef.current;
+    try {
+      let blueprint;
+      try { blueprint = JSON.parse(blueprintText); } catch { throw new Error('Blueprint must be valid JSON.'); }
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const result = await api.request('/api/owner/ai/blueprint/' + environment + '/' + guildId + '/preview', {
+        method: 'POST', body: JSON.stringify({ blueprint })
+      });
+      // A server switch or inventory refresh may finish while the preview is
+      // pending. Never attach a late preview to a different selected server.
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
+      if (result.environment !== environment || String(result.guild?.id || '') !== guildId ||
+          result.executable !== false) throw new Error('Preview target verification failed.');
+      setBlueprintPlan(result);
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    }
+    finally { setBlueprintBusy(false); }
+  };
+  const refreshDrafts = async () => {
+    const revision = ++draftRefreshRevisionRef.current;
+    const value = await api.request('/api/owner/ai/drafts');
+    // A slower earlier fetch must not replace a newer saved-draft library.
+    if (draftRefreshRevisionRef.current === revision)
+      setSavedDrafts(value.drafts || []);
+  };
+  const saveCurrentDraft = async () => {
+    if (!audit || !blueprintText.trim() || draftBusy) return;
+    const environment = String(audit.environment);
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    const editorRevision = blueprintRevisionRef.current;
+    setDraftBusy(true); setDraftNotice(''); setError('');
+    try {
+      const blueprint = JSON.parse(blueprintText);
+      const title = String(blueprint?.name || audit.guild.name + ' rebuild');
+      const result = await api.request('/api/owner/ai/drafts', {
+        method: 'POST',
+        body: JSON.stringify({ environment, guildId,
+          blueprint, title, auditDigest: blueprintPlan?.auditDigest || undefined })
+      });
+      if (result.draft?.environment !== environment || String(result.draft?.guildId || '') !== guildId)
+        throw new Error('Saved draft target mismatch.');
+      await refreshDrafts();
+      // Saving has already happened server-side. Avoid a misleading notice
+      // when the owner has since switched guilds or edited the blueprint.
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
+      setDraftNotice('Saved a private draft. It cannot modify the Discord server.');
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setDraftBusy(false); }
+  };
+  const openSavedDraft = async (id) => {
+    if (!audit || draftBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
+    const editorRevision = blueprintRevisionRef.current;
+    setDraftBusy(true); setError(''); setDraftNotice('');
+    try {
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id));
+      // The selected server can change while the draft is loading.
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
+      const item = result.draft;
+      if (!item || item.environment !== environment || String(item.guildId) !== guildId)
+        throw new Error('Select and scan the draft’s original environment and server before opening it.');
+      replaceBlueprintText(JSON.stringify(item.blueprint, null, 2));
+      setBlueprintPlan(null);
+      setDraftNotice('Draft loaded. Run a fresh preview before relying on any proposed change.');
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    }
+    finally { setDraftBusy(false); }
+  };
+  const reviewSavedDraft = async (id) => {
+    if (!audit || draftBusy) return;
+    const environment = String(audit.environment);
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    setDraftBusy(true); setError(''); setDraftNotice('');
+    try {
+      const item = savedDrafts.find(value => value.id === id);
+      if (!item || item.environment !== environment || String(item.guildId) !== guildId ||
+          selectedGuildRef.current !== requestedGuild)
+        throw new Error('Select the saved draft’s original server before reviewing it.');
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/review', {
+        method: 'POST', body: JSON.stringify({})
+      });
+      // The review endpoint returns the updated saved draft, not execution flags.
+      // Validate its identity before showing a review acknowledgement.
+      if (String(result.draft?.id || '') !== String(id) ||
+          result.draft?.environment !== environment ||
+          String(result.draft?.guildId || '') !== guildId)
+        throw new Error('Reviewed draft target mismatch.');
+      await refreshDrafts();
+      if (selectedGuildRef.current !== requestedGuild) return;
+      setDraftNotice('Review recorded. This does not authorise execution.');
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setDraftBusy(false); }
+  };
+  const checkDraftReadiness = async (id) => {
+    if (!audit || readinessBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
+    setReadinessBusy(true); setError(''); setReadiness(null); setOperationReviews(null);
+    try {
+      const item = savedDrafts.find(value => value.id === id);
+      if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
+        throw new Error('Select and scan the exact environment and guild for this saved draft.');
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/readiness');
+      // A late response must not show readiness for a previously selected guild.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.draftId !== id || result.environment !== environment ||
+          String(result.guildId) !== guildId || result.canExecute !== false || result.executable !== false)
+        throw new Error('Execution readiness target validation failed.');
+      setReadiness(result);
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
+    finally { setReadinessBusy(false); }
+  };
+  const refreshRenameJournal = async () => {
+    if (renameJournalBusy) return;
+    setRenameJournalBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/category-rename-journal');
+      if (!Array.isArray(result.entries)) throw new Error('Invalid rename history response.');
+      setRenameJournal(result.entries);
+      const latestStatus = await api.request('/api/owner/ai/status');
+      setStatus(latestStatus);
+    } catch (err) { setError(err.message); }
+    finally { setRenameJournalBusy(false); }
+  };
+  const reconcileRename = async (entry) => {
+    if (renameJournalBusy || entry.status !== 'pending' ||
+        !window.confirm('Verify the current DEV Discord category name? This will not rename anything.')) return;
+    setRenameJournalBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/category-rename-journal/' +
+        encodeURIComponent(entry.id) + '/reconcile', {
+        method: 'POST', body: JSON.stringify({ confirmation: 'VERIFY DEV RENAME STATE' })
+      });
+      if (!result.reconciled || result.guildId !== entry.guildId ||
+          result.categoryId !== entry.categoryId) throw new Error('Recovery response mismatch.');
+      const history = await api.request('/api/owner/ai/category-rename-journal');
+      if (!Array.isArray(history.entries)) throw new Error('Invalid refreshed history.');
+      setRenameJournal(history.entries);
+      const latestStatus = await api.request('/api/owner/ai/status');
+      setStatus(latestStatus);
+      setRenameCandidate(null);
+      setRenameConfirmation('');
+      setAudit(null); setReadiness(null); setOperationReviews(null);
+      setDraftNotice('DEV rename reconciliation: ' + result.status + ' — ' + result.currentName);
+    } catch (err) { setError(err.message); }
+    finally { setRenameJournalBusy(false); }
+  };
+  const inspectRenameCandidate = async (id) => {
+    if (!audit || audit.environment !== 'DEV' || renameBusy) return;
+    const selected = String(audit.environment) + ':' + String(audit.guild.id);
+    setRenameBusy(true); setRenameCandidate(null); setRenameConfirmation(''); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/execution-candidates');
+      if (selectedGuildRef.current !== selected) return;
+      if (result.environment !== 'DEV' || result.guildId !== String(audit.guild.id) ||
+          result.draftId !== id || result.canExecute !== false ||
+          result.candidates?.length !== 1 || result.candidates[0]?.kind !== 'rename_category' ||
+          !result.candidates[0]?.eligibleForFutureApproval)
+        throw new Error('Only a reviewed, single-operation DEV category rename can be prepared.');
+      setRenameCandidate({ draftId: id, guildId: result.guildId, candidate: result.candidates[0] });
+    } catch (err) {
+      if (selectedGuildRef.current === selected) setError(err.message);
+    } finally { setRenameBusy(false); }
+  };
+  const applyRenameCandidate = async () => {
+    const candidate = renameCandidate;
+    if (!candidate || renameBusy || renameConfirmation !== 'APPLY DEV CATEGORY RENAME' ||
+        selectedGuildRef.current !== 'DEV:' + candidate.guildId) return;
+    setRenameBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' +
+        encodeURIComponent(candidate.draftId) + '/apply-category-rename', {
+        method: 'POST', body: JSON.stringify({
+          sequence: candidate.candidate.sequence,
+          operationKey: candidate.candidate.operationKey,
+          confirmation: renameConfirmation
+        })
+      });
+      if (selectedGuildRef.current !== 'DEV:' + candidate.guildId) return;
+      if (result.applied !== true || result.environment !== 'DEV' ||
+          result.guildId !== candidate.guildId ||
+          result.categoryId !== candidate.candidate.target?.id)
+        throw new Error('Discord rename response could not be verified.');
+      setDraftNotice('DEV category renamed and verified: ' + result.previousName + ' → ' + result.currentName);
+      setRenameCandidate(null); setRenameConfirmation('');
+      setAudit(null); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
+    } catch (err) {
+      if (selectedGuildRef.current === 'DEV:' + candidate.guildId) setError(err.message);
+    } finally { setRenameBusy(false); }
+  };
+  const inspectOperationReviews = async (id) => {
+    if (!audit || operationReviewBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
+    setOperationReviewBusy(true); setError(''); setOperationReviews(null); setReadiness(null);
+    try {
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
+      // Ignore review data returned after the owner has switched guilds.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.draftId !== id || result.environment !== environment ||
+          String(result.guildId) !== guildId || result.canExecute !== false ||
+          result.executable !== false || !Array.isArray(result.operations) ||
+          !Array.isArray(result.events))
+        throw new Error('Review target mismatch or unsafe review response.');
+      setOperationReviews(result);
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
+    finally { setOperationReviewBusy(false); }
+  };
+  const recordOperationReview = async (id, sequence, decision) => {
+    if (operationReviewBusy || !audit) return;
+    const environment = audit.environment;
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    const currentReviews = operationReviews;
+    if (selectedGuildRef.current !== requestedGuild ||
+        currentReviews?.draftId !== id || currentReviews?.environment !== environment ||
+        String(currentReviews?.guildId) !== guildId || currentReviews?.canExecute !== false) {
+      setError('Load operation reviews for the selected server before recording a decision.');
+      return;
+    }
+    setOperationReviewBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews', {
+        method: 'POST', body: JSON.stringify({ sequence, decision })
+      });
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.canExecute !== false || result.executable !== false) throw new Error('Review response unsafe.');
+      const latest = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (latest.draftId !== id || latest.environment !== environment ||
+          String(latest.guildId) !== guildId || latest.canExecute !== false ||
+          latest.executable !== false) throw new Error('Refreshed review target mismatch.');
+      setOperationReviews(latest);
+      setDraftNotice(result.notice);
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setOperationReviewBusy(false); }
+  };
+  const removeSavedDraft = async (id) => {
+    if (!audit || draftBusy) return;
+    const environment = String(audit.environment);
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    const item = savedDrafts.find(value => value.id === id);
+    if (!item || item.environment !== environment || String(item.guildId) !== guildId ||
+        selectedGuildRef.current !== requestedGuild) {
+      setError('Select the saved draft’s original server before deleting it.');
+      return;
+    }
+    if (!window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
+    if (selectedGuildRef.current !== requestedGuild) return;
+    setDraftBusy(true); setError(''); setDraftNotice('');
+    try {
+      await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id), { method: 'DELETE' });
+      await refreshDrafts();
+      if (selectedGuildRef.current !== requestedGuild) return;
+      setDraftNotice('Saved draft deleted; Discord was not changed.');
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setDraftBusy(false); }
+  };
+  const send = async (event) => {
+    event.preventDefault();
+    const content = draft.trim();
+    if (!content || busy || !status?.enabled) return;
+    const next = [...messages.filter((item, index) => index !== 0 || item.role !== 'assistant'), { role: 'user', content }];
+    const history = next.slice(-16);
+    // DEV guilds can be fetched fresh and read-only by the authenticated owner
+    // without requiring a separate scan button. Never auto-query unconnected environments.
+    const selected = guilds.find(guild => guild.environment + ':' + guild.id === selectedGuild);
+    const context = selected?.auditAvailable
+      ? { environment: selected.environment, guildId: selected.id }
+      : audit && selectedGuild === audit.environment + ':' + audit.guild?.id
+        ? { environment: audit.environment, guildId: audit.guild.id }
+        : null;
+    setMessages(next); setDraft(''); setBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/chat', { method: 'POST',
+        body: JSON.stringify({ messages: history, ...(context ? { guildContext: context } : {}) }) });
+      setMessages((items) => [...items, { role: 'assistant', content: result.reply }]);
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
+  return <section style={{ display: 'grid', gap: 16, maxWidth: 980, margin: '0 auto', color: theme?.cardText || '#e5e7eb' }}>
+
+    <header style={panel}>
+      <h1 style={{ margin: '0 0 8px', fontSize: 28 }}>Goliath AI</h1>
+      <p style={{ margin: 0, color: theme?.mutedText || '#94a3b8' }}>Developer-only · Global Discord auditing across DEV, BETA and PRODUCTION · Free local inference</p>
+      <p role="status" style={{ marginBottom: 0, color: status?.enabled ? '#86efac' : '#fbbf24' }}>{status ? (status.enabled ? 'Local AI enabled' : 'Local AI not enabled') : 'Checking local AI…'}</p>
+      {status?.notice && <p style={{ color: theme?.mutedText || '#94a3b8' }}>{status.notice}</p>}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+        <button type="button" onClick={checkAIHealth} disabled={checkingHealth}
+          style={{ padding: '9px 13px', color: '#e5e7eb', background: '#1e293b', border: '1px solid #64748b', borderRadius: 10 }}>
+          {checkingHealth ? 'Checking model…' : 'Check local AI connection'}
+        </button>
+        {health && <span role="status" style={{ color: health.ready ? '#86efac' : '#fbbf24' }}>
+          {health.state === 'ready' ? 'Ready to test' : 'Not ready'} · {health.state}
+        </span>}
+      </div>
+      {health && <p style={{ fontSize: 13, color: theme?.mutedText || '#94a3b8' }}>{health.reason}{health.models?.length ? ' Loaded model(s): ' + health.models.join(', ') : ''}</p>}
+    </header>
+    <details style={panel} aria-label="Permission recovery status">
+      <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+        Permission Management · DEV recovery
+        {recoveryError ? ' · Status unavailable' : !recovery ? ' · Loading…' :
+          ' · ' + recovery.entries.filter(item => item.status === 'pending').length + ' pending / ' +
+          recovery.entries.filter(item => item.status === 'verified').length + ' recoverable'}
+      </summary>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+        <button type="button" onClick={refreshRecovery}>Refresh status</button>
+        {recovery?.checkedAt && <span style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Last checked: {new Date(recovery.checkedAt).toLocaleTimeString()}</span>}
+      </div>
+      <p style={{ margin: 0, fontSize: 13 }}>Read-only status from the same recovery journal as Discord /owner. Restore or reconcile permissions in Discord.</p>
+      {recoveryError && <p role="alert" style={{ color: '#fca5a5', margin: 0 }}>{recoveryError}</p>}
+      {!recoveryError && !recovery && <p style={{ margin: 0 }}>Loading recovery status…</p>}
+      {recovery && (recovery.entries.length === 0
+        ? <p style={{ margin: 0 }}>No active recovery records for your owner account.</p>
+        : recovery.entries.map((item, index) => <div key={item.kind + item.roleId + (item.channelId || '') + index} style={{ borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 8 }}>
+            <strong>{item.kind === 'role' ? 'Role' : 'Channel'} · {item.status === 'pending' ? 'Reconciliation required' : 'Recovery available'}</strong>
+            <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>Server: {item.guildId} · Role: {item.roleId}{item.channelId ? ' · Channel: ' + item.channelId : ''}</div>
+            <div style={{ fontSize: 12 }}>{item.status === 'pending' ? 'Pending until reconciled' : 'Expires: ' + new Date(item.expiresAt).toLocaleString()}</div>
+          </div>))}
+    </details>
+
+    {selectedGuild.startsWith('DEV:') && <section style={panel}>
+      <h2>Goliath Deployment Centre</h2>
+      <p>Scan the selected DEV guild using the same permission template as Discord. Guided installation: scan, select roles, confirm role deployment, then review and confirm Bulk Sync. Existing installations can use Bulk Sync directly.</p>
+      <button type="button" disabled={deploymentBusy} onClick={scanDeployment}>{deploymentBusy?'Scanning…':'Scan deployment permissions'}</button>
+      {deploymentError && <p role="alert">{deploymentError}</p>}
+      {deployment && selectedGuild==='DEV:'+deployment.guildId && <div>
+        <p>Channels and categories: {deployment.channelCount} · Permission gaps: {deployment.gaps.length}</p>
+        <p>Active groups: {deployment.profile.groups.join(', ')}</p>
+        <p>Missing server permissions: {deployment.missing.join(', ')||'None'}</p>
+        {deployment.optionalPermissions?.length>0&&<details><summary>Optional feature-specific permissions</summary><ul>{deployment.optionalPermissions.map(item=><li key={item.permission}>{item.permission} ({item.modules.join(', ')}): {item.guidance}</li>)}</ul></details>}
+        <p>Assigned roles: {deployment.assigned.map(role=>role.name).join(', ')||'None'}</p>
+        <p>Manageable roles: {deployment.candidates.length}</p>
+        <details>
+          <summary>Available existing roles</summary>
+          <ul>{deployment.candidates.map(role=><li key={role.id}>{role.name} — {role.hoist?'Visible display role':'Unhoisted operational role'} (ID: {role.id})</li>)}</ul>
+        </details>
+        {deployment.recoveryRequired && <p role="alert">Unresolved deployment transaction. Review recovery in Discord /owner before applying further changes.</p>}
+        {deployment.sync && <details>
+          <summary>Bulk Sync preview — {deployment.sync.steps.length} changes, {deployment.sync.blocked.length} skipped</summary>
+          <p>Only Goliath member overwrites are changed by this plan. Private channels may be included. Synced children inherit category changes.</p>
+          {deployment.sync.steps.map(step=><div key={step.channelId} style={{padding:'8px 0',overflowWrap:'anywhere'}}>
+            <strong>{step.channelId}</strong>: {step.grants.join(', ')}
+            {step.inheritedChildren?.length>0 && <details><summary>{step.inheritedChildren.length} inherited channels</summary><ul>{step.inheritedChildren.map(id=><li key={id}>{id}</li>)}</ul></details>}
+          </div>)}
+          {deployment.sync.blocked.length>0 && <details><summary>Skipped channel IDs</summary><ul>{deployment.sync.blocked.map(id=><li key={id}>{id}</li>)}</ul></details>}
+        </details>}
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired} onClick={()=>prepareSync(false)}>Smart Sync</button>
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired} onClick={()=>prepareSync(true)}>Full Template Sync</button>
+        {syncApproval && selectedGuild==='DEV:'+syncApproval.guildId && <div>
+          <h3>Confirm fresh Sync plan</h3>
+          <p>{syncApproval.steps.length} overwrite changes; {syncApproval.blocked.length} skipped. Approval expires after ten minutes.</p>
+          <ul>{syncApproval.steps.map(step=><li key={step.channelId}>{step.channelId}: {step.grants.join(', ')}{step.inheritedChildren.length>0 && <ul>{step.inheritedChildren.map(id=><li key={id}>Inherited: {id}</li>)}</ul>}</li>)}</ul>
+          <label><input type="checkbox" checked={syncAcknowledged} onChange={event=>setSyncAcknowledged(event.target.checked)} /> I approve access for Goliath to all listed channels, including private and inherited channels.</label>
+          <button type="button" disabled={deploymentBusy||!syncAcknowledged||!syncApproval.steps.length} onClick={confirmSync}>Confirm Bulk Sync</button>
+          <button type="button" disabled={deploymentBusy} onClick={()=>{setSyncApproval(null);setSyncAcknowledged(false);}}>Cancel</button>
+        </div>}
+        {syncResult && selectedGuild==='DEV:'+syncResult.guildId && <p role="status">{syncResult.status==='verified'?'Verified '+syncResult.changed+' changes.':'Sync stopped; inspect recovery.'} Transaction: {syncResult.transactionId}</p>}
+        {deployment.hierarchy && <div>
+          <h3>Role hierarchy</h3>
+          <p>Current highest Goliath role: {deployment.hierarchy.highestBotRole} (position {deployment.hierarchy.highestBotPosition}).</p>
+          <p>New dedicated operational roles are placed below Goliath's current highest role when possible. To manage higher roles, the server owner must move Goliath's operational role above those roles in Server Settings → Roles. Keep the operational role unhoisted and the separate display role hoisted. Existing shared roles are never repositioned.</p>
+        </div>}
+        <h3>Deploy Goliath roles</h3>
+        <p>Choose separate operational and display roles. Existing role permissions will not be changed. Owner intervention may be needed for hierarchy.</p>
+        {['operational','display'].map(kind=><label key={kind} style={{display:'block',margin:'8px 0'}}>{kind==='operational'?'Operational role':'Visible display role'}
+          <select disabled={deploymentBusy} value={roleSelection[kind]} onChange={event=>{setRoleSelection(previous=>({...previous,[kind]:event.target.value}));setRoleApproval(null);}}>
+            <option value="">Select role</option><option value="create">Create recommended role</option>
+            {deployment.candidates.filter(role=>role.hoist===(kind==='display')).map(role=><option key={role.id} value={role.id}>{role.name}</option>)}
+          </select>
+        </label>)}
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired||!roleSelection.operational||!roleSelection.display||(roleSelection.operational!=='create'&&roleSelection.operational===roleSelection.display)} onClick={()=>deployRoles()}>Preview Role Deployment</button>
+        {roleApproval&&roleApproval.guildId===deployment.guildId&&<div>
+          <ul>{roleApproval.steps.map((step,index)=><li key={index}>{step.action==='create'?'Create and assign ':'Assign '}{step.name}{step.permissions?' — '+(step.permissions.join(', ')||'No guild permissions'):''}</li>)}</ul>
+          {roleApproval.blockers.map((blocker,index)=><p role="alert" key={index}>{blocker}</p>)}
+          <button type="button" disabled={deploymentBusy||roleApproval.blockers.length>0||!roleApproval.steps.length} onClick={()=>deployRoles(true)}>Confirm Role Deployment</button>
+          <button type="button" disabled={deploymentBusy} onClick={()=>setRoleApproval(null)}>Cancel</button>
+        </div>}
+        {roleResult&&roleResult.guildId===deployment.guildId&&<p role="status">{roleResult.status==='verified'?'Role deployment verified. Review the fresh Bulk Sync preview above if channel changes are required.':'Role deployment stopped. Inspect recovery.'} Transaction: {roleResult.transactionId}</p>}
+        <a href={'https://discord.com/channels/'+deployment.guildId} target="_blank" rel="noopener noreferrer">Open selected guild in Discord</a>
+        <p>Dashboard previews are read-only and do not constitute approval.</p>
+        <ul>{deployment.gaps.slice(0,50).map(gap=><li key={gap.id}>{gap.id}: {gap.missing.join(', ')} {gap.synced?'(category synced)':''} {!gap.editable?'(owner intervention needed)':''}</li>)}</ul>
+        {deployment.gaps.length>50 && <p>Showing first 50 gaps.</p>}
+        <a href={deployment.inviteUrl} target="_blank" rel="noopener noreferrer">Update DEV guild authorisation</a>
+      </div>}
+    </section>}
+    <section style={panel}>
+      <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
+      <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <select aria-label="Server source filter" value={guildFilter} onChange={event => setGuildFilter(event.target.value)}
+          style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827' }}>
+          <option value="all">All available servers</option>
+          <option value="connected">Goliath-connected servers</option>
+          <option value="mine">Servers I own or manage</option>
+        </select>
+        <select aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setRoleSelection({operational:'',display:''}); setRoleApproval(null); setRoleResult(null); setSyncApproval(null); setSyncAcknowledged(false); setSyncResult(null); setDeploymentError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+          {availableOptions.length ? availableOptions.map((guild) => <option key={guild.value} value={guild.value}>{guild.label}</option>) : <option value="">No servers available in this filter</option>}
+        </select>
+        <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
+        <button type="button" onClick={runAudit} disabled={!selectedConnected?.auditAvailable || auditing} style={{ border: 0, borderRadius: 10, padding: '10px 16px', background: '#2563eb', color: 'white' }}>{auditing ? 'Scanning…' : 'Scan permissions'}</button>
+      </div>
+      {environments.length > 0 && <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>
+        {environments.map(item => item.environment + ': ' +
+          (item.botStatus === 'verified' ? item.guildCount + ' bot-connected servers' : 'bot status unverified') +
+          (item.auditStatus === 'ready' ? ' (AI audit ready)' : ' (AI audit unavailable)')).join(' · ')}
+      </p>}
+      <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8', marginTop: 4 }}>
+        {personalGuildsStatus === 'ready' ? 'Discord account servers loaded. '
+          : personalGuildsStatus === 'partial' ? 'Discord returned a partial server list; refresh to try again. '
+          : personalGuildsStatus === 'reconnect-required' ? 'Reconnect your Discord login to list servers you own or manage. '
+          : 'Discord account servers are temporarily unavailable. '}
+        Future servers appear when you refresh this list. Bot presence and AI audit readiness are separate:
+        a verified Goliath installation may still need its audit endpoint enabled.
+        Owner/manager access alone cannot substitute for the bot's permissions. No Discord changes are made.
+      </p>
+      {audit && <div style={{ marginTop: 16 }}>
+        <strong>{audit.environment} — {audit.guild?.name}</strong>
+        <p role="status">Found {audit.summary?.roles} roles, {audit.summary?.categories} categories, {audit.summary?.channels} channels and {audit.summary?.unsyncedChannels} unsynchronised child channels.</p>
+        {audit.analysis && <div style={{ border: '1px solid rgba(148,163,184,.25)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <h3 style={{ margin: '0 0 10px', fontSize: 17 }}>Permission findings (read-only)</h3>
+          <p style={{ marginTop: 0 }}>{audit.analysis.totals.high} high priority · {audit.analysis.totals.review} items to review · {audit.analysis.totals.info} informational</p>
+          {(audit.analysis.findings || []).length === 0 && <p>No findings detected by the current rule set; this does not guarantee the server is secure.</p>}
+          {(audit.analysis.findings || []).map((finding, index) => <div key={index} style={{ padding: '10px 0', borderTop: '1px solid rgba(148,163,184,.2)' }}>
+            <strong>{finding.severity.toUpperCase()} · {finding.target?.name}</strong>
+            <div>{finding.message}</div>
+            <div style={{ color: theme?.mutedText || '#94a3b8', marginTop: 5 }}>Suggestion: {finding.recommendation}</div>
+          </div>)}
+          {audit.analysis.findingsTruncated && <p>Showing the first 200 findings. The totals include all findings.</p>}
+          <p style={{ fontSize: 12, marginBottom: 0 }}>Findings are prompts for review, not confirmed vulnerabilities. No permissions are modified.</p>
+        </div>}
+        <button type="button" onClick={buildPlan} disabled={planning || auditing} style={{ padding: '10px 14px', border: '1px solid #64748b', borderRadius: 10, background: '#1e293b', color: '#e5e7eb' }}>{planning ? 'Preparing preview…' : 'Prepare proposed changes (preview only)'}</button>
+        {preview && <section style={{ marginTop: 12, border: '1px solid #64748b', borderRadius: 12, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Proposed Discord changes — no actions performed</h3>
+          <p>{preview.totalProposals} suggestions · {preview.environment} · {preview.guild?.name}</p>
+          <p style={{ color: '#fbbf24' }}>{preview.notice}</p>
+          {preview.proposals.map(item => <details key={item.id} style={{ padding: '10px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
+            <summary>{item.risk.toUpperCase()} · {item.target.name} — {item.description}</summary>
+            <p>{item.warning}</p>
+            <div style={{ fontSize: 12 }}>Current</div>
+            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify(item.before, null, 2)}</pre>
+            {item.proposed && <><div style={{ fontSize: 12 }}>Suggested</div><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify(item.proposed, null, 2)}</pre></>}
+          </details>)}
+          {preview.truncated && <p>Showing first 100 suggestions. Additional reviews were detected.</p>}
+          <p style={{ fontSize: 12 }}>No apply button exists. These are non-executable review proposals only.</p>
+        </section>}
+        <section style={{ border: '1px solid rgba(148,163,184,.25)', borderRadius: 12, padding: 14, marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Server Layout Blueprint (preview only)</h3>
+          <p style={{ color: theme?.mutedText || '#94a3b8' }}>Load the current server layout as editable JSON. Add or rename categories and channels in the blueprint, then generate a proposed change list. Existing content is preserved. Nothing can be applied from this screen.</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" onClick={loadBlueprint} disabled={blueprintBusy} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>{blueprintBusy ? 'Working…' : 'Load current layout'}</button>
+            <label style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b', cursor: 'pointer' }}>
+              Import JSON blueprint
+              <input type="file" accept=".json,application/json" aria-label="Import a Goliath AI blueprint JSON file"
+                onChange={event => { void importBlueprint(event.target.files?.[0]); event.target.value = ''; }}
+                style={{ display: 'block', width: 140, marginTop: 6, fontSize: 11 }} />
+            </label>
+            <button type="button" onClick={exportBlueprint} disabled={!blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>Export JSON blueprint</button>
+            <button type="button" onClick={previewBlueprint} disabled={blueprintBusy || !blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#2563eb', border: 'none' }}>Preview layout changes</button>
+          </div>
+          <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
+            <strong>Ask Goliath AI to draft new categories</strong>
+            <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Describe the categories and channels you want. The AI will append suggestions to your blueprint, not your Discord server. This requires the free local model to be running.</p>
+            <textarea value={aiLayoutRequest} onChange={event => setAiLayoutRequest(event.target.value.slice(0, 1200))}
+              placeholder="Create a Community category with introductions and general chat, and a Gaming category with looking-for-group and a voice channel."
+              rows={3} maxLength={1200} disabled={!status?.enabled || aiDraftBusy} aria-label="AI category draft request"
+              style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
+            <button type="button" onClick={generateLayoutDraft} disabled={!status?.enabled || aiDraftBusy || !aiLayoutRequest.trim()}
+              style={{ padding: '10px 14px', borderRadius: 10, background: '#334155', border: 0, color: 'white' }}>
+              {aiDraftBusy ? 'Generating draft…' : 'Generate suggestions (no changes)'}
+            </button>
+          </div>
+          <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
+            <strong>Add a new category to the blueprint</strong>
+            <label htmlFor="goliath-ai-category" style={{ display: 'block', marginTop: 10 }}>Category name</label>
+            <input id="goliath-ai-category" value={newCategoryName} maxLength={100}
+              onChange={event => setNewCategoryName(event.target.value)} placeholder="e.g. The Rough"
+              style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
+            <label htmlFor="goliath-ai-channels" style={{ display: 'block', marginTop: 10 }}>Channels (one per line, optional type after |)</label>
+            <textarea id="goliath-ai-channels" value={newChannelLines} rows={4}
+              onChange={event => setNewChannelLines(event.target.value)} placeholder={'general | text\nvoice-lounge | voice'}
+              style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
+            <button type="button" onClick={addCategoryToBlueprint} disabled={!newCategoryName.trim()}
+              style={{ padding: '10px 14px', background: '#334155', color: 'white', border: 0, borderRadius: 10 }}>Add to blueprint (not Discord)</button>
+          </div>
+          <section style={{ border: '1px solid rgba(148,163,184,.25)', padding: 12, borderRadius: 10, marginTop: 12 }}>
+            <h4 style={{ marginTop: 0 }}>Saved developer plans</h4>
+            <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Private DEV storage · up to 30 drafts · accessible only to your two developer accounts · reviews do not execute changes</p>
+            <button type="button" onClick={saveCurrentDraft} disabled={draftBusy || !blueprintText.trim()}
+              style={{ padding: '10px 14px', border: 0, borderRadius: 9, background: '#334155', color: 'white' }}>
+              {draftBusy ? 'Working…' : 'Save current blueprint'}
+            </button>
+            <button type="button" onClick={() => { void refreshDrafts().catch(err => setError(err.message)); }}
+              style={{ padding: '10px 14px', border: '1px solid #64748b', marginLeft: 8, borderRadius: 9, background: '#1e293b', color: 'white' }}>
+              Refresh drafts
+            </button>
+            {draftNotice && <p role="status" style={{ color: '#86efac' }}>{draftNotice}</p>}
+            {savedDrafts.filter(item => item.environment === audit.environment && item.guildId === audit.guild.id).map(item =>
+              <div key={item.id} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '12px 0', marginTop: 10 }}>
+                <strong>{item.title}</strong>
+                <p style={{ fontSize: 12, margin: '4px 0' }}>{item.review?.status === 'reviewed' ? 'Reviewed (not approved for execution)' : 'Draft'} · {new Date(item.updatedAt).toLocaleString()}</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button type="button" disabled={draftBusy} onClick={() => openSavedDraft(item.id)}>Load</button>
+                  <button type="button" disabled={draftBusy} onClick={() => reviewSavedDraft(item.id)}>Mark reviewed</button>
+                  <button type="button" disabled={draftBusy || readinessBusy} onClick={() => checkDraftReadiness(item.id)}>Check execution readiness</button>
+                  <button type="button" disabled={draftBusy || operationReviewBusy} onClick={() => inspectOperationReviews(item.id)}>Operation reviews</button>
+                  {item.environment === 'DEV' && <button type="button" disabled={draftBusy || renameBusy} onClick={() => inspectRenameCandidate(item.id)}>Prepare approved rename</button>}
+                  <button type="button" disabled={draftBusy} onClick={() => removeSavedDraft(item.id)}>Delete draft</button>
+                </div>
+              </div>
+            )}
+            <details style={{ marginTop: 12 }}>
+              <summary>DEV category rename history and recovery</summary>
+              <button type="button" disabled={renameJournalBusy} onClick={refreshRenameJournal}>
+                {renameJournalBusy ? 'Checking…' : 'Refresh execution history'}
+              </button>
+              {renameJournal.map(entry => <div key={entry.id}
+                style={{ borderTop: '1px solid rgba(148,163,184,.25)', padding: '8px 0' }}>
+                <strong>{entry.status}</strong> · {entry.previousName} → {entry.proposedName}
+                <p style={{ fontSize: 12 }}>Guild {entry.guildId} · Category {entry.categoryId} · {entry.updatedAt}</p>
+                {entry.status === 'pending' && <button type="button" disabled={renameJournalBusy}
+                  onClick={() => reconcileRename(entry)}>Verify against Discord</button>}
+              </div>)}
+            </details>
+            {renameCandidate && audit?.environment === 'DEV' &&
+              String(audit.guild.id) === renameCandidate.guildId && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
+                <h4 style={{ marginTop: 0 }}>DEV category rename — explicit owner approval</h4>
+                <p>Category: {renameCandidate.candidate.target?.name} → {renameCandidate.candidate.proposed?.name}</p>
+                <p style={{ fontSize: 12 }}>This changes one real Discord category. The server will revalidate the reviewed plan, permissions and current state.</p>
+                {status?.devCategoryRenameEnabled !== true && <p role="alert" style={{ color: '#fbbf24' }}>
+                  {status?.renameRecoveryBlocked
+                    ? 'Execution blocked: unresolved or unreadable DEV rename recovery journal. Open the history section and reconcile pending entries before continuing.'
+                    : 'Live execution is disabled on DEV. You can review the proposed change, but applying it is unavailable until the server feature switch is enabled and tested.'}
+                </p>}
+                <label htmlFor="goliath-rename-confirmation">Type APPLY DEV CATEGORY RENAME to approve</label>
+                <input id="goliath-rename-confirmation" value={renameConfirmation}
+                  onChange={event => setRenameConfirmation(event.target.value)}
+                  autoComplete="off" style={{ display: 'block', width: '100%', margin: '8px 0' }} />
+                <button type="button" disabled={renameBusy || status?.devCategoryRenameEnabled !== true || renameConfirmation !== 'APPLY DEV CATEGORY RENAME'}
+                  onClick={applyRenameCandidate}>Apply this DEV rename</button>
+                <button type="button" disabled={renameBusy} style={{ marginLeft: 8 }}
+                  onClick={() => { setRenameCandidate(null); setRenameConfirmation(''); }}>Cancel</button>
+              </div>}
+            {operationReviews && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
+              <h4 style={{ marginTop: 0 }}>Operation review log — no Discord execution</h4>
+              {operationReviews.stale && <p style={{ color: '#fbbf24' }}>This plan is stale. Save and review a fresh plan before acknowledging operations.</p>}
+              {!operationReviews.stale && operationReviews.operations.map(item =>
+                <div key={item.sequence} style={{ padding: '10px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
+                  <strong>{item.sequence}. {item.kind.replaceAll('_', ' ')} — {item.target?.name}</strong>
+                  <p style={{ fontSize: 12 }}>{item.reviews.length
+                    ? item.reviews.map(review => review.decision + ' by ' + review.reviewerId + ' (expires ' + new Date(review.expiresAt).toLocaleString() + ')').join(' · ')
+                    : 'No current acknowledgement'}</p>
+                  <button type="button" disabled={operationReviewBusy} onClick={() => recordOperationReview(operationReviews.draftId, item.sequence, 'acknowledged')}>Acknowledge review</button>
+                  <button type="button" disabled={operationReviewBusy} style={{ marginLeft: 8 }} onClick={() => recordOperationReview(operationReviews.draftId, item.sequence, 'rejected')}>Reject proposal</button>
+                </div>)}
+              <details style={{ marginTop: 10 }}><summary>Review audit history ({operationReviews.events?.length || 0})</summary>
+                {(operationReviews.events || []).map(event => <p key={event.id} style={{ fontSize: 12 }}>
+                  {event.createdAt} · operation {event.sequence} · {event.decision} · reviewer {event.reviewerId}
+                </p>)}
+              </details>
+              <p style={{ color: '#fbbf24', fontSize: 12 }}>Acknowledgements are for developer review only. They expire and never grant execution permission.</p>
+            </div>}
+            {readiness && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
+              <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
+              <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
+              <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.structuralSimulation && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Offline structural rehearsal (not Discord execution)</h5>
+                <p style={{ fontSize: 12 }}>
+                  {readiness.structuralSimulation.simulated
+                    ? 'In-memory structure checks passed'
+                    : 'Rehearsal blocked or incomplete'}
+                  {' · '}{readiness.structuralSimulation.operationsChecked} operations checked
+                  {' · '}Projected channels: {readiness.structuralSimulation.proposedChannelCount ?? 'unknown'}
+                </p>
+                {(readiness.structuralSimulation.problems || []).map((problem, index) =>
+                  <p key={index} style={{ color: '#fbbf24', fontSize: 12 }}>{problem}</p>)}
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.structuralSimulation.notice ||
+                  'No permissions, backup, rollback or Discord API writes were tested.'}</p>
+              </section>}
+              {readiness.transactionManifest && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Deterministic change manifest — preview only</h5>
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>
+                  {readiness.transactionManifest.unavailable
+                    ? 'Manifest unavailable: saved plan, scope or audit may be stale.'
+                    : readiness.transactionManifest.operationCount + ' operations; all authorisations disabled.'}
+                </p>
+                {readiness.transactionManifest.fingerprint && <p style={{ overflowWrap: 'anywhere', fontSize: 12 }}>
+                  SHA-256 fingerprint: <code>{readiness.transactionManifest.fingerprint}</code>
+                </p>}
+                {(readiness.transactionManifest.entries || []).map(entry => <details
+                  key={entry.sequence} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '8px 0' }}>
+                  <summary>{entry.sequence}. {entry.kind.replaceAll('_', ' ')}
+                    {entry.dependsOn.length ? ' · requires operation ' + entry.dependsOn.join(', ') : ''}
+                    {entry.issues.length ? ' · needs attention' : ''}</summary>
+                  <p style={{ overflowWrap: 'anywhere', fontSize: 12 }}>Operation SHA-256: {entry.operationFingerprint}</p>
+                  {entry.issues.map((issue, index) => <p key={index} style={{ fontSize: 12, color: '#fbbf24' }}>{issue}</p>)}
+                </details>)}
+                <p style={{ fontSize: 12 }}>Fingerprints identify a saved proposal; they are not an approval token or permission to execute.</p>
+              </section>}
+              {readiness.recoveryPlan && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Rollback planning (no automatic recovery)</h5>
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>
+                  {readiness.recoveryPlan.stale ? 'Saved snapshot is stale. ' : ''}
+                  {readiness.recoveryPlan.operationCount} recovery assessments · Restore test not performed · Rollback disabled
+                </p>
+                {readiness.recoveryPlan.items.map(item => <details key={item.sequence}
+                  style={{ padding: '8px 0', borderTop: '1px solid rgba(148,163,184,.2)' }}>
+                  <summary>{item.sequence}. {item.kind.replaceAll('_', ' ')} — {item.recoveryType.replaceAll('_', ' ')}</summary>
+                  <p style={{ fontSize: 12 }}>{item.recoveryDescription}</p>
+                  {(item.issues || []).map((warning, index) => <p key={index} style={{ color: '#fbbf24', fontSize: 12 }}>{warning}</p>)}
+                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>
+                    {JSON.stringify({ original: item.before, proposed: item.proposed }, null, 2)}
+                  </pre>
+                </details>)}
+                <details style={{ marginTop: 8 }}><summary>Required before execution is ever enabled</summary>
+                  <ul>{readiness.recoveryPlan.requiredBeforeExecution.map((requirement, i) => <li key={i}>{requirement}</li>)}</ul>
+                </details>
+              </section>}
+              {readiness.capabilityPreflight && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Bot permission and rollback preflight</h5>
+                <p style={{ fontSize: 12 }}>{readiness.capabilityPreflight.permissionsVerified ? 'Read-only permission snapshot obtained.' : 'Bot permissions could not be verified.'}
+                  {' · '}{readiness.capabilityPreflight.counts?.blocked || 0} blocked
+                  {' · '}{readiness.capabilityPreflight.counts?.unknown || 0} unknown
+                  {' · '}{readiness.capabilityPreflight.counts?.permittedInPrinciple || 0} potentially permitted</p>
+                {readiness.capabilityPreflight.operations.map(item => <details key={item.sequence} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '8px 0' }}>
+                  <summary>{item.sequence}. {item.target?.name} · {item.permission}</summary>
+                  {(item.warnings || []).map((warning, index) => <p key={index} style={{ fontSize: 12, color: '#fbbf24' }}>{warning}</p>)}
+                  <p style={{ fontSize: 12 }}>Recovery: {item.recovery}</p>
+                </details>)}
+                <p style={{ color: '#fbbf24', fontSize: 12 }}>No rollback procedure has been verified, and no operation is executable.</p>
+              </section>}
+              {readiness.backupEvidence && <div style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <strong>Existing Goliath backup history</strong>
+                <p style={{ fontSize: 12 }}>{readiness.backupEvidence.status === 'candidate-found'
+                  ? 'Matching backup metadata found (not a verified restore point).'
+                  : readiness.backupEvidence.status === 'none-found'
+                    ? 'No matching backup found in the recent history returned by the existing Backup Center.'
+                    : 'Backup history unavailable.'}</p>
+                {(readiness.backupEvidence.candidates || []).map(candidate => <div key={candidate.backupId} style={{ fontSize: 12, paddingBottom: 6 }}>
+                  {candidate.backupId} · {candidate.createdAt} · {candidate.backupType}
+                  {' · '}Integrity metadata: {candidate.hasIntegrityMetadata ? 'present' : 'missing'}
+                  {' · '}Validation: {candidate.validationReportedValid ? 'reported valid' : 'not established'}
+                </div>)}
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>Existing backups have not been verified for restoration here. Execution remains disabled.</p>
+              </div>}
+              {readiness.checks.map(check => <div key={check.key} style={{ padding: '8px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
+                <strong>{check.state.toUpperCase()} · {check.label}</strong>
+                <div style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>{check.detail}</div>
+              </div>)}
+              <details style={{ marginTop: 10 }}><summary>View operations requiring explicit approval</summary>
+                {readiness.operations.map(operation => <div key={operation.sequence} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '8px 0' }}>
+                  <strong>{operation.sequence}. {operation.kind.replaceAll('_',' ')} — {operation.target?.name}</strong>
+                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify({ before: operation.before, proposed: operation.proposed }, null, 2)}</pre>
+                </div>)}
+              </details>
+              <p style={{ fontSize: 12 }}>There is no Apply button or Discord mutation endpoint. A review is not execution approval.</p>
+            </div>}
+            {savedDrafts.filter(item => item.environment === audit.environment && item.guildId === audit.guild.id).length === 0 &&
+              <p style={{ fontSize: 12 }}>No saved plans for this environment and server.</p>}
+          </section>
+          {categoriesForEditor.length > 0 && <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
+            <strong>Add a channel to an existing blueprint category</strong>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <select aria-label="Blueprint category" value={targetCategoryIndex} onChange={event => setTargetCategoryIndex(event.target.value)}
+                style={{ flex: '1 1 160px', minWidth: 0, color: 'white', background: '#111827', borderRadius: 8, padding: 9 }}>
+                {categoriesForEditor.map((category, index) => <option value={String(index)} key={index}>{category.name}</option>)}
+              </select>
+              <input aria-label="New channel name" value={newSingleChannel} maxLength={100} onChange={event => setNewSingleChannel(event.target.value)}
+                placeholder="Channel name" style={{ flex: '1 1 160px', minWidth: 0, color: 'white', background: '#111827', borderRadius: 8, padding: 9 }}/>
+              <select aria-label="New channel type" value={newSingleType} onChange={event => setNewSingleType(event.target.value)}
+                style={{ background: '#111827', color: 'white', borderRadius: 8, padding: 9 }}>
+                {['text', 'voice', 'forum', 'announcement', 'stage'].map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={addChannelToExistingCategory} disabled={!newSingleChannel.trim()}
+              style={{ marginTop: 10, background: '#334155', color: 'white', padding: '10px 14px', border: 0, borderRadius: 10 }}>Add channel to blueprint</button>
+          </div>}
+          {blueprintText && <>
+            <label htmlFor="goliath-ai-blueprint" style={{ display: 'block', fontWeight: 700, margin: '12px 0 6px' }}>Editable server blueprint (JSON)</label>
+            <textarea id="goliath-ai-blueprint" value={blueprintText} spellCheck={false}
+              onChange={(event) => { replaceBlueprintText(event.target.value); setBlueprintPlan(null); }} rows={13}
+              style={{ boxSizing: 'border-box', width: '100%', resize: 'vertical', color: '#e5e7eb', background: '#0f172a', border: '1px solid #64748b', borderRadius: 10, padding: 12, fontFamily: 'monospace', fontSize: 12 }} />
+            <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Retain existing Discord IDs when renaming. For new categories or channels, omit the ID. Supported types: text, voice, forum, announcement and stage.</p>
+          </>}
+          {blueprintPlan && <div role="region" aria-label="Blueprint preview" style={{ marginTop: 14 }}>
+            <strong>{blueprintPlan.operationCount} proposed operations · {blueprintPlan.untouchedCount} existing items unaffected</strong>
+            <p style={{ color: '#fbbf24' }}>{blueprintPlan.notice}</p>
+            {(blueprintPlan.warnings || []).map((warning, index) => <p key={index} style={{ color: '#fbbf24' }}>{warning}</p>)}
+            {blueprintPlan.operations.length === 0 && <p>No changes needed for this blueprint.</p>}
+            {blueprintPlan.operations.map((operation, index) => <details key={index} style={{ padding: '9px 0', borderTop: '1px solid rgba(148,163,184,.2)' }}>
+              <summary>{operation.kind.replaceAll('_', ' ')} · {operation.target?.name}</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify({ before: operation.before, proposed: operation.after }, null, 2)}</pre>
+            </details>)}
+            <p style={{ fontSize: 12 }}>This is a planning document, not an approved or executable change set.</p>
+          </div>}
+        </section>
+        <details><summary>View role and channel inventory</summary>
+          <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, maxHeight: 360, overflowY: 'auto' }}>{JSON.stringify({ roles: audit.roles, channels: audit.channels }, null, 2)}</pre>
+        </details>
+      </div>}
+    </section>
+    <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 13, margin: 0 }}>
+      {selectedConnected?.auditAvailable
+        ? <>Chat context: <strong>fresh, read-only {selectedConnected.environment} server audit</strong> is retrieved when you send a message. This does not modify Discord.</>
+        : audit && selectedGuild === audit.environment + ':' + audit.guild?.id
+          ? <>Chat context: <strong>{audit.environment} — {audit.guild?.name}</strong> (fresh read-only audit on send).</>
+          : selectedGuild.startsWith('PERSONAL:')
+            ? <>Chat context: <strong>general planning only</strong>. An authorised Goliath audit is unavailable for this server.</>
+            : <>Chat context: <strong>general planning only</strong>. Select a connected DEV server to use verified read-only server data.</>}
+    </p>
+    <div aria-label="Conversation" style={{ ...panel, minHeight: 280, maxHeight: '52vh', overflowY: 'auto', display: 'grid', alignContent: 'start', gap: 12 }}>
+      {messages.map((message, index) => <div key={index} style={{ maxWidth: '94%', justifySelf: message.role === 'user' ? 'end' : 'start', padding: 12, borderRadius: 12, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: message.role === 'user' ? 'rgba(37,99,235,.3)' : 'rgba(148,163,184,.14)' }}>
+        <strong style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>{message.role === 'user' ? 'You' : 'Goliath AI'}</strong>{message.role === 'assistant' ? <AIReply content={message.content} /> : message.content}
+      </div>)}
+      <div ref={bottom} />
+    </div>
+    {error && <div role="alert" style={{ color: '#fca5a5' }}>{error}</div>}
+    <form onSubmit={send} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <label htmlFor="goliath-ai-prompt" style={{ width: '100%', fontWeight: 700 }}>Your message</label>
+      <textarea id="goliath-ai-prompt" value={draft} onChange={(event) => setDraft(event.target.value.slice(0, 4000))} rows={3} maxLength={4000} placeholder="Ask Goliath AI…" disabled={!status?.enabled || busy} style={{ flex: '1 1 240px', minWidth: 0, borderRadius: 12, padding: 12, color: '#e5e7eb', background: '#111827', border: '1px solid #475569', font: 'inherit' }} />
+      <button type="submit" disabled={!status?.enabled || busy || !draft.trim()} style={{ alignSelf: 'end', padding: '12px 22px', borderRadius: 12, border: 0, background: '#2563eb', color: 'white', cursor: 'pointer', opacity: !status?.enabled || busy ? .5 : 1 }}>{busy ? 'Thinking…' : 'Send'}</button>
+    </form>
+    <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 12, margin: 0 }}>Conversations currently remain in this browser tab only. This first version cannot change Discord settings or control your PC.</p>
+  </section>;
+}

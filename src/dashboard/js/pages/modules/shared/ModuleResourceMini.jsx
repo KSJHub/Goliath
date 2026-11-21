@@ -1,3 +1,4 @@
+import { goDashboard } from '../../../services/dashboardPath.js';
 import React, { useEffect, useState } from 'react';
 
 import { api } from '../../../services/apiClient.js';
@@ -9,7 +10,7 @@ function idFrom(selectedGuild, selectedGuildData) {
 }
 
 function openEmbedStudio() {
-  window.location.assign('/embed-studio');
+  goDashboard('/embed-studio');
 }
 
 export default function ModuleResourceMini({ theme, selectedGuild, selectedGuildData, title, description }) {

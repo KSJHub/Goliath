@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
-import PageShell, { EmptyState, LoadingPanel, Notice, PrimaryButton, StatGrid, SummaryStat } from '../../shared/PageShell';
+import PageShell, { EmptyState, LoadingPanel, Notice, PrimaryButton, StatGrid, SummaryStat, DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 
 function getGuildId(selectedGuild, selectedGuildData) {
   return String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '').split(':').pop().trim();
@@ -71,7 +71,7 @@ export default function Starboard({ theme, selectedGuild, selectedGuildData }) {
       const result = await api.request(`/api/starboard/${guildId}/settings`, { method: 'PATCH', body: JSON.stringify({ settings: nextDraft }) });
       setConfig(result.config || null);
       setOverview(result.overview || null);
-      setMessage('✅ Starboard settings saved.');
+      setMessage(`${E.SUCCESS} Starboard settings saved.`);
     } catch (saveError) {
       setError(saveError.message || 'Failed to save Starboard settings.');
     } finally {
@@ -87,7 +87,7 @@ export default function Starboard({ theme, selectedGuild, selectedGuildData }) {
       setConfig(result.config || null);
       setOverview(result.overview || null);
       setDraft((current) => ({ ...current, enabled }));
-      setMessage(`✅ Starboard ${enabled ? 'enabled' : 'disabled'}.`);
+      setMessage(`${E.SUCCESS} Starboard ${enabled ? 'enabled' : 'disabled'}.`);
     } catch (saveError) {
       setError(saveError.message || 'Failed to update Starboard state.');
     } finally {

@@ -21,8 +21,15 @@ async function restoreMemberViewAllows(guild, memberId, channelIds = [], options
   const failed = [];
   for (const channelId of [...new Set((channelIds || []).map(String))]) {
     let channel = guild.channels.cache.get(channelId);
-    if (!channel) channel = await guild.channels.fetch(channelId).catch(() => null);
-    if (!channel?.permissionOverwrites?.edit) continue;
+    if (!channel) {
+      try { channel = await guild.channels.fetch(channelId); }
+      catch (error) {
+        if (Number(error?.code) !== 10003) failed.push({ channelId, error: String(error?.message || error).slice(0, 250) });
+        continue;
+      }
+    }
+    if (!channel) continue; // Confirmed deleted channels need no overwrite restoration.
+    if (!channel.permissionOverwrites?.edit) { failed.push({ channelId, error: 'Channel overwrites are unavailable.' }); continue; }
     try {
       await channel.permissionOverwrites.edit(String(memberId), { ViewChannel: true }, { reason: options.reason || 'Restoring pre-quarantine member channel access' });
       restored.push(channelId);
@@ -38,8 +45,15 @@ async function recontainMemberViewAllows(guild, memberId, channelIds = [], optio
   const failed = [];
   for (const channelId of [...new Set((channelIds || []).map(String))]) {
     let channel = guild.channels.cache.get(channelId);
-    if (!channel) channel = await guild.channels.fetch(channelId).catch(() => null);
-    if (!channel?.permissionOverwrites?.edit) continue;
+    if (!channel) {
+      try { channel = await guild.channels.fetch(channelId); }
+      catch (error) {
+        if (Number(error?.code) !== 10003) failed.push({ channelId, error: String(error?.message || error).slice(0, 250) });
+        continue;
+      }
+    }
+    if (!channel) continue; // Confirmed deleted channels need no overwrite restoration.
+    if (!channel.permissionOverwrites?.edit) { failed.push({ channelId, error: 'Channel overwrites are unavailable.' }); continue; }
     try {
       await channel.permissionOverwrites.edit(String(memberId), { ViewChannel: false }, { reason: options.reason || 'Re-containing member after failed quarantine release' });
       contained.push(channelId);
@@ -52,18 +66,29 @@ async function recontainMemberViewAllows(guild, memberId, channelIds = [], optio
 
 async function verifyMemberContainment(guild, member, allowedChannelIds = []) {
   const allowed = new Set((allowedChannelIds || []).filter(Boolean).map(String));
-  const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+  const errors = [];
+  const channels = await guild.channels.fetch().catch(error => { errors.push(String(error?.message || error)); return guild.channels.cache; });
   const leaks = [];
-  for (const [, channel] of channels || []) {
-    if (!channel || channel.type === ChannelType.GuildCategory || channel.isThread?.()) continue;
+  const activeThreads = await guild.channels.fetchActiveThreads().catch(error => { errors.push(String(error?.message || error)); return null; });
+  const confirmed = await guild.members.fetch({ user: member.id, force: true }).catch(error => { errors.push(String(error?.message || error)); return null; });
+  if (!confirmed) errors.push('Member roles could not be confirmed.');
+  const candidates = [...(channels?.values?.() || []), ...(activeThreads?.threads?.values?.() || [])];
+  for (const channel of candidates) {
+    if (!channel || channel.type === ChannelType.GuildCategory) continue;
     if (allowed.has(String(channel.id))) continue;
-    const permissions = channel.permissionsFor?.(member);
+    const permissions = confirmed && channel.permissionsFor?.(confirmed);
+    if (!permissions) { errors.push(`Permissions unavailable for channel ${channel.id}`); continue; }
     if (permissions?.has(PermissionFlagsBits.ViewChannel)) {
       leaks.push({ channelId: channel.id, channelName: channel.name || null });
       if (leaks.length >= 25) break;
     }
   }
-  return { success: leaks.length === 0, leaks };
+  for (const channelId of allowed) {
+    const room = channels?.get(channelId);
+    const permissions = confirmed && room?.permissionsFor?.(confirmed);
+    if (!permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory])) errors.push(`Investigation room access unavailable: ${channelId}`);
+  }
+  return { success: leaks.length === 0 && errors.length === 0, leaks, errors };
 }
 
 async function syncQuarantineIsolation(guild, options = {}) {
@@ -76,17 +101,20 @@ async function syncQuarantineIsolation(guild, options = {}) {
   try { role = options.role || await ensureQuarantineRole(guild, options); }
   catch (error) { return { success: false, reason: error.message, updated: 0, failed: 0 }; }
 
-  const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
+  let channels;
+  try { channels = await guild.channels.fetch(); }
+  catch (error) { return { success: false, reason: `Channel inventory unavailable: ${error.message}`, updated: 0, failed: 1 }; }
   let updated = 0;
   let skipped = 0;
   let failed = 0;
   const failures = [];
   const memberViewAllowRestores = [];
   const targetMemberId = options.targetMemberId ? String(options.targetMemberId) : null;
+  const allowedChannelIds = new Set((options.allowedChannelIds || []).map(String));
 
   for (const [, channel] of channels || []) {
     if (!channel?.permissionOverwrites?.edit || channel.isThread?.()) continue;
-    if (targetMemberId) {
+    if (targetMemberId && !allowedChannelIds.has(String(channel.id))) {
       const memberOverwrite = channel.permissionOverwrites.cache?.get(targetMemberId);
       if (memberOverwrite?.allow?.has(PermissionFlagsBits.ViewChannel)) {
         const botPermissions = channel.permissionsFor?.(botMember);
@@ -106,8 +134,8 @@ async function syncQuarantineIsolation(guild, options = {}) {
       }
     }
 
-    const rolePermissions = channel.permissionsFor?.(role);
-    if (!rolePermissions?.has(PermissionFlagsBits.ViewChannel)) { skipped += 1; continue; }
+    const existingDeny = channel.permissionOverwrites.cache?.get(role.id)?.deny?.has(PermissionFlagsBits.ViewChannel);
+    if (existingDeny) { skipped += 1; continue; }
     const botPermissions = channel.permissionsFor?.(botMember);
     if (!botPermissions?.has(PermissionFlagsBits.ManageRoles)) {
       failed += 1;

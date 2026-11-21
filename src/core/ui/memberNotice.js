@@ -1,6 +1,8 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+
+const { navigationButton, linkButton, EMOJIS } = require('../guild/goliathNavigation');
 
 const COLORS = Object.freeze({
   info: 0x5865F2,
@@ -28,14 +30,13 @@ function field(name, value, inline = false) {
 }
 
 function button(def = {}) {
-  const item = new ButtonBuilder()
-    .setLabel(clean(def.label, 'Open', 80))
-    .setStyle(def.url ? ButtonStyle.Link : (def.style ?? ButtonStyle.Secondary));
-  if (def.url) item.setURL(def.url);
-  else if (def.customId) item.setCustomId(def.customId);
-  else return null;
+  const label = clean(def.label, 'Open', 80);
+  if (!def.url && !def.customId) return null;
+  const item = def.url
+    ? linkButton(label, def.url, { disabled: def.disabled === true })
+    : navigationButton(def.customId, label, def.style ?? ButtonStyle.Secondary, def.disabled === true);
+  item.setLabel(label);
   if (def.emoji) item.setEmoji(def.emoji);
-  if (def.disabled === true) item.setDisabled(true);
   return item;
 }
 
@@ -113,7 +114,7 @@ function buildMemberNotice(guild, options = {}) {
   ].filter(Boolean);
 
   embed.setFooter({
-    text: footerBits.join(' • ').slice(0, 2048),
+    text: moduleName === 'Verification' ? 'Goliath Verification •' : footerBits.join(' • ').slice(0, 2048),
     ...(icon ? { iconURL: icon } : {}),
   });
 
@@ -134,13 +135,13 @@ function buildMemberNotice(guild, options = {}) {
 function moderationNotice(guild, modCase, options = {}) {
   const action = String(modCase?.action || options.action || 'moderation').toLowerCase();
   const meta = {
-    warn: { emoji: '⚠️', title: 'You Have Received a Warning', label: 'Warning', color: COLORS.warning, meaning: 'A warning has been recorded on your moderation history. Further incidents may result in additional moderation action.' },
-    timeout: { emoji: '⏳', title: 'You Have Been Timed Out', label: 'Timeout', color: COLORS.caution, meaning: 'Your ability to interact in the server has been temporarily restricted for the duration shown below.' },
-    kick: { emoji: '👢', title: 'You Have Been Kicked', label: 'Kick', color: COLORS.danger, meaning: 'You have been removed from the server. This action does not by itself prevent you from joining again unless another restriction applies.' },
-    ban: { emoji: '🔨', title: 'You Have Been Banned', label: 'Ban', color: COLORS.danger, meaning: 'You have been banned from the server and cannot rejoin while the ban remains active.' },
-    quarantine: { emoji: '🔒', title: 'Your Account Has Been Quarantined', label: 'Quarantine', color: COLORS.security, meaning: 'Your access has been restricted while a security or moderation review is completed.' },
-    unquarantine: { emoji: '🔓', title: 'Your Quarantine Has Been Released', label: 'Quarantine Released', color: COLORS.success, meaning: 'The quarantine restriction has been removed. Any separately applied moderation restrictions remain in effect.' },
-  }[action] || { emoji: '🛡️', title: 'Moderation Notice', label: clean(action, 'Moderation Action', 80), color: COLORS.info, meaning: 'A moderation action has been recorded on your account.' };
+    warn: { emoji: EMOJIS.WARNING, title: 'You Have Received a Warning', label: 'Warning', color: COLORS.warning, meaning: 'A warning has been recorded on your moderation history. Further incidents may result in additional moderation action.' },
+    timeout: { emoji: EMOJIS.TIMEOUT, title: 'You Have Been Timed Out', label: 'Timeout', color: COLORS.caution, meaning: 'Your ability to interact in the server has been temporarily restricted for the duration shown below.' },
+    kick: { emoji: EMOJIS.KICK, title: 'You Have Been Kicked', label: 'Kick', color: COLORS.danger, meaning: 'You have been removed from the server. This action does not by itself prevent you from joining again unless another restriction applies.' },
+    ban: { emoji: EMOJIS.BAN, title: 'You Have Been Banned', label: 'Ban', color: COLORS.danger, meaning: 'You have been banned from the server and cannot rejoin while the ban remains active.' },
+    quarantine: { emoji: EMOJIS.RESTRICTIONS, title: 'Your Account Has Been Quarantined', label: 'Quarantine', color: COLORS.security, meaning: 'Your access has been restricted while a security or moderation review is completed.' },
+    unquarantine: { emoji: EMOJIS.UNLOCK, title: 'Your Quarantine Has Been Released', label: 'Quarantine Released', color: COLORS.success, meaning: 'The quarantine restriction has been removed. Any separately applied moderation restrictions remain in effect.' },
+  }[action] || { emoji: EMOJIS.SECURITY, title: 'Moderation Notice', label: clean(action, 'Moderation Action', 80), color: COLORS.info, meaning: 'A moderation action has been recorded on your account.' };
 
   const caseId = modCase?.caseId || options.caseId;
   const fields = options.compactModerationLayout ? [...(options.extraFields || [])] : [field('🛡️ Action', `**${meta.label}**`, true)];
@@ -158,4 +159,25 @@ function moderationNotice(guild, modCase, options = {}) {
   });
 }
 
-module.exports = { COLORS, buildMemberNotice, moderationNotice, guildIcon, validUrl };
+function quarantineReleaseNotice(guild, snapshot = {}, result = {}, options = {}) {
+  const fields = [field('🏠 Server', guild?.name || 'Discord Server', true)];
+  if (snapshot?.caseId) fields.push(field('🆔 Case Reference', `#${snapshot.caseId}`, true));
+  if (options.reviewedBy) fields.push(field('👤 Reviewed By', options.reviewedBy));
+  let nextSteps = 'If you need any help with your access, please contact server management.';
+  if (result.verification?.ok === false) {
+    nextSteps = 'Please contact server management for help completing verification and checking your access.';
+  } else if (result.verification?.reconciled === true) {
+    nextSteps = 'Please complete the server’s verification process to finish restoring your access. Contact server management if you need help.';
+  } else if (result.skippedRoles?.length) {
+    nextSteps = 'Some of your previous roles are no longer available. Please contact server management to check your access.';
+  }
+  return buildMemberNotice(guild, {
+    module: 'Goliath Moderation', emoji: EMOJIS.UNLOCK, title: 'Quarantine Lifted', color: COLORS.success,
+    description: options.automatic
+      ? 'Your quarantine period has ended, and this restriction has been lifted.'
+      : 'Server management has completed your review and lifted your quarantine restrictions.',
+    fields, nextSteps, compactModerationLayout: true,
+  });
+}
+
+module.exports = { COLORS, buildMemberNotice, moderationNotice, quarantineReleaseNotice, guildIcon, validUrl };

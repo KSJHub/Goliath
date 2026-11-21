@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const { EmbedBuilder } = require('discord.js');
 const { db } = require('./storage');
@@ -6,9 +7,9 @@ const intelligence = require('./intelligence');
 const { recordModerationSystemEvent } = require('./permissions');
 
 const DECISIONS = Object.freeze({
-  clear: { label: 'CLEAR', emoji: '🟢', rank: 0, color: 0x57F287 },
-  review: { label: 'REVIEW', emoji: '🟠', rank: 1, color: 0xF0A202 },
-  high: { label: 'HIGH ATTENTION', emoji: '🔴', rank: 2, color: 0xED4245 },
+  clear: { label: 'CLEAR', emoji: EMOJIS.ACTIVE, rank: 0, color: 0x57F287 },
+  review: { label: 'REVIEW', emoji: EMOJIS.SEVERITY_HIGH, rank: 1, color: 0xF0A202 },
+  high: { label: 'HIGH ATTENTION', emoji: EMOJIS.OWNER_RED, rank: 2, color: 0xED4245 },
 });
 
 function now() { return new Date().toISOString(); }
@@ -194,7 +195,7 @@ function buildChangeEmbed(member, result, trigger) {
 
   return new EmbedBuilder()
     .setColor(config.color)
-    .setTitle(`🧠 Intelligence Change • ${member.user.tag || member.user.username}`)
+    .setTitle(`${EMOJIS.BRAIN} Intelligence Change • ${member.user.tag || member.user.username}`)
     .setDescription(`${config.emoji} **${config.label}** • Risk **${result.after.riskScore}/100**\n\n${changeText}`)
     .addFields(
       { name: 'Why this score?', value: riskFactors.slice(0, 1024), inline: false },

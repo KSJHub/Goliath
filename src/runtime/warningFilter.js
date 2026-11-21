@@ -6,7 +6,6 @@ process.emitWarning = (warning, ...args) => {
   const message = String(typeof warning === 'string' ? warning : warning?.message || '');
   const warningName = typeof args[0] === 'string' ? args[0] : args[0]?.type || warning?.name;
   if (warningName === 'DeprecationWarning' && message.includes('ready event has been renamed to clientReady')) return;
-  if (warningName === 'DeprecationWarning' && message.includes('`punycode` module is deprecated')) return;
   originalEmitWarning(warning, ...args);
 };
 

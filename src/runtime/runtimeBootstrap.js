@@ -155,6 +155,21 @@ function registerEvents(client, options = {}) {
     const listener = async (...args) => {
       if (eventName === 'interactionCreate') {
         await prepareInteraction(args[0]);
+        // Owner AI controls have their own authorised dispatcher. Route them
+        // before generic component fallback can acknowledge an unknown ID.
+        const interaction = args[0];
+        if (String(interaction?.customId || '').startsWith('ownerpanel:ai-') ||
+            String(interaction?.customId || '').startsWith('ownerpanel:acs:')) {
+          try {
+            await require('../owner/command').handleOwnerPanelInteraction(interaction);
+          } catch (error) {
+            console.error('[Owner AI] Interaction failed:', error?.stack || error);
+            const payload = { content: 'Permission Architect action failed. Run /owner to reopen the panel.', embeds: [], components: [] };
+            if (interaction.deferred || interaction.replied) await interaction.editReply(payload).catch(() => null);
+            else await interaction.reply({ ...payload, ephemeral: true }).catch(() => null);
+          }
+          return;
+        }
       }
 
       for (const handler of handlers) {

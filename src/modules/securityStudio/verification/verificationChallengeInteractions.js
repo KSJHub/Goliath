@@ -1,10 +1,12 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags,
+  ActionRowBuilder, ButtonStyle, EmbedBuilder, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
-const guildManager = require('../../core/guild/guildManager');
+const guildManager = require('../../../core/guild/guildManager');
 const runtime = require('./verificationChallengeRuntime');
 const verificationStore = require('./verificationStore');
 
@@ -40,9 +42,9 @@ function challengeEmbed(challenge, member = null) {
 }
 
 function memberChallengePayload(userId, challenge) {
-  if (!challenge) return { content: '❌ No active Verification challenge exists.', components: [] };
-  if (challenge.method === 'staff_approval') return { embeds: [challengeEmbed(challenge)], content: '⏳ Verification is waiting for a member of staff.', components: [] };
-  const button = new ButtonBuilder().setCustomId(runtime.buildMemberActionId(userId, challenge.challengeId)).setLabel(challenge.method === 'minigame' ? 'Answer Mini-game' : 'Enter Answer').setStyle(ButtonStyle.Primary);
+  if (!challenge) return { content: emojiLabel('ERROR', 'No active Verification challenge exists.'), components: [] };
+  if (challenge.method === 'staff_approval') return { embeds: [challengeEmbed(challenge)], content: emojiLabel('TIMEOUT', 'Verification is waiting for a member of staff.'), components: [] };
+  const button = navigationButton(runtime.buildMemberActionId(userId, challenge.challengeId), challenge.method === 'minigame' ? 'Answer Mini-game' : 'Enter Answer', ButtonStyle.Primary);
   return { embeds: [challengeEmbed(challenge)], components: [new ActionRowBuilder().addComponents(button)] };
 }
 
@@ -50,9 +52,9 @@ function staffChallengePayload(userId, challenge) {
   if (!challenge || challenge.method !== 'staff_approval') return null;
   const ids = Object.fromEntries((challenge.allowedActions || []).map(action => [action, runtime.buildStaffActionId(userId, challenge.challengeId, action)]));
   const buttons = [];
-  if (ids.approve) buttons.push(new ButtonBuilder().setCustomId(ids.approve).setLabel('Approve').setStyle(ButtonStyle.Success));
-  if (ids.reject) buttons.push(new ButtonBuilder().setCustomId(ids.reject).setLabel('Reject').setStyle(ButtonStyle.Danger));
-  if (ids.quarantine) buttons.push(new ButtonBuilder().setCustomId(ids.quarantine).setLabel('Quarantine').setStyle(ButtonStyle.Secondary));
+  if (ids.approve) buttons.push(navigationButton(ids.approve, 'Approve', ButtonStyle.Success));
+  if (ids.reject) buttons.push(navigationButton(ids.reject, 'Reject', ButtonStyle.Danger));
+  if (ids.quarantine) buttons.push(navigationButton(ids.quarantine, 'Quarantine', ButtonStyle.Secondary));
   return { embeds: [challengeEmbed(challenge)], components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [] };
 }
 
@@ -66,7 +68,7 @@ function isStaff(member, settings = {}) {
 async function maybeResumeFlow(interaction, result, manager, targetUserId = null) {
   if (!result?.resumeFlow || typeof manager?.resumeVerification !== 'function') return null;
   const userId = clean(targetUserId || interaction.user?.id);
-  const member = await interaction.guild.members.fetch(userId).catch(() => userId === clean(interaction.user?.id) ? interaction.member : null);
+  const member = await interaction.guild.members.fetch({ user: userId, force: true }).catch(() => null);
   if (!member) return { ok: false, message: 'Verification member is no longer available.' };
   return manager.resumeVerification({ guild: interaction.guild, guildId: interaction.guildId, member, user: member.user, completedSecurity: result.completedSecurity });
 }
@@ -101,37 +103,41 @@ async function publishResumedChallenge(interaction, userId, resumed) {
 }
 
 async function handleMemberAction(interaction, parsed) {
-  if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: '❌ This Verification challenge belongs to another member.', flags: MessageFlags.Ephemeral }); return true; }
+  if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge belongs to another member.'), flags: MessageFlags.Ephemeral }); return true; }
   const state = runtime.sessionState(interaction.guildId, parsed.userId); const challenge = state.activeChallenge;
   const session = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
   const config = verificationStore.getVerificationSection(interaction.guildId);
-  if (Number(session.securityConfigRevision || 0) !== Number(config.configRevision || 1)) { await interaction.reply({ content: '❌ Verification settings changed. Start Verification again for the updated checks.', flags: MessageFlags.Ephemeral }); return true; }
-  if (!challenge || challenge.challengeId !== parsed.challengeId || challenge.status !== 'pending' || ['verified','quarantined','review','rejected','failed','timed_out'].includes(state.state)) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }
+  if (Number(session.securityConfigRevision || 0) !== Number(config.configRevision || 1)) { await interaction.reply({ content: emojiLabel('ERROR', 'Verification settings changed. Start Verification again for the updated checks.'), flags: MessageFlags.Ephemeral }); return true; }
+  if (!challenge || challenge.challengeId !== parsed.challengeId || challenge.status !== 'pending' || ['verified','quarantined','review','rejected','failed','timed_out'].includes(state.state)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.'), flags: MessageFlags.Ephemeral }); return true; }
   const recovery = runtime.recover(interaction.guildId, parsed.userId);
-  if (recovery?.changed && runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge?.status !== 'pending') { await interaction.reply({ content: '❌ This Verification challenge has expired. Start Verification again.', flags: MessageFlags.Ephemeral }); return true; }
+  if (recovery?.changed && runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge?.status !== 'pending') { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge has expired. Start Verification again.'), flags: MessageFlags.Ephemeral }); return true; }
   await interaction.showModal(buildAnswerModal(parsed.userId, challenge));
   return true;
 }
 
 async function handleAnswerModal(interaction, parsed, manager) {
-  if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: '❌ This Verification challenge belongs to another member.', flags: MessageFlags.Ephemeral }); return true; }
+  if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge belongs to another member.'), flags: MessageFlags.Ephemeral }); return true; }
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
-  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
+  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.'), flags: MessageFlags.Ephemeral }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
     const failure = await recordTerminalFailure(interaction, parsed, result, manager);
-    const message = failure?.quarantined ? '⛔ Verification failed and your account has been moved to quarantine for staff review.' : result.reason === 'security_configuration_changed' ? '❌ Verification settings changed. Start Verification again.' : result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
-    await interaction.reply({ content: message, flags: MessageFlags.Ephemeral }); return true;
+    const message = failure?.quarantined ? emojiLabel('BLOCKED', 'Verification failed and your account has been moved to quarantine for staff review.') : result.reason === 'challenge_unavailable' ? emojiLabel('WARNING', 'This challenge could not be checked. Press Verify again for a fresh challenge; this has not counted as a wrong answer.') : result.reason === 'staff_action_in_progress' ? emojiLabel('TIMEOUT', 'Management is processing this Verification session. Please wait.') : ['stale_challenge', 'challenge_closed', 'terminal_session', 'wrong_member'].includes(result.reason) ? emojiLabel('WARNING', 'This challenge is no longer available. Start Verification again or contact management.') : result.reason === 'security_configuration_changed' ? emojiLabel('ERROR', 'Verification settings changed. Start Verification again.') : result.reason === 'expired' ? emojiLabel('AUTOMOD_LIMITS', 'This challenge expired. Start Verification again.') : result.complete ? emojiLabel('ERROR', 'That answer was incorrect and this challenge has ended.') : emojiLabel('ERROR', 'That answer was incorrect. Try again.');
+    const challengeUpdate = result.challenge && result.challenge.challengeId === parsed.challengeId
+      ? { embeds: [challengeEmbed(result.challenge)], components: result.complete ? [] : memberChallengePayload(parsed.userId, result.challenge).components }
+      : {};
+    await interaction.reply({ content: message, ...challengeUpdate, flags: MessageFlags.Ephemeral }); return true;
   }
   const resumed = await maybeResumeFlow(interaction, result, manager);
   if (resumed) { await interaction.reply({ ...resumedMemberPayload(parsed.userId, resumed), flags: MessageFlags.Ephemeral }); return true; }
   const next = runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge;
-  await interaction.reply({ content: result.complete ? '✅ Security check passed.' : '✅ Round passed. Continue with the next round.', ...(next && !result.complete ? memberChallengePayload(parsed.userId, next) : {}), flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: result.complete ? emojiLabel('HEALTHY', 'Security check passed.') : emojiLabel('HEALTHY', 'Round passed. Continue with the next round.'), ...(next && !result.complete ? memberChallengePayload(parsed.userId, next) : {}), flags: MessageFlags.Ephemeral });
   return true;
 }
 
 async function handleStaffAction(interaction, parsed, manager) {
   const section = verificationStore.getVerificationSection(interaction.guildId);
-  if (!isStaff(interaction.member, section.settings || {})) { await interaction.reply({ content: '❌ You are not authorised to resolve Verification staff approvals.', flags: MessageFlags.Ephemeral }); return true; }
+  const staffMember = await interaction.guild?.members?.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  if (!isStaff(staffMember, section.settings || {})) { await interaction.reply({ content: emojiLabel('ERROR', 'You are not authorised to resolve Verification staff approvals.'), flags: MessageFlags.Ephemeral }); return true; }
   const requiredService = {
     approve: 'resumeVerification',
     reject: 'recordVerificationFailure',
@@ -141,7 +147,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     await interaction.reply({ content: 'Verification action service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
     return true;
   }
-  const targetMember = await interaction.guild?.members?.fetch(parsed.userId).catch(() => null);
+  const targetMember = await interaction.guild?.members?.fetch({ user: parsed.userId, force: true }).catch(() => null);
   if (!targetMember) {
     await interaction.reply({ content: 'Verification member is unavailable. Staff action was not recorded; check whether the member has left the server.', flags: MessageFlags.Ephemeral });
     return true;
@@ -171,6 +177,12 @@ async function handleStaffAction(interaction, parsed, manager) {
       }
     }
   }
+  const currentStaff = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  const currentSettings = verificationStore.getVerificationSection(interaction.guildId).settings;
+  if (!guildManager.isModuleEnabled(interaction.guildId, 'verification') || !isStaff(currentStaff, currentSettings)) {
+    await interaction.reply({ content: 'Verification staff authorisation is no longer available. No action was recorded.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
   let resumed = null;
@@ -185,7 +197,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     } catch (error) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_action_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
-      await interaction.reply({ content: '⚠️ Staff quarantine action was recorded, but its role transition failed unexpectedly. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Staff quarantine action was recorded, but its role transition failed unexpectedly. Manual staff review is required.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     if (!outcome?.quarantined) {
@@ -198,7 +210,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     const pending = latest.staffActionProcessingPending;
     if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'quarantine' || pending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
-      await interaction.reply({ content: '⚠️ Quarantine processing returned after its session entered review or changed. Confirm the member roles manually.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Quarantine processing returned after its session entered review or changed. Confirm the member roles manually.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffActionProcessingPending: null });
@@ -213,7 +225,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     } catch (error) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_processing_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
-      await interaction.reply({ content: '⚠️ Staff rejection was recorded, but failure processing raised an unexpected error. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Staff rejection was recorded, but failure processing raised an unexpected error. Manual staff review is required.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     if (outcome?.quarantined !== true && outcome?.ok === false && !Number.isFinite(outcome?.failed)) {
@@ -226,7 +238,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     const pending = latest.staffActionProcessingPending;
     if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'reject' || pending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
-      await interaction.reply({ content: '⚠️ Rejection processing returned after its session entered review or changed. Manual staff review is required. Check quarantine roles if they were applied.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Rejection processing returned after its session entered review or changed. Manual staff review is required. Check quarantine roles if they were applied.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     if (!outcome?.quarantined) {
@@ -240,7 +252,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     } catch (error) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_continuation_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
-      await interaction.reply({ content: '⚠️ Staff approval was recorded, but Verification continuation failed unexpectedly. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Staff approval was recorded, but Verification continuation failed unexpectedly. Manual staff review is required.'), flags: MessageFlags.Ephemeral });
       return true;
     }
   }
@@ -255,7 +267,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     const pending = latest.staffApprovalContinuationPending;
     if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
-      await interaction.reply({ content: '⚠️ Approval continuation returned after its session entered review or changed. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Approval continuation returned after its session entered review or changed. Manual staff review is required.'), flags: MessageFlags.Ephemeral });
       return true;
     }
   }
@@ -269,7 +281,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     if (!delivered) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_challenge_delivery_failed', staffUserId: clean(interaction.user.id), challengeId: clean(resumed.challenge.challengeId) });
-      await interaction.reply({ content: '⚠️ Staff approval was recorded, but the next Verification challenge could not be delivered. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Staff approval was recorded, but the next Verification challenge could not be delivered. Manual staff review is required.'), flags: MessageFlags.Ephemeral });
       return true;
     }
   }
@@ -277,7 +289,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
     if (latest.state === 'review' || latest.staffApprovalContinuationPending?.challengeId !== clean(parsed.challengeId) || latest.staffApprovalContinuationPending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_finalization_stale', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
-      await interaction.reply({ content: '⚠️ Approval continuation changed while finalising. Staff must review the session and any challenge already delivered.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('WARNING', 'Approval continuation changed while finalising. Staff must review the session and any challenge already delivered.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffApprovalContinuationPending: null });
@@ -295,7 +307,44 @@ async function handleVerificationChallengeInteraction(interaction, manager = nul
   const customId = clean(interaction?.customId);
   if (!customId.startsWith('verify:')) return false;
   if (!interaction.guildId || !guildManager.isModuleEnabled(interaction.guildId, 'verification')) {
-    await interaction.reply({ content: '⏸️ Verification is currently disabled on this server.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: emojiLabel('USER_PAUSE', 'Verification is currently disabled on this server.'), flags: MessageFlags.Ephemeral });
+    return true;
+  }
+  if (customId.startsWith('verify:quarantine:') && interaction.isButton?.()) {
+    const parts = customId.split(':');
+    const action = parts[2], userId = parts[3];
+    if (!['request', 'status'].includes(action) || !/^\\d{15,22}$/.test(userId)) return false;
+    if (clean(interaction.user?.id) !== userId) {
+      await interaction.reply({ content: 'This private review belongs to another member.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const session = verificationStore.getSession(interaction.guildId, userId) || {};
+    if (session.state !== 'quarantined' || clean(session.quarantineChannelId) !== clean(interaction.channelId)) {
+      await interaction.reply({ content: 'This quarantine case is no longer active. Contact management if you need help.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    if (action === 'status') {
+      await interaction.reply({ content: session.quarantineReviewRequestedAt
+        ? emojiLabel('TIMEOUT', 'Your review has been requested. Management will assess your case. You can also send a message in this channel.')
+        : emojiLabel('TIMEOUT', 'Verification is on hold. You can request a management review or send a message here.'), flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    if (session.quarantineReviewRequestedAt) {
+      await interaction.reply({ content: 'Your review request has already been recorded. Please wait for management.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const requestedAt = new Date().toISOString();
+    verificationStore.upsertSession(interaction.guildId, userId, { quarantineReviewRequestedAt: requestedAt });
+    verificationStore.addSecurityHistory(interaction.guildId, userId, { type: 'quarantine_review_requested', requestedAt });
+    await interaction.reply({ content: emojiLabel('HEALTHY', 'Review requested. Management has been notified in this private case channel.'), flags: MessageFlags.Ephemeral });
+    const settings = verificationStore.normalizeSettings(verificationStore.getVerificationSection(interaction.guildId)?.settings || {});
+    const staffRoleIds = [...new Set((settings.quarantine?.staffRoleIds?.length ? settings.quarantine.staffRoleIds : settings.roles?.staff || []).map(String))];
+    try {
+      await interaction.channel.send({ content: `📩 **Management review requested** by <@${userId}>. Review this case through **/mod → Cases**. ${staffRoleIds.map(id => `<@&${id}>`).join(' ')}`,
+        allowedMentions: { users: [], roles: staffRoleIds, parse: [] } });
+    } catch (error) {
+      console.warn('[Verification] Could not post quarantine review request:', error?.message || error);
+    }
     return true;
   }
   const modal = parseAnswerModalId(customId);

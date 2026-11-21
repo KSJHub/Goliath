@@ -1,3 +1,4 @@
+const { EMOJIS } = require('../../guild/goliathNavigation');
 const { sendAutoModDM } = require('./dm');
 const { shouldBlockOwnerDestructiveAction } = require('../../../owner/dev/DevOverrideManager');
 
@@ -73,7 +74,7 @@ async function safeDelete(message) {
     await message.delete();
     return true;
   } catch (error) {
-    console.error('❌ Punishment engine delete failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine delete failed:`, error);
     return false;
   }
 }
@@ -84,7 +85,7 @@ async function safeTimeout(member, durationMs, reason) {
     await member.timeout(durationMs, reason);
     return true;
   } catch (error) {
-    console.error('❌ Punishment engine timeout failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine timeout failed:`, error);
     return false;
   }
 }
@@ -95,7 +96,7 @@ async function safeKick(member, reason) {
     await member.kick(reason);
     return true;
   } catch (error) {
-    console.error('❌ Punishment engine kick failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine kick failed:`, error);
     return false;
   }
 }
@@ -116,7 +117,7 @@ async function safeBan(context, reason, deleteDays = 0) {
     await context.guild.members.ban(String(context.targetId), options);
     return true;
   } catch (error) {
-    console.error('❌ Punishment engine ban failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine ban failed:`, error);
     return false;
   }
 }
@@ -126,14 +127,14 @@ async function safeWarnChannel(message, reason) {
     if (!message?.channel || !message?.author) return false;
     const safeReason = String(reason || 'AutoMod rule triggered').slice(0, 1500);
     const sent = await message.channel.send({
-      content: `⚠️ ${message.author}, your message was blocked: ${safeReason}`,
+      content: `${EMOJIS.WARNING} ${message.author}, your message was blocked: ${safeReason}`,
       allowedMentions: { parse: [] },
     });
     const cleanup = setTimeout(() => { sent.delete().catch(() => {}); }, 5000);
     cleanup.unref?.();
     return true;
   } catch (error) {
-    console.error('❌ Punishment engine channel warn failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine channel warn failed:`, error);
     return false;
   }
 }

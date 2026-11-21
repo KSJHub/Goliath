@@ -1,4 +1,5 @@
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -111,7 +112,7 @@ export default function Birthdays({ theme, selectedGuild, selectedGuildData }) {
     await runAction(`remove-${userId}`, () => api.request(`/api/birthdays/${guildId}/members/${userId}`, { method: 'DELETE' }), 'Birthday record removed.');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="🎂" title="Select a server" description="Select a server to manage Birthdays." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.BIRTHDAY} title="Select a server" description="Select a server to manage Birthdays." />;
 
   return <div style={{ display: 'grid', gap: 18 }}>
     <section style={{ ...cardStyle, padding: 24, background: 'linear-gradient(135deg, rgba(236,72,153,0.16), rgba(15,23,42,0.08) 48%, rgba(59,130,246,0.12))' }}>

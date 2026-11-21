@@ -1,4 +1,6 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -28,8 +30,7 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 const selections = new Map();
 const keyFor = (guildId, userId) => `${guildId}:${userId}`;
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(customId, label, style, disabled);
 
 function formatExpiry(value) {
   const timestamp = new Date(value || 0).getTime();
@@ -76,11 +77,11 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
 
   const embed = new EmbedBuilder()
     .setColor(enabled ? 0x57F287 : 0x747F8D)
-    .setTitle('⚡ Temporary Roles')
+    .setTitle(emojiLabel('THREAT', 'Temporary Roles'))
     .setDescription([
       'Assign a role for a fixed amount of time. Goliath removes it automatically when it expires.',
       '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ⏸️'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.USER_PAUSE}`}`,
       `**Active assignments:** ${assignments.length}`,
       `**Selected member:** ${selection.memberId ? `<@${selection.memberId}>` : 'Choose below'}`,
       `**Selected role:** ${selection.roleId ? `<@&${selection.roleId}>` : 'Choose below'}`,
@@ -116,7 +117,7 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
       ),
       row(manage),
       row(
-        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.max(0, safePage - 1)), '⬅️ Previous Roles', ButtonStyle.Secondary, safePage <= 0) : null,
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Previous Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
         pageCount > 1 ? button(`${PREFIX}:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Next Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
         button('admin:studio:roleStudio', 'Back to Role Studio'),
@@ -142,7 +143,7 @@ function buildAssignmentPanel(guildId, assignmentId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('⚡ Temporary Role Assignment')
+      .setTitle(emojiLabel('THREAT', 'Temporary Role Assignment'))
       .setDescription([
         `**Member:** <@${assignment.memberId}>`,
         `**Role:** <@&${assignment.roleId}>`,

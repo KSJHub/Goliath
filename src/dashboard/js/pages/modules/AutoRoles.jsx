@@ -1,4 +1,6 @@
+import { dashboardPath } from '../../services/dashboardPath.js';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -56,7 +58,7 @@ function RoleList({ theme, title, roles, selectedRoles, onRemove, removingRole, 
       {selectedRoles.length === 0 ? (
         <EmptyState
           theme={theme}
-          icon={type === 'bot' ? '🤖' : '👥'}
+          icon={type === 'bot' ? E.BOT : E.MEMBERS}
           title={type === 'bot' ? 'No bot roles configured' : 'No join roles configured'}
           description={type === 'bot' ? 'Add roles for bots that join the server.' : 'Add roles for new members who join the server.'}
         />
@@ -178,7 +180,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
     await runAction('reset', () => api.request(`/api/auto-roles/${guildId}/reset`, { method: 'POST' }), 'Auto Roles reset to defaults.');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="👥" title="Select a server" description="Select a server to manage Auto Roles." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.MEMBERS} title="Select a server" description="Select a server to manage Auto Roles." />;
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -206,7 +208,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
             <button type="button" onClick={toggleEnabled} disabled={saving === 'enabled'} style={buttonStyle(theme, 'primary')}>{saving === 'enabled' ? 'Saving...' : moduleEnabled ? 'Disable' : 'Enable'}</button>
             <button type="button" onClick={() => runAction('repair', () => api.request(`/api/auto-roles/${guildId}/repair`, { method: 'POST' }), 'Configuration repaired.')} disabled={saving} style={buttonStyle(theme, 'primary')}>Repair</button>
             <button type="button" onClick={() => runAction('reapply', () => api.request(`/api/auto-roles/${guildId}/reapply`, { method: 'POST' }), 'Roles reapplied across the server.')} disabled={saving} style={buttonStyle(theme, 'success')}>Reapply Now</button>
-            <a href={`/api/auto-roles/${guildId}/export`} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
+            <a href={dashboardPath(`/api/auto-roles/${guildId}/export`)} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
             <button type="button" onClick={resetModule} disabled={saving} style={buttonStyle(theme, 'danger')}>Reset</button>
           </div>
         </div>
@@ -238,9 +240,9 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
       <section style={{ ...cardStyle, padding: 22, display: 'grid', gap: 12 }}>
         <h2 style={{ margin: 0 }}>Health & Diagnostics</h2>
         {health?.warnings?.length
-          ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 850 }}>⚠ {warning}</div>)
-          : <div style={{ color: '#86efac', fontWeight: 900 }}>✅ Auto Roles configuration is healthy.</div>}
-        {(health?.roles || []).map((role) => <div key={role.roleId} style={{ color: role.exists && role.manageable ? '#86efac' : '#fca5a5' }}>{role.exists && role.manageable ? '✅' : '❌'} {role.name || role.roleId}</div>)}
+          ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 850 }}>{E.WARNING} {warning}</div>)
+          : <div style={{ color: '#86efac', fontWeight: 900 }} >{E.SUCCESS} Auto Roles configuration is healthy.</div>}
+        {(health?.roles || []).map((role) => <div key={role.roleId} style={{ color: role.exists && role.manageable ? '#86efac' : '#fca5a5' }}>{role.exists && role.manageable ? E.SUCCESS : E.ERROR} {role.name || role.roleId}</div>)}
         <button type="button" onClick={load} disabled={loading} style={{ ...buttonStyle(theme), justifySelf: 'start' }}>{loading ? 'Refreshing...' : 'Refresh Health'}</button>
       </section>
     </div>

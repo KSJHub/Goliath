@@ -1,10 +1,11 @@
+const { EMOJIS, navigationButton } = require('../../guild/goliathNavigation');
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const leveling = require('../../../modules/communityStudio/leveling/leveling');
 
 function button(customId, label, style = ButtonStyle.Secondary, emoji = null) {
-  const component = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  const component = navigationButton(customId, label, style);
   if (emoji) component.setEmoji(emoji);
   return component;
 }
@@ -59,7 +60,7 @@ function cleanSearchOptions(payload) {
 }
 
 function rebuildProfileHome(payload) {
-  if (embedTitle(payload) !== '👤 Your Profile') return payload;
+  if (embedTitle(payload) !== `${EMOJIS.USER} Your Profile`) return payload;
 
   const searchRow = payload.components?.find((actionRow) =>
     actionRow?.components?.some((component) => componentId(component) === 'user:search'));
@@ -67,22 +68,22 @@ function rebuildProfileHome(payload) {
   const existingNavigationComponents = existingNavigation?.components || [];
 
   const back = existingNavigationComponents.find((component) => componentLabel(component) === 'Back')
-    || button('user:close', 'Back', ButtonStyle.Secondary, '⬅️');
+    || button('user:close', 'Back', ButtonStyle.Secondary, EMOJIS.BACK);
   const refresh = existingNavigationComponents.find((component) => componentLabel(component) === 'Refresh')
-    || button('user:profile:refresh', 'Refresh', ButtonStyle.Success, '🔄');
+    || button('user:profile:refresh', 'Refresh', ButtonStyle.Success, EMOJIS.REFRESH);
   const inProgress = existingNavigationComponents.find((component) => componentLabel(component) === 'In Progress')
-    || button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, '🚧');
+    || button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, EMOJIS.QUARANTINE);
 
   const homeButtons = [
-    button('user:account:record', 'Account', ButtonStyle.Secondary, '🗂️'),
-    button('user:category:community', '🏘️ Community'),
-    button('user:category:feedback', '💬 Feedback'),
-    button('user:help', 'Help', ButtonStyle.Secondary, '❓'),
-    button('user:category:messages', '✉️ Messages'),
-    button('user:category:roles', '🎭 Roles'),
-    button('user:category:security', '🛡️ Security'),
-    button('user:category:social', '📣 Social'),
-    button('user:category:utility', '🧰 Utility'),
+    button('user:account:record', 'Account', ButtonStyle.Secondary, EMOJIS.WORKSPACE),
+    button('user:category:community', `${EMOJIS.COMMUNITIES} Community`),
+    button('user:category:feedback', `${EMOJIS.MESSAGES} Feedback`),
+    button('user:help', 'Help', ButtonStyle.Secondary, EMOJIS.HELP_QUESTION),
+    button('user:category:messages', `${EMOJIS.AUTOMOD_INVITES} Messages`),
+    button('user:category:roles', `${EMOJIS.ROLES} Roles`),
+    button('user:category:security', `${EMOJIS.SECURITY} Security`),
+    button('user:category:social', `${EMOJIS.SOCIAL} Social`),
+    button('user:category:utility', `${EMOJIS.TOOLS} Utility`),
   ];
 
   payload.components = [
@@ -93,7 +94,7 @@ function rebuildProfileHome(payload) {
     row(
       back,
       refresh,
-      button('user:preferences', 'Preferences', ButtonStyle.Secondary, '⚙️'),
+      button('user:preferences', 'Preferences', ButtonStyle.Secondary, EMOJIS.SETTINGS),
       inProgress,
     ),
   ].filter(Boolean);
@@ -102,13 +103,13 @@ function rebuildProfileHome(payload) {
 }
 
 function rebuildLevelingPanel(payload) {
-  if (embedTitle(payload) !== '🏆 Your Leveling') return payload;
+  if (embedTitle(payload) !== `${EMOJIS.TROPHY} Your Leveling`) return payload;
 
   const paused = embedDescription(payload).includes('Leveling is paused for your account.');
   const navigationRow = payload.components?.[payload.components.length - 1];
   const existingActionComponents = payload.components?.[0]?.components || [];
   const refresh = existingActionComponents.find((component) => componentLabel(component) === 'Refresh')
-    || button('user:module:leveling', 'Refresh', ButtonStyle.Success, '🔄');
+    || button('user:module:leveling', 'Refresh', ButtonStyle.Success, EMOJIS.REFRESH);
 
   payload.components = [
     row(
@@ -116,9 +117,9 @@ function rebuildLevelingPanel(payload) {
         'user:preferences',
         paused ? 'Enable Leveling' : 'Disable Leveling',
         paused ? ButtonStyle.Success : ButtonStyle.Danger,
-        paused ? '▶️' : '⏸️',
+        paused ? EMOJIS.PLAY : EMOJIS.PAUSE,
       ),
-      button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, '🏆'),
+      button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, EMOJIS.TROPHY),
       refresh,
     ),
     navigationRow,
@@ -132,18 +133,18 @@ function rebuildCategoryPanel(payload) {
   const navigationRow = payload.components?.[payload.components.length - 1];
 
   let moduleButtons = null;
-  if (title === '🎭 Roles') {
+  if (title === `${EMOJIS.ROLES} Roles`) {
     moduleButtons = [
-      button('user:module:role-history', 'History', ButtonStyle.Secondary, '📜'),
-      button('user:profile:roles', 'View Roles', ButtonStyle.Primary, '🎭'),
+      button('user:module:role-history', 'History', ButtonStyle.Secondary, EMOJIS.SCROLL),
+      button('user:profile:roles', 'View Roles', ButtonStyle.Primary, EMOJIS.ROLES),
     ];
-  } else if (title === '🛡️ Security') {
+  } else if (title === `${EMOJIS.SECURITY} Security`) {
     moduleButtons = [
-      button('user:module:security-notifications', 'Notifications', ButtonStyle.Secondary, '🔔'),
-      button('user:module:verification', 'Verification', ButtonStyle.Secondary, '✅'),
+      button('user:module:security-notifications', 'Notifications', ButtonStyle.Secondary, EMOJIS.BELL),
+      button('user:module:verification', 'Verification', ButtonStyle.Secondary, EMOJIS.SUCCESS),
     ];
-  } else if (title === '📣 Social') {
-    moduleButtons = [button('user:module:social', 'My Creator Profile', ButtonStyle.Success, '👤')];
+  } else if (title === `${EMOJIS.SOCIAL} Social`) {
+    moduleButtons = [button('user:module:social', 'My Creator Profile', ButtonStyle.Success, EMOJIS.USER)];
   }
 
   if (moduleButtons) payload.components = [row(...moduleButtons), navigationRow].filter(Boolean);
@@ -152,30 +153,30 @@ function rebuildCategoryPanel(payload) {
 
 function refreshHelpPanel(payload) {
   const embed = payload?.embeds?.[0];
-  if (embedTitle(payload) !== '❓ Goliath User Panel Help') return payload;
+  if (embedTitle(payload) !== `${EMOJIS.HELP_QUESTION} Goliath User Panel Help`) return payload;
 
   embed.setDescription([
     'Welcome to your personal Goliath User Panel.',
     '',
-    '**👤 Profile Home**',
+    `**${EMOJIS.USER} Profile Home**`,
     'Your live Discord profile, membership, progress and community summary are displayed directly on the landing panel.',
     '',
-    '**📌 Personal Tools**',
-    '🗂️ **Account Record** — Your warnings, cases, infractions and appeals.',
-    '❓ **Help** — User Panel guidance.',
-    '⚙️ **Preferences** — Control personal participation in supported modules.',
+    `**${EMOJIS.ADMIN_PIN} Personal Tools**`,
+    `${EMOJIS.WORKSPACE} **Account Record** — Your warnings, cases, infractions and appeals.`,
+    `${EMOJIS.HELP_QUESTION} **Help** — User Panel guidance.`,
+    `${EMOJIS.SETTINGS} **Preferences** — Control personal participation in supported modules.`,
     '',
-    '**📂 Categories**',
-    '🏘️ **Community** — Giveaways, invites, leveling and polls.',
-    '💬 **Feedback** — Forms, suggestions and tickets.',
-    '✉️ **Messages** — Starboard.',
-    '🎭 **Roles** — View roles and role history.',
-    '🛡️ **Security** — Verification and notifications.',
-    '📣 **Social** — My Creator Profile.',
-    '🧰 **Utility** — Live Help, Ping and Server Info, plus planned utility tools.',
+    `**${EMOJIS.CHANNELS} Categories**`,
+    `${EMOJIS.COMMUNITIES} **Community** — Giveaways, invites, leveling and polls.`,
+    `${EMOJIS.MESSAGES} **Feedback** — Forms, suggestions and tickets.`,
+    `${EMOJIS.AUTOMOD_INVITES} **Messages** — Starboard.`,
+    `${EMOJIS.ROLES} **Roles** — View roles and role history.`,
+    `${EMOJIS.SECURITY} **Security** — Verification and notifications.`,
+    `${EMOJIS.SOCIAL} **Social** — My Creator Profile.`,
+    `${EMOJIS.TOOLS} **Utility** — Live Help, Ping and Server Info, plus planned utility tools.`,
     '',
-    '**🧭 Navigation**',
-    '⬅️ **Back** returns to the previous page. Multi-page menus add User Panel and page controls only when needed.',
+    `**${EMOJIS.USER_HELP_NAVIGATION} Navigation**`,
+    `${EMOJIS.BACK} **Back** returns to the previous page. Multi-page menus add User Panel and page controls only when needed.`,
   ].join('\n'));
 
   return payload;
@@ -184,24 +185,24 @@ function refreshHelpPanel(payload) {
 function refreshInProgressPanel(payload) {
   const embed = payload?.embeds?.[0];
   const title = embedTitle(payload);
-  if (!title.startsWith('🚧 User Panel Development —')) return payload;
+  if (!title.startsWith(`${EMOJIS.QUARANTINE} User Panel Development —`)) return payload;
 
   const pages = {
-    '🚧 User Panel Development — 🏘️ Community': [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.COMMUNITIES} Community`]: [
       '**Pending buttons**',
       '• Giveaways',
       '• Invites',
       '• Leveling',
       '• Polls',
     ],
-    '🚧 User Panel Development — 💬 Feedback & Messages': [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.MESSAGES} Feedback & Messages`]: [
       '**Pending buttons**',
       '• Forms',
       '• Starboard',
       '• Suggestions',
       '• Tickets',
     ],
-    '🚧 User Panel Development — 🎭 Roles, Security & Social': [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.ROLES} Roles, Security & Social`]: [
       '**Pending buttons**',
       '• History',
       '• My Creator Profile',
@@ -209,7 +210,7 @@ function refreshInProgressPanel(payload) {
       '• Verification',
       '• View Roles',
     ],
-    '🚧 User Panel Development — 👤 Account & Utility': [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.USER} Account & Utility`]: [
       '**Pending personal tools**',
       '• Account Record',
       '',
@@ -224,7 +225,7 @@ function refreshInProgressPanel(payload) {
   const lines = pages[title];
   if (!lines) return payload;
 
-  if (title.endsWith('👤 Account & Utility')) embed.setTitle('🚧 User Panel Development — Personal Tools & Utility');
+  if (title.endsWith(`${EMOJIS.USER} Account & Utility`)) embed.setTitle(`${EMOJIS.QUARANTINE} User Panel Development — Personal Tools & Utility`);
 
   embed.setDescription([
     '**DEV planning notebook**',
@@ -247,7 +248,7 @@ function sortNonNavigationButtons(payload) {
   rebuildCategoryPanel(payload);
 
   const title = embedTitle(payload);
-  if (title === '👤 Your Profile' || title === '👥 Creator Profiles' || title === '👥 My Creator Profile') return payload;
+  if (title === `${EMOJIS.USER} Your Profile` || title === `${EMOJIS.MEMBERS} Creator Profiles` || title === `${EMOJIS.MEMBERS} My Creator Profile`) return payload;
 
   const finalRowIndex = payload.components.length - 1;
   const sortableRows = [];
@@ -286,7 +287,7 @@ function buildSimpleDevelopmentPanel(interaction, title, description) {
       .setDescription(description)
       .setFooter({ text: `Requested by ${name}` })
       .setTimestamp()],
-    components: [row(button('user:home', 'Back', ButtonStyle.Secondary, '⬅️'))],
+    components: [row(button('user:home', 'Back', ButtonStyle.Secondary, EMOJIS.BACK))],
   };
 }
 
@@ -294,7 +295,7 @@ function buildPreferencesDevelopmentPanel(interaction) {
   const guildId = interaction.guildId || interaction.guild?.id;
   const userId = interaction.user?.id;
   const sourceTitle = interactionSourceTitle(interaction);
-  const shouldToggleLeveling = sourceTitle === '⚙️ Preferences' || sourceTitle === '🏆 Your Leveling';
+  const shouldToggleLeveling = sourceTitle === `${EMOJIS.SETTINGS} Preferences` || sourceTitle === `${EMOJIS.TROPHY} Your Leveling`;
 
   let participating = leveling.isUserParticipating(guildId, userId);
   let notice = null;
@@ -306,8 +307,8 @@ function buildPreferencesDevelopmentPanel(interaction) {
       action: participating ? 'user_leveling_opt_in' : 'user_leveling_opt_out',
     });
     notice = participating
-      ? '✅ Leveling enabled. XP earning and profile progress have resumed.'
-      : '⏸️ Leveling disabled. Your XP is preserved and no new XP will be earned.';
+      ? `${EMOJIS.SUCCESS} Leveling enabled. XP earning and profile progress have resumed.`
+      : `${EMOJIS.PAUSE} Leveling disabled. Your XP is preserved and no new XP will be earned.`;
   }
 
   const name = interaction.member?.displayName || interaction.user?.username || 'Unknown User';
@@ -318,12 +319,12 @@ function buildPreferencesDevelopmentPanel(interaction) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(participating ? '#57F287' : '#747F8D')
-      .setTitle('⚙️ Preferences')
+      .setTitle(`${EMOJIS.SETTINGS} Preferences`)
       .setDescription([
         notice ? `> ${notice}` : null,
         notice ? '' : null,
-        '**🏆 Leveling**',
-        `**Status:** ${participating ? '🟢 Participating' : '⏸️ Paused'}`,
+        `**${EMOJIS.TROPHY} Leveling**`,
+        `**Status:** ${participating ? `${EMOJIS.ENV_PRODUCTION} Participating` : `${EMOJIS.PAUSE} Paused`}`,
         `**Saved level:** ${savedLevel}`,
         `**Saved XP:** ${savedXp.toLocaleString()}`,
         '',
@@ -340,9 +341,9 @@ function buildPreferencesDevelopmentPanel(interaction) {
         'user:preferences',
         participating ? 'Disable Leveling' : 'Enable Leveling',
         participating ? ButtonStyle.Danger : ButtonStyle.Success,
-        participating ? '⏸️' : '▶️',
+        participating ? EMOJIS.PAUSE : EMOJIS.PLAY,
       )),
-      row(button('user:home', 'Back', ButtonStyle.Secondary, '⬅️')),
+      row(button('user:home', 'Back', ButtonStyle.Secondary, EMOJIS.BACK)),
     ],
   };
 }
@@ -350,7 +351,7 @@ function buildPreferencesDevelopmentPanel(interaction) {
 function buildProfileDevelopmentPage(interaction) {
   return buildSimpleDevelopmentPanel(
     interaction,
-    '🚧 User Panel Development Tools',
+    `${EMOJIS.QUARANTINE} User Panel Development Tools`,
     'Development roadmap only. Modules remain owned by their existing APIs.',
   );
 }

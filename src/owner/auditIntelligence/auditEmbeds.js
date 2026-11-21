@@ -1,6 +1,8 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder } = require('discord.js');
+
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 
 const guildIntelligenceWired = new WeakSet();
 
@@ -10,10 +12,10 @@ const COLORS = {
 };
 
 const GUILD_ACTIVITY_FAMILIES = {
-  all: { label: 'Recent Activity', emoji: '🕒' }, moderation: { label: 'Moderation', emoji: '🛡️' },
-  members: { label: 'Members', emoji: '👥' }, roles: { label: 'Roles / Permissions', emoji: '🎭' },
-  messages: { label: 'Messages / Reactions', emoji: '💬' }, voice: { label: 'Voice', emoji: '🔊' },
-  security: { label: 'Security / AutoMod', emoji: '🔐' }, goliath: { label: 'Goliath Actions', emoji: '🤖' },
+  all: { label: 'Recent Activity', emoji: EMOJIS.ROLE_CLOCK }, moderation: { label: 'Moderation', emoji: EMOJIS.SECURITY },
+  members: { label: 'Members', emoji: EMOJIS.ROLE_MEMBERS }, roles: { label: 'Roles / Permissions', emoji: EMOJIS.USER_ROLES },
+  messages: { label: 'Messages / Reactions', emoji: EMOJIS.USER_FEEDBACK }, voice: { label: 'Voice', emoji: EMOJIS.USER_TEMP_VOICE },
+  security: { label: 'Security / AutoMod', emoji: EMOJIS.PERMISSION_GUARD }, goliath: { label: 'Goliath Actions', emoji: EMOJIS.AUTOMOD },
 };
 
 function runtimeMode() {
@@ -209,7 +211,7 @@ async function buildGuildIntelligencePanel(client, sourceGuildId = null, familyK
   const stored = auditStore.getGuild(sourceGuild.id) || {}; const guildConfig = config.guilds?.[sourceGuild.id] || {}; const structure = await auditRouter.inspectStructure(client, sourceGuild).catch(() => ({}));
   const recentEvents = auditStore.getGuildEvents(sourceGuild.id, { limit: 100 }); const matchingEvents = recentEvents.filter((event) => matchesGuildActivityFamily(event, selectedFamily));
   rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`owner:guildintelligence:family:${sourceGuild.id}`).setPlaceholder('Inspect activity by family').setMinValues(1).setMaxValues(1).addOptions(Object.entries(GUILD_ACTIVITY_FAMILIES).map(([value, details]) => ({ label: details.label, value, emoji: details.emoji, default: value === selectedFamily })))));
-  rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`owner:guildintelligence:refresh:${sourceGuild.id}:${selectedFamily}`).setLabel('Rescan Guild').setEmoji('🔄').setStyle(ButtonStyle.Secondary)));
+  rows.push(new ActionRowBuilder().addComponents(navigationButton(`owner:guildintelligence:refresh:${sourceGuild.id}:${selectedFamily}`, 'Rescan Guild', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH)));
   return { embeds: [buildGuildIntelligenceEmbed(sourceGuild, stored, guildConfig, structure), buildGuildActivityEmbed(sourceGuild, matchingEvents, selectedFamily)], components: rows, allowedMentions: { parse: [] } };
 }
 
@@ -233,7 +235,7 @@ function buildCommandCenterHome(client, guild, config = {}) {
   const monitored = Object.keys(config.guilds && typeof config.guilds === 'object' ? config.guilds : {}).filter((id) => String(id) !== String(guild?.id || config.commandCenter?.guildId || '')).length;
   const embed = new EmbedBuilder().setColor(COLORS.intelligence).setTitle('🛡️ GOLIATH COMMAND CENTER').setDescription('Private owner control plane for Sentinel and Audit Intelligence.')
     .addFields({ name: 'Environment', value: `\`${runtimeMode()}\``, inline: true }, { name: 'Destination', value: guild ? `**${guild.name}**\n\`${guild.id}\`` : 'Not configured', inline: true }, { name: 'Status', value: guild ? '🟢 Operational' : '🔴 Not configured', inline: true }, { name: 'Monitored Guilds', value: `\`${monitored}\``, inline: true }, { name: 'Auto Provision', value: config.autoProvision === false ? '🔴 Off' : '🟢 On', inline: true }, { name: 'Command Visibility', value: guild ? `Only registered in **${guild.name}**` : 'Not registered', inline: true }).setFooter({ text: 'Goliath Command Center • Owner only' }).setTimestamp();
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('owner:commandcenter:refresh').setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:commandcenter:routing').setLabel('Routing').setEmoji('📡').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('owner:commandcenter:monitoring').setLabel('Monitoring').setEmoji('👁️').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:commandcenter:structure').setLabel('Structure').setEmoji('📂').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:commandcenter:health').setLabel('Health').setEmoji('🩺').setStyle(ButtonStyle.Secondary)), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('owner:commandcenter:intelligence').setLabel('User Intelligence').setEmoji('🔎').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('owner:guildintelligence:open').setLabel('Guild Intelligence').setEmoji('🏰').setStyle(ButtonStyle.Primary))], allowedMentions: { parse: [] } };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(navigationButton('owner:commandcenter:refresh', 'Refresh', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH), navigationButton('owner:commandcenter:routing', 'Routing', ButtonStyle.Primary).setEmoji(EMOJIS.SOCIAL_MONITOR), navigationButton('owner:commandcenter:monitoring', 'Monitoring', ButtonStyle.Secondary).setEmoji(EMOJIS.WELCOME_PREVIEW), navigationButton('owner:commandcenter:structure', 'Structure', ButtonStyle.Secondary).setEmoji(EMOJIS.USER_HELP_CATEGORIES), navigationButton('owner:commandcenter:health', 'Health', ButtonStyle.Secondary).setEmoji(EMOJIS.SOCIAL_HEALTH)), new ActionRowBuilder().addComponents(navigationButton('owner:commandcenter:intelligence', 'User Intelligence', ButtonStyle.Primary).setEmoji(EMOJIS.INVESTIGATE), navigationButton('owner:guildintelligence:open', 'Guild Intelligence', ButtonStyle.Primary).setEmoji(EMOJIS.USER_SERVER_INFO))], allowedMentions: { parse: [] } };
 }
 
 function buildGuildIntelligenceEmbed(guild, stored = {}, guildConfig = {}, structure = {}) {
@@ -252,7 +254,7 @@ function buildUserIntelligenceEmbed(report, sourceGuild) {
 }
 
 function buildUserIntelligenceControls() {
-  return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('owner:audit:refresh').setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:audit:deep').setLabel('Deep Scan').setEmoji('🔎').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('owner:audit:identity').setLabel('Identity History').setEmoji('🏷️').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('owner:audit:guilds').setLabel('Guild History').setEmoji('🏰').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:audit:moderation').setLabel('Moderation').setEmoji('🛡️').setStyle(ButtonStyle.Secondary)), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('owner:audit:account').setLabel('Account & Membership').setEmoji('👥').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('owner:audit:evidence').setLabel('Evidence Summary').setEmoji('📌').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('owner:audit:roles').setLabel('Roles').setEmoji('🎭').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:audit:voice').setLabel('Voice').setEmoji('🔊').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('owner:audit:timeline').setLabel('Timeline').setEmoji('🕒').setStyle(ButtonStyle.Secondary)), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('owner:audit:actions').setLabel('Actions Performed').setEmoji('👤').setStyle(ButtonStyle.Primary))];
+  return [new ActionRowBuilder().addComponents(navigationButton('owner:audit:refresh', 'Refresh', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH), navigationButton('owner:audit:deep', 'Deep Scan', ButtonStyle.Primary).setEmoji(EMOJIS.INVESTIGATE), navigationButton('owner:audit:identity', 'Identity History', ButtonStyle.Primary).setEmoji(EMOJIS.ROLE_TAG), navigationButton('owner:audit:guilds', 'Guild History', ButtonStyle.Secondary).setEmoji(EMOJIS.USER_SERVER_INFO), navigationButton('owner:audit:moderation', 'Moderation', ButtonStyle.Secondary).setEmoji(EMOJIS.SECURITY)), new ActionRowBuilder().addComponents(navigationButton('owner:audit:account', 'Account & Membership', ButtonStyle.Primary).setEmoji(EMOJIS.ADMIN_STAFF), navigationButton('owner:audit:evidence', 'Evidence Summary', ButtonStyle.Primary).setEmoji(EMOJIS.ADMIN_PIN), navigationButton('owner:audit:roles', 'Roles', ButtonStyle.Secondary).setEmoji(EMOJIS.USER_ROLES), navigationButton('owner:audit:voice', 'Voice', ButtonStyle.Secondary).setEmoji(EMOJIS.USER_TEMP_VOICE), navigationButton('owner:audit:timeline', 'Timeline', ButtonStyle.Secondary).setEmoji(EMOJIS.ROLE_CLOCK)), new ActionRowBuilder().addComponents(navigationButton('owner:audit:actions', 'Actions Performed', ButtonStyle.Primary).setEmoji(EMOJIS.USER))];
 }
 
 function listLines(items, formatter, limit = 15) { if (!Array.isArray(items) || !items.length) return 'None recorded.'; return items.slice(-limit).reverse().map(formatter).join('\n').slice(0, 3900) || 'None recorded.'; }

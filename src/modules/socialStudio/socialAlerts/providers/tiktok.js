@@ -310,10 +310,14 @@ async function checkTikTok(account) {
       },
     });
 
-    const redirectedAwayFromLive = !onOwnLiveUrl && finalUrl.toLowerCase().includes(`@${username.toLowerCase()}`);
-    if (ended || redirectedAwayFromLive) return result('tiktok', {
+    // TikTok can redirect a LIVE URL or serve a generic "LIVE has ended" message
+    // while the creator is still broadcasting. Neither proves this account's
+    // current broadcast has ended. Only accept an explicit ended marker on the
+    // creator's own LIVE page with matching creator identity.
+    const confirmedEnded = ended && onOwnLiveUrl && creatorMarker;
+    if (confirmedEnded) return result('tiktok', {
       isLive: false,
-      providerSource: ended ? 'public_page_ended' : 'public_page_redirect',
+      providerSource: 'public_page_ended',
       confidence: 'high',
       externalId: userId || undefined,
       url: profile,

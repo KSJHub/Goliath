@@ -1,12 +1,13 @@
 'use strict';
+const { emojiLabel } = require('../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const store = require('../../modules/socialStudio/socialAlerts/socialStudioStore');
 const liveRole = require('../../modules/socialStudio/socialAlerts/socialStudioLiveRole');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
@@ -21,7 +22,7 @@ function sessionKey(interaction) { return `${interaction.guildId}:${interaction.
 function getRoleSession(interaction) { return roleSessions.get(sessionKey(interaction)) || { rolePage: 0 }; }
 function setRoleSession(interaction, patch) { const next = { ...getRoleSession(interaction), ...patch }; roleSessions.set(sessionKey(interaction), next); return next; }
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
-function button(id, label, disabled = false) { return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(ButtonStyle.Secondary).setDisabled(disabled); }
+function button(id, label, disabled = false) { return navigationButton(id, label, ButtonStyle.Secondary, disabled); }
 function who(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 function sortedRoles(interaction) {
   return [...(interaction.guild?.roles?.cache?.values?.() || [])]
@@ -89,10 +90,10 @@ function rolePayload(interaction) {
     'Used only for the first notification of a genuinely new LIVE session.',
   ].join('\n');
   const navigation = [
-    button(`${P}settings`, '⬅️ Back'),
-    button(`${P}roles:page:prev`, '◀️', safePage <= 0),
+    button(`${P}settings`, emojiLabel('BACK', 'Back')),
+    button(`${P}roles:page:prev`, emojiLabel('ROLE_PREVIOUS', 'Roles'), safePage <= 0),
     button(`${P}roles:page:info`, `📄 Roles ${safePage + 1}/${pageCount}`, true),
-    button(`${P}roles:page:next`, '▶️', safePage >= pageCount - 1),
+    button(`${P}roles:page:next`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), safePage >= pageCount - 1),
   ];
   return { embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🎭 Roles & Access').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()], components: [manager.row, user.row, live, notificationSelect(interaction, config, safePage), row(...navigation)] };
 }

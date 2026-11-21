@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from './PageShell.jsx';
 import React from 'react';
 
 const fallback = {
@@ -14,7 +15,7 @@ function themeOf(theme) {
 
 export default function EmptyState({
   theme,
-  icon = '🧩',
+  icon = E.SYSTEM,
   title = 'Nothing here yet',
   description,
   text,

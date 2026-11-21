@@ -2,7 +2,9 @@ const crypto = require('node:crypto');
 const express = require('express');
 const security = require('../../core/security/protection/core');
 
+const { dashboardBasePath, dashboardSessionName, oauthReturnName, dashboardUrl } = require('../../config/dashboardRouting');
 const router = express.Router();
+const { MEMBER_PORTAL, listDashboardGuilds } = require('../middleware/dashboardAccess');
 // Hands an authenticated Appeals login directly back to the validated route
 // using a no-cache HTML handoff instead of relying on SPA/hash redirect recovery.
 const AUTH_FLOW_REVISION = 'appeals-state';
@@ -44,18 +46,18 @@ function getAuthConfig() {
 function getCookieOptions() {
   return {
     httpOnly: true,
-    secure: isProduction(),
+    secure: isProduction() || Boolean(dashboardBasePath()),
     sameSite: isProduction() ? 'none' : 'lax',
-    path: '/',
+    path: dashboardBasePath() || '/',
   };
 }
 
 function getOAuthReturnCookieOptions() {
   return {
     httpOnly: false,
-    secure: isProduction(),
+    secure: isProduction() || Boolean(dashboardBasePath()),
     sameSite: isProduction() ? 'none' : 'lax',
-    path: '/',
+    path: dashboardBasePath() || '/',
     maxAge: 15 * 60 * 1000,
   };
 }
@@ -91,7 +93,8 @@ function safeReturnPath(value) {
   if (!raw) return '/';
   try {
     const parsed = new URL(raw, 'https://goliath.local');
-    if (parsed.origin !== 'https://goliath.local' || parsed.pathname !== '/appeals') return '/';
+    if (parsed.origin !== 'https://goliath.local' || !['/appeals', '/portal'].includes(parsed.pathname)) return '/';
+    if (parsed.pathname === '/portal') return '/portal';
     const params = new URLSearchParams();
     const guild = String(parsed.searchParams.get('guild') || '').trim();
     const caseId = String(parsed.searchParams.get('case') || '').trim();
@@ -140,12 +143,12 @@ function readOAuthState(value, secret) {
 function buildPostOAuthTarget(origin, returnPath) {
   const safeOrigin = safeRedirectUrl(origin);
   const safePath = safeReturnPath(returnPath);
-  return `${safeOrigin}${safePath}`;
+  return dashboardUrl(safeOrigin, safePath);
 }
 
 function renderAppealsHandoff(returnPath, clientUrl) {
   const safePath = safeReturnPath(returnPath);
-  const target = buildPostOAuthTarget(clientUrl, safePath.startsWith('/appeals') ? safePath : '/appeals');
+  const target = buildPostOAuthTarget(clientUrl, (safePath.startsWith('/appeals') || safePath === '/portal') ? safePath : '/appeals');
   const escapedTarget = target.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   return `<!doctype html>
 <html lang="en">
@@ -153,11 +156,11 @@ function renderAppealsHandoff(returnPath, clientUrl) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="refresh" content="0;url=${escapedTarget}">
-  <title>Returning to Goliath Appeals</title>
+  <title>Returning to Goliath</title>
 </head>
 <body>
-  <p>Authentication complete. Returning to Goliath Appeals…</p>
-  <p><a href="${escapedTarget}">Continue to Appeals</a></p>
+  <p>Authentication complete. Returning to Goliath…</p>
+  <p><a href="${escapedTarget}">Continue to Goliath</a></p>
 </body>
 </html>`;
 }
@@ -185,7 +188,7 @@ router.get('/login', (req, res) => {
   const returnPath = safeReturnPath(req.query?.next);
   if (req.session) req.session.oauthReturnPath = returnPath;
   if (returnPath.startsWith('/appeals')) {
-    res.cookie('goliath_oauth_return', returnPath, getOAuthReturnCookieOptions());
+    res.cookie(oauthReturnName(), returnPath, getOAuthReturnCookieOptions());
   }
 
   const params = new URLSearchParams({
@@ -211,15 +214,22 @@ router.get('/login', (req, res) => {
 
 /* ---------------- CHECK AUTH ---------------- */
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session?.user) {
     return res.status(401).json({ authenticated: false, user: null });
   }
+  res.set('Cache-Control', 'no-store');
+  let dashboardGuilds;
+  try { dashboardGuilds = await listDashboardGuilds(req.client, req.session.user.id); }
+  catch { return res.status(503).json({ error: 'Unable to verify server access.' }); }
   return res.json({
     authenticated: true,
+    dashboardAllowed: security.isBotOwner(req.session.user.id) || dashboardGuilds.length > 0,
+    memberPortal: MEMBER_PORTAL,
     user: {
       ...req.session.user,
       isOwner: security.isBotOwner(req.session.user.id),
+      dashboardAllowed: security.isBotOwner(req.session.user.id) || dashboardGuilds.length > 0,
     },
   });
 });
@@ -228,7 +238,7 @@ router.get('/me', (req, res) => {
 
 router.post('/logout', (req, res) => {
   if (!req.session) {
-    res.clearCookie('goliath_dashboard_session', getCookieOptions());
+    res.clearCookie(dashboardSessionName(), getCookieOptions());
     return res.json({ success: true });
   }
 
@@ -237,7 +247,7 @@ router.post('/logout', (req, res) => {
       console.error('❌ Logout session destroy failed', error);
       return res.status(500).json({ error: 'Logout failed' });
     }
-    res.clearCookie('goliath_dashboard_session', getCookieOptions());
+    res.clearCookie(dashboardSessionName(), getCookieOptions());
     return res.json({ success: true });
   });
 });
@@ -263,7 +273,7 @@ router.get('/callback', async (req, res) => {
     const stateReturnPath = readOAuthState(req.query.state, clientSecret);
     if (!stateReturnPath) {
       console.error('❌ OAuth callback rejected missing, invalid, or expired state.');
-      return res.status(400).send('OAuth sign-in state expired or was invalid. Return to the Appeals page and sign in again.');
+      return res.status(400).send('OAuth sign-in state expired or was invalid. Return to Goliath and sign in again.');
     }
 
     const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
@@ -318,20 +328,22 @@ router.get('/callback', async (req, res) => {
 
     if (isDebug()) console.log('[AUTH] User logged in:', req.session.user.username);
 
+    const dashboardGuilds = stateReturnPath.startsWith('/appeals') ? [] : await listDashboardGuilds(req.client, userData.id);
+    const dashboardAllowed = security.isBotOwner(userData.id) || dashboardGuilds.length > 0;
     req.session.save((saveError) => {
       if (saveError) {
         console.error('❌ Session save failed', saveError);
         return res.status(500).send('Session error.');
       }
 
-      if (stateReturnPath.startsWith('/appeals')) {
-        res.clearCookie('goliath_oauth_return', { path: '/', sameSite: isProduction() ? 'none' : 'lax', secure: isProduction() });
+      if (stateReturnPath.startsWith('/appeals') || stateReturnPath === '/portal') {
+        res.clearCookie(oauthReturnName(), { path: dashboardBasePath() || '/', sameSite: isProduction() ? 'none' : 'lax', secure: isProduction() || Boolean(dashboardBasePath()) });
         return res.status(200).type('html').send(renderAppealsHandoff(stateReturnPath, clientUrl));
       }
 
       // Always return to the configured frontend origin; the OAuth callback
       // may run on a separate API hostname that cannot serve dashboard routes.
-      return res.redirect(buildPostOAuthTarget(clientUrl, stateReturnPath));
+      return res.redirect(dashboardAllowed ? buildPostOAuthTarget(clientUrl, stateReturnPath) : dashboardUrl(clientUrl, MEMBER_PORTAL));
     });
   } catch (error) {
     console.error('❌ Auth error', error);
@@ -340,3 +352,4 @@ router.get('/callback', async (req, res) => {
 });
 
 module.exports = router;
+

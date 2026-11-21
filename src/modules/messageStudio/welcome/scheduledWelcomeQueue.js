@@ -13,13 +13,35 @@ async function refreshMembers(guild) {
 
 async function getQueuedMembers(guild, config = {}) {
   const roleId = cleanId(config.queueRoleId);
-  if (!guild || !roleId) return [];
+  if (!guild) return [];
   await refreshMembers(guild);
+  if (!roleId) {
+    const entries = config.pendingMembers && typeof config.pendingMembers === 'object' ? config.pendingMembers : {};
+    const members = [];
+    for (const [memberId, entry] of Object.entries(entries)) {
+      const id = cleanId(memberId);
+      if (!id) continue;
+      // Verify membership against Discord rather than trusting a possibly stale cache
+      // after a restart or a missed leave event.
+      const member = await guild.members.fetch({ user: id, force: true }).catch(() => null);
+      if (!member || (entry?.joinedAt && entry.joinedAt !== member.joinedAt?.toISOString?.())) continue;
+      if (config.ignoreBots !== false && member.user?.bot) continue;
+      members.push(member);
+    }
+    return members.sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
+  }
   const role = guild.roles?.cache?.get(roleId) || await guild.roles?.fetch?.(roleId).catch(() => null);
   if (!role) return [];
-  return [...role.members.values()]
-    .filter((member) => config.ignoreBots === false || !member.user?.bot)
-    .sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
+  const members = [];
+  for (const cachedMember of role.members.values()) {
+    // Role membership in the cache can be stale after a leave, rejoin or
+    // restart. Confirm both current membership and the role before delivery.
+    const member = await guild.members.fetch({ user: cachedMember.id, force: true }).catch(() => null);
+    if (!member?.roles?.cache?.has(roleId)) continue;
+    if (config.ignoreBots !== false && member.user?.bot) continue;
+    members.push(member);
+  }
+  return members.sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
 }
 
 async function removeQueueRole(member, roleId, reason = 'Scheduled welcome completed') {

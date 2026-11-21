@@ -49,6 +49,7 @@ const discordRoleEditorRoutes = route('discord role editor routes', './src/serve
 const discordResourceRoutes = route('discord resource routes', './src/server/routes/discord/discordResources');
 const statusRoutes = route('status routes', './src/server/routes/status');
 const ownerRoutes = route('owner routes', './src/server/routes/owner/owner');
+const ownerAIRoutes = route('private Goliath AI routes', './src/owner/dev/goliathAI');
 const ownerDiagnosticsRoutes = route('owner diagnostics routes', './src/server/routes/owner/diagnostics');
 const ownerTranslationRoutes = route('owner translation routes', './src/server/routes/owner/translation');
 const ownerVariablesRoutes = route('owner variables routes', './src/server/routes/owner/variables');
@@ -87,7 +88,7 @@ const automationRoutes = route('automation routes', './src/server/routes/automat
 const notificationRoutes = route('notification routes', './src/server/routes/notifications');
 const activityRoutes = route('activity routes', './src/server/routes/activity');
 const pollsRoutes = route('polls routes', './src/server/routes/modules/communityStudio/polls');
-const freeGamesRoutes = route('free games routes', './src/server/routes/modules/utilityStudio/freeGames');
+const freeGamesRoutes = route('free games routes', './src/server/routes/modules/utilityStudio/games');
 const statsRoutes = route('stats routes', './src/server/routes/modules/utilityStudio/stats');
 const tempVoiceRoutes = route('temp voice routes', './src/server/routes/modules/utilityStudio/tempVoice');
 const starboardRoutes = route('starboard routes', './src/server/routes/modules/messageStudio/starboard');
@@ -137,19 +138,27 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 client.commands = new Collection();
+const { dashboardBasePath, dashboardSessionName } = require('./src/config/dashboardRouting');
 const app = express();
 const server = http.createServer(app);
-const io = initSocketHub(server) || null;
+const { requireDashboardAccess, resolveGuildAccess } = require('./src/server/middleware/dashboardAccess');
+const io = initSocketHub(server, { client, getSession: () => dashboardSession, resolveGuildAccess }) || null;
 app.set('trust proxy', 1);
 app.set('goliath.client', client);
 app.set('goliath.io', io);
 
 const allowedOrigins = new Set(['https://goliath.ksjdigital.co.uk', 'https://dev.goliath.ksjdigital.co.uk', 'https://twotonetaj.ksjdigital.co.uk', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175']);
-[process.env.CLIENT_URL, process.env.DASHBOARD_CLIENT_URL, process.env.DASHBOARD_URL, process.env.VITE_CLIENT_URL, process.env.TWOTONETAJ_CLIENT_URL].filter(Boolean).forEach((origin) => allowedOrigins.add(String(origin).trim()));
+[process.env.CLIENT_URL, process.env.DASHBOARD_CLIENT_URL, process.env.DASHBOARD_URL, process.env.VITE_CLIENT_URL, process.env.TWOTONETAJ_CLIENT_URL].filter(Boolean).forEach((origin) => allowedOrigins.add(new URL(String(origin).trim()).origin));
 app.use(cors({ origin(origin, callback) { if (!origin || allowedOrigins.has(origin)) return callback(null, true); return callback(null, false); }, credentials: true }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } }));
+const dashboardSession = session({ name: dashboardSessionName(), store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { path: dashboardBasePath() || '/', secure: isProduction || Boolean(dashboardBasePath()), httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } });
+app.use(dashboardSession);
+app.use((req, _res, next) => {
+  const base = dashboardBasePath();
+  if (base && (req.url === base || req.url.startsWith(base + '/') || req.url.startsWith(base + '?'))) req.url = req.url.slice(base.length) || '/';
+  next();
+});
 app.use((req, _res, next) => { req.client = client; req.io = io; next(); });
 
 function cleanDiscordId(value) {
@@ -185,10 +194,16 @@ async function requireEmojiGuildAccess(req, res, next) {
 
 app.use('/api/emojis/:guildId', requireEmojiGuildAccess);
 
+const memberProfileRoutes = require('./src/server/routes/memberProfile');
+app.use('/api/member-profile', memberProfileRoutes);
+
 const mounts = [
-  ['/auth', authRoutes], ['/api/auth', authRoutes], ['/api/discord', discordRoutes], ['/api/discord', discordRoleEditorRoutes], ['/api/discord', discordResourceRoutes], ['/api/status', statusRoutes], ['/api/public/community', publicCommunityRoutes], ['/api/owner', ownerRoutes], ['/api/owner/diagnostics', ownerDiagnosticsRoutes], ['/api/owner/translation', ownerTranslationRoutes], ['/api/owner/variables', ownerVariablesRoutes], ['/api/config/automod', automodRoutes], ['/api/config/general', generalSettingsRoutes], ['/api/config/logs', logsRoutes], ['/api/config/messages', messagesRoutes], ['/api/billing', billingRoutes], ['/api/moderation', moderationRoutes], ['/api/cases', moderationRoutes], ['/api/restore', serverRestoreRoutes], ['/api/security', securityRoutes], ['/api/tickets', ticketRoutes], ['/api/forms', formsRoutes], ['/api/transcripts', transcriptRoutes], ['/api/suggestions', suggestionsRoutes], ['/api/translation', translationRoutes], ['/api/permissions', permissionHealthRoutes], ['/api/social', socialRoutes], ['/api/schedule', scheduleRoutes], ['/api/invites', invitesRoutes], ['/api/birthdays', birthdaysRoutes], ['/api/private-rooms', privateRoomsRoutes], ['/api/emojis', emojisRoutes], ['/api/verification', verificationRoutes], ['/api/auto-roles', autoRolesRoutes], ['/api/welcome', welcomeRoutes], ['/api/goodbye', goodbyeRoutes], ['/api/reaction-roles', reactionRolesRoutes], ['/api/timed-roles', timedRolesRoutes], ['/api/temporary-roles', temporaryRolesRoutes], ['/api/role-selector', roleSelectorRoutes], ['/api/colour-roles', roleSelectorRoutes], ['/api/modules', modulesRoutes], ['/api/automation', automationRoutes], ['/api/notifications', notificationRoutes], ['/api/activity', activityRoutes], ['/api/polls', pollsRoutes], ['/api/free-games', freeGamesRoutes], ['/api/stats', statsRoutes], ['/api/temp-voice', tempVoiceRoutes], ['/api/starboard', starboardRoutes], ['/api/media', mediaRoutes], ['/api/owner/deployments', ownerDeploymentRoutes], ['/api/resources', discordResourceRoutes],
+  ['/auth', authRoutes], ['/api/auth', authRoutes], ['/api/discord', discordRoutes], ['/api/discord', discordRoleEditorRoutes], ['/api/discord', discordResourceRoutes], ['/api/status', statusRoutes], ['/api/public/community', publicCommunityRoutes], ['/api/owner', ownerRoutes], ['/api/owner/ai', ownerAIRoutes], ['/api/owner/diagnostics', ownerDiagnosticsRoutes], ['/api/owner/translation', ownerTranslationRoutes], ['/api/owner/variables', ownerVariablesRoutes], ['/api/config/automod', automodRoutes], ['/api/config/general', generalSettingsRoutes], ['/api/config/logs', logsRoutes], ['/api/config/messages', messagesRoutes], ['/api/billing', billingRoutes], ['/api/moderation', moderationRoutes], ['/api/cases', moderationRoutes], ['/api/restore', serverRestoreRoutes], ['/api/security', securityRoutes], ['/api/tickets', ticketRoutes], ['/api/forms', formsRoutes], ['/api/transcripts', transcriptRoutes], ['/api/suggestions', suggestionsRoutes], ['/api/translation', translationRoutes], ['/api/permissions', permissionHealthRoutes], ['/api/social', socialRoutes], ['/api/schedule', scheduleRoutes], ['/api/invites', invitesRoutes], ['/api/birthdays', birthdaysRoutes], ['/api/private-rooms', privateRoomsRoutes], ['/api/emojis', emojisRoutes], ['/api/verification', verificationRoutes], ['/api/auto-roles', autoRolesRoutes], ['/api/welcome', welcomeRoutes], ['/api/goodbye', goodbyeRoutes], ['/api/reaction-roles', reactionRolesRoutes], ['/api/timed-roles', timedRolesRoutes], ['/api/temporary-roles', temporaryRolesRoutes], ['/api/role-selector', roleSelectorRoutes], ['/api/colour-roles', roleSelectorRoutes], ['/api/modules', modulesRoutes], ['/api/automation', automationRoutes], ['/api/notifications', notificationRoutes], ['/api/activity', activityRoutes], ['/api/polls', pollsRoutes], ['/api/games', freeGamesRoutes], ['/api/free-games', freeGamesRoutes], ['/api/stats', statsRoutes], ['/api/temp-voice', tempVoiceRoutes], ['/api/starboard', starboardRoutes], ['/api/media', mediaRoutes], ['/api/owner/deployments', ownerDeploymentRoutes], ['/api/resources', discordResourceRoutes],
 ];
-for (const [base, router] of mounts) app.use(base, router);
+for (const [base, router] of mounts) {
+  const publicRoute = ['/auth', '/api/auth', '/api/public/community'].includes(base);
+  app.use(base, ...(publicRoute ? [] : [requireDashboardAccess(base)]), router);
+}
 
 const dashboardDist = path.join(process.cwd(), 'dist');
 if (fs.existsSync(dashboardDist)) {
@@ -227,8 +242,8 @@ async function startConfiguredModules(client) {
       const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'reactionRoles'));
       return require('./src/modules/roleStudio/reactionRoles/reactionRoles').startup({ guilds: { cache: enabledGuilds } });
     }),
-    runStartupTask('Verification', () => require('./src/modules/securityStudio/verification').startupVerification(client)),
-    runStartupTask('Free Games', () => require('./src/modules/utilityStudio/freeGames/freeGamesMonitor').startup(client)),
+    runStartupTask('Verification', () => require('./src/modules/securityStudio/verification/verification').startupVerification(client)),
+    runStartupTask('Games', () => require('./src/modules/utilityStudio/games/gamesMonitor').startup(client)),
     runStartupTask('Stats', () => require('./src/modules/utilityStudio/stats/stats').startup(client)),
     runStartupTask('Birthdays', async () => {
       const birthdays = require('./src/modules/communityStudio/birthdays/birthdays');
@@ -263,7 +278,7 @@ async function gracefulShutdown(signal) {
   console.log(`[Runtime] ${signal} received. Shutting down cleanly.`);
   const forceTimer = setTimeout(() => process.exit(0), 8000);
   forceTimer.unref?.();
-  try { require('./src/modules/utilityStudio/freeGames/freeGamesMonitor').shutdown(client); }
+  try { require('./src/modules/utilityStudio/games/gamesMonitor').shutdown(client); }
   catch (error) { console.warn('[Free Games] Shutdown failed:', error.message); }
   try { require('./src/modules/utilityStudio/stats/stats').shutdown(client); }
   catch (error) { console.error('[Stats] Shutdown failed:', error?.stack || error?.message || error); }

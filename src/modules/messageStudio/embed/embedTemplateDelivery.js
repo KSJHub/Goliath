@@ -119,10 +119,18 @@ async function buildTemplateDeliveryPayload(options = {}) {
   const embeds = panel.buildPreviewEmbeds(state, interaction);
   const actionRows = includeComponents ? panel.buttonRows(state, interaction) : [];
 
+  // The renderer can add a standalone member ping. Avoid adding it when the
+  // saved template already mentions that member in its content or panels.
+  const memberMention = userId ? new RegExp('<@!?' + String(userId) + '>') : null;
+  const hasTemplateMemberMention = Boolean(memberMention && (
+    memberMention.test(String(rendered.content || '')) ||
+    (state.panels || []).some((entry) => memberMention.test(JSON.stringify(entry)))
+  ));
+
   let payload = await buildEmbedPayload({
     embeds,
     actionRows,
-    allowUserPing,
+    allowUserPing: allowUserPing && !hasTemplateMemberMention,
     userId,
     ephemeral,
     media: state.media,
