@@ -219,6 +219,8 @@ jobs:
     steps:
       - name: Write deployment summary
         shell: bash
+        env:
+          DEPLOY_SHA: ${{ needs.promote.outputs.deploy_sha }}
         run: |
           {
             echo "## Deploy Goliath"
@@ -228,6 +230,6 @@ jobs:
             echo "- DEV validation: **${{ needs.preflight.result }}**"
             echo "- Branch promotion: **${{ needs.promote.result }}**"
             echo "- VPS deployment: **${{ needs.deploy.result }}**"
-            echo "- Deployed commit: `${{ needs.promote.outputs.deploy_sha }}`"
+            printf -- '- Deployed commit: `%s`\n' "$DEPLOY_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
           [ "${{ needs.deploy.result }}" = "success" ]
