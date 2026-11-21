@@ -10,6 +10,8 @@ import React, { memo } from 'react';
  */
 export const DASHBOARD_EMOJIS = Object.freeze({
   CHANNEL_PREVIOUS: '◀',
+  GAME_NEW: '🆕',
+  WELCOME_INHERIT_TEXT: '↩',
   MEMBERS: '👥', ACTIVE: '🟢', INACTIVE: '⚫', ROLES: '🎭', VOICE: '🔊',
   FOLDER: '📁', ROLE_TAG: '🏷️', DATE: '📅', TIMER: '⏳',
   MESSAGES: '💬', MICROPHONE: '🎙️', JOIN: '📥', LEAVE: '📤',
