@@ -50,6 +50,7 @@ function buildMeta(req, action) {
   return {
     action,
     actorId: getActorId(req),
+    expectedConfigRevision: req.body?.expectedConfigRevision,
   };
 }
 
@@ -158,6 +159,8 @@ function getConfig(guildId) {
 
 function saveConfig(guildId, input = {}, meta = {}) {
   const current = verificationManager.getVerificationStatus(guildId);
+  const { expectedConfigRevision: _revision, ...cleanInput } = input;
+  input = cleanInput;
   const settingsInput = input.settings && typeof input.settings === 'object'
     ? input.settings
     : input;
@@ -232,6 +235,8 @@ router.get('/:guildId/overview', async (req, res) => {
       guildId,
       updatedAt: new Date().toISOString(),
       config: getConfig(guildId),
+      configRevision: section.configRevision,
+      activePanelId: section.activePanelId,
       messages: section.messages,
       panelTemplate: section.panelTemplate,
       panels: Object.values(section.panels || {}),
@@ -294,7 +299,7 @@ router.post('/:guildId/template', (req, res) => {
     const guildId = getGuildId(req);
     const template = verificationManager.updatePanelTemplate(
       guildId,
-      req.body || {},
+      Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => key !== 'expectedConfigRevision')),
       buildMeta(req, 'verification_api_template')
     );
 
@@ -335,10 +340,7 @@ router.post('/:guildId/deploy', async (req, res) => {
         panelId,
         createdBy: actorId,
       },
-      {
-        action: 'verification_api_deploy',
-        actorId,
-      }
+      buildMeta(req, 'verification_api_deploy')
     );
 
     return success(res, { guildId, panel });
@@ -356,10 +358,8 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
     if (!existing) throw new Error('Verification panel not found.');
 
     const actorId = getActorId(req);
-    const meta = {
-      action: 'verification_api_redeploy',
-      actorId,
-    };
+    const meta = buildMeta(req, 'verification_api_redeploy');
+    const { expectedConfigRevision: _revision, ...panelInput } = req.body || {};
 
     let panel;
 
@@ -367,7 +367,7 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
       panel = await verificationManager.refreshVerificationPanel(
         guild,
         existing.panelId,
-        req.body || {},
+        panelInput,
         meta
       );
     } else {
@@ -394,7 +394,7 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
         createdAt: _createdAt,
         createdBy: _createdBy,
         ...redeployInput
-      } = req.body || {};
+      } = panelInput;
       const section = verificationStore.getVerificationSection(guildId);
 
       panel = await verificationManager.deployVerificationPanel(
