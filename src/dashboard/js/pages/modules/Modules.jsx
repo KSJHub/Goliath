@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { api } from '../../services/apiClient.js';
 import ModuleCard from '../../ui/ModuleCard.jsx';
-import { MODULE_STATUSES, moduleRegistry } from '../../shared/moduleRegistry.js';
+import { MODULE_STATUSES, MODULE_STUDIOS, moduleRegistry } from '../../shared/moduleRegistry.js';
 
 function StatCard({ theme, label, value, hint }) {
   return (
@@ -250,6 +250,9 @@ export default function Modules({ theme, selectedGuild, selectedGuildData }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState('');
+  const [search, setSearch] = useState('');
+  const [studioFilter, setStudioFilter] = useState('');
+  const [collapsed, setCollapsed] = useState({});
 
   useEffect(() => {
     let active = true;
@@ -294,6 +297,16 @@ export default function Modules({ theme, selectedGuild, selectedGuildData }) {
   const modules = useMemo(() => (
     mergeModuleState(registryModules, moduleState, entitlementFeatures).sort((a, b) => a.name.localeCompare(b.name))
   ), [registryModules, moduleState, entitlementFeatures]);
+
+  const visibleStudios = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const known = new Set(MODULE_STUDIOS.map(studio => studio.name));
+    const studios = [...MODULE_STUDIOS, ...Array.from(new Set(modules.map(module => module.category).filter(name => !known.has(name)))).map(name => ({ name }))];
+    return studios.filter(studio => !studioFilter || studio.name === studioFilter).map(studio => ({
+      ...studio,
+      modules: modules.filter(module => module.category === studio.name && (!query || [module.name, module.category, module.summary].some(value => String(value || '').toLowerCase().includes(query))))
+    })).filter(studio => studio.modules.length);
+  }, [modules, search, studioFilter]);
 
   const stats = useMemo(() => ({
     total: modules.length,
@@ -367,11 +380,11 @@ export default function Modules({ theme, selectedGuild, selectedGuildData }) {
           <div>
             <p style={{ margin: '0 0 8px', color: '#93c5fd', fontWeight: 950, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Goliath Modules Hub</p>
             <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em' }}>Modules</h1>
-            <p style={{ margin: '10px 0 0', color: theme.mutedText, lineHeight: 1.6, maxWidth: 840 }}>Enable a module, then open it from this grid. Premium modules are locked until the server has the required plan.</p>
+            <p style={{ margin: '10px 0 0', color: theme.mutedText, lineHeight: 1.6, maxWidth: 840 }}>Find modules by Studio, enable them, then open their settings. Premium modules are locked until the server has the required plan.</p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
-            <StatCard theme={theme} label="Feature Modules" value={stats.total} hint="Grid launcher" />
+            <StatCard theme={theme} label="Feature Modules" value={stats.total} hint="Across all Studios" />
             <StatCard theme={theme} label="Enabled" value={stats.enabled} hint="Saved to guild JSON" />
             <StatCard theme={theme} label="Locked" value={stats.locked} hint="Premium gated" />
             <StatCard theme={theme} label="Dashboard Ready" value={stats.dashboardReady} hint="Every module opens" />
@@ -385,18 +398,34 @@ export default function Modules({ theme, selectedGuild, selectedGuildData }) {
         </section>
       ) : null}
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 14 }}>
-        {modules.map((module) => (
-          <ModuleCard
-            key={module.key}
-            module={module}
-            theme={theme}
-            onOpen={handleOpenModule}
-            onToggle={handleToggleModule}
-            saving={savingKey === module.key}
-          />
-        ))}
+      <section style={{ ...cardStyle, padding: 16, display: 'grid', gap: 12 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <input aria-label="Search modules" placeholder="Search modules..." value={search} onChange={event => setSearch(event.target.value)} style={{ flex: '1 1 220px', minWidth: 0, padding: 12, borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText }} />
+          <select aria-label="Filter by Studio" value={studioFilter} onChange={event => setStudioFilter(event.target.value)} style={{ flex: '1 1 180px', minWidth: 0, padding: 12, borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBgSolid || theme.cardBg, color: theme.cardText }}>
+            <option value="">All Studios</option>
+            {MODULE_STUDIOS.map(studio => <option key={studio.name} value={studio.name}>{studio.name}</option>)}
+          </select>
+          <button type="button" onClick={() => { setSearch(''); setStudioFilter(''); setCollapsed({}); }} style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, cursor: 'pointer' }}>Reset filters</button>
+        </div>
+        <div aria-live="polite" style={{ color: theme.mutedText }}>{visibleStudios.reduce((sum, studio) => sum + studio.modules.length, 0)} of {modules.length} modules</div>
       </section>
+      {visibleStudios.length === 0 && <section style={{ ...cardStyle, padding: 20 }}>No modules match your search.</section>}
+      {visibleStudios.map(studio => {
+        const expanded = Boolean(search.trim() || studioFilter) || !collapsed[studio.name];
+        return (
+          <section key={studio.name} style={{ ...cardStyle, padding: 'clamp(12px, 2vw, 20px)', display: 'grid', gap: 14, minWidth: 0 }}>
+            <button type="button" aria-expanded={expanded} disabled={Boolean(search.trim() || studioFilter)} onClick={() => setCollapsed(previous => ({ ...previous, [studio.name]: !previous[studio.name] }))} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', border: 0, background: 'transparent', color: theme.cardText, padding: 4, cursor: search.trim() || studioFilter ? 'default' : 'pointer' }}>
+              <span style={{ fontSize: 22 }} aria-hidden="true">{studio.icon}</span>
+              <strong style={{ fontSize: 20, flex: '1 1 160px' }}>{studio.name}</strong>
+              <span style={{ color: theme.mutedText }}>{studio.modules.filter(module => module.enabled).length} / {studio.modules.length} enabled</span>
+              <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+            </button>
+            {expanded && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 14 }}>
+              {studio.modules.map(module => <ModuleCard key={module.key} module={module} theme={theme} onOpen={handleOpenModule} onToggle={handleToggleModule} saving={Boolean(savingKey) || loading} />)}
+            </div>}
+          </section>
+        );
+      })}
     </div>
   );
 }
