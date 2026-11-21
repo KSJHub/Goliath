@@ -382,6 +382,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
       ),
       row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
       row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview')), button(customId('admin:roleSelector:controlMode', selected.id), selected.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')),
+      row(button(customId('admin:roleSelector:dependencies', selected.id), emojiLabel('SETTINGS', 'Role Dependencies'))),
       nav('admin:roleSelector:groups'),
     ],
   };
@@ -783,6 +784,29 @@ async function handleRoleSelectorInteraction(i) {
       return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
+    if (id.startsWith('admin:roleSelector:dependencies:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:dependencies'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      return respond(i, {
+        embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Role Dependencies').setDescription('Members must hold every required role and none of the conflicting roles. Clearing a selection remains subject to its selection limits.')],
+        components: [
+          row(new RoleSelectMenuBuilder().setCustomId(customId('admin:roleSelector:dependencyRequired', group.id)).setPlaceholder('Required roles (all)').setMinValues(0).setMaxValues(25).setDefaultRoles(...(group.requiredRoleIds || []))),
+          row(new RoleSelectMenuBuilder().setCustomId(customId('admin:roleSelector:dependencyConflicting', group.id)).setPlaceholder('Conflicting roles (any)').setMinValues(0).setMaxValues(25).setDefaultRoles(...(group.conflictingRoleIds || []))),
+          nav(customId('admin:roleSelector:groupOpen', group.id))
+        ]
+      });
+    }
+    if (/^admin:roleSelector:dependency(Required|Conflicting):/.test(id)) {
+      const [, , action, groupId] = id.split(':');
+      const group = roleSelector.getGroup(i.guildId, groupId);
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      const key = action === 'dependencyRequired' ? 'requiredRoleIds' : 'conflictingRoleIds';
+      const other = key === 'requiredRoleIds' ? 'conflictingRoleIds' : 'requiredRoleIds';
+      const values = [...new Set(i.values || [])];
+      if (values.some(value => value === i.guildId || (group[other] || []).includes(value) || group.options.some(option => option.roleId === value))) throw new Error('Dependencies cannot overlap, include everyone or reference roles in this selector.');
+      await roleSelector.saveGroupSafe(i.guild, { ...group, [key]: values }, { ...actor, action: 'role_selector_dependencies' });
+      return respond(i, buildGroupsPanel(i.guildId, group.id));
+    }
     if (id.startsWith('admin:roleSelector:controlMode:')) {
       const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:controlMode'));
       if (!group || group.builtIn) throw new Error('Select a custom selector first.');
