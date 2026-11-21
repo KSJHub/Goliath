@@ -1301,7 +1301,7 @@ async function verificationLifecycleAudit() {
       ${lockSource}
       const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
       const roles={verified:['verified'],auto:[],pending:[],verifying:[],quarantine:['quarantine']};
-      const config={settings:{roles}};
+      const config={configRevision:1,settings:{roles}};
       const roleIds=(settings,key)=>settings.roles[key]||[];
       const unique=values=>[...new Set(values)];
       const fetchRoles=async(guild,ids)=>ids.map(id=>({id}));
@@ -1317,7 +1317,7 @@ async function verificationLifecycleAudit() {
         started=new Promise(resolve=>{entered=resolve;});
       }
       const verificationStore={
-        getSession:()=>({state,completedSecurity,activeChallenge}),
+        getSession:()=>({state,sessionId:'integration-session',securityConfigRevision:1,completedSecurity,activeChallenge}),
         upsertSession:(guild,user,value)=>{if(value.state)state=value.state;},
         addSecurityHistory:()=>{},
         clearAttempts:()=>{},
@@ -1331,7 +1331,7 @@ async function verificationLifecycleAudit() {
         id:'member',guild,roles:{cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
       })}};
       const member={id:'member',guild,roles:{cache:{has:()=>false}}};
-      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');};
+      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');return{added:[],removed:[]};};
       // Resolve the extracted module's local dependency explicitly; never load live storage.
       const sharedQuarantine={
         QUARANTINE_MODES:{INVESTIGATION:'investigation'},
