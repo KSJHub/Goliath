@@ -1186,6 +1186,25 @@ async function verificationLifecycleAudit() {
       }
     }
 
+    // Exercise optimistic configuration concurrency without touching guild data.
+    {
+      const source = store.match(/function updateConfiguration\(.*\}/)?.[0];
+      assert(source, 'Configuration revision updater must exist');
+      let state = { configRevision: 7, configHistory: [], settings: {}, panels: {} };
+      const clone = value => JSON.parse(JSON.stringify(value));
+      const update = new Function('updateVerificationSection', 'clone', 'now', 'CONFIG_HISTORY_LIMIT', source + '\nreturn updateConfiguration;')(
+        (guildId, updater) => { state = updater(clone(state)); return state; }, clone, () => 'test', 10
+      );
+      update('guild', section => ({ ...section, settings: { first: true } }), { expectedConfigRevision: 7 });
+      assert.equal(state.configRevision, 8);
+      assert.throws(() => update('guild', section => ({ ...section, settings: { stale: true } }), { expectedConfigRevision: 7 }), /configuration changed/);
+      assert.deepEqual(state.settings, { first: true });
+      assert.equal(state.configHistory[0].revision, 7);
+      update('guild', section => ({ ...section, settings: { second: true } }), { expectedConfigRevision: 8 });
+      assert.equal(state.configRevision, 9);
+      assert.deepEqual(state.settings, { second: true });
+    }
+
     // Guard the security handoff and challenge recovery against regressions.
     contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
     contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
