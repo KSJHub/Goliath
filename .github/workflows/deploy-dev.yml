@@ -56,7 +56,12 @@ jobs:
         run: |
           set -euo pipefail
           npm run doctor
-          npm run audit:emojis
+                    # Retain the selected branch's native audit contract.
+          if [ "$BOT_MODE" = production ] && [ ! -f src/core/guild/goliathNavigation.js ]; then
+            echo "Legacy PRODUCTION: central emoji audit is not available."
+          else
+            npm run audit:emojis
+          fi
           node scripts/goliath.js embed-graphic-headers
           node scripts/goliath.js runtime-contracts
           if [ "$BOT_MODE" = dev ]; then
