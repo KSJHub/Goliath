@@ -6174,8 +6174,10 @@ function goliathDeploymentRegression(source, assert, vm) {
   ];
   guild.members={me:bot};
   guild.channels.cache.set('c',{id:'c',permissionOverwrites:{cache:new Map([['bot',{allow:{bitfield:1n},deny:{bitfield:6n}}]])}});
+  const fullTargets=[];
   const planSync=vm.runInNewContext(source.slice(syncStart,syncEnd)+'; aiDeploySyncPlan',{
-    aiGoliathDeploymentScan:()=>({gaps:fixtures}), PermissionsBitField:BitField,
+    aiGoliathDeploymentScan:()=>({gaps:fixtures,targets:fullTargets,profile}), PermissionsBitField:BitField,
+    aiGoliathChannelRequirements:helpers.required,
     aiGoliathInheritedChildren:helpers.children
   });
   const plan=planSync(guild);
@@ -6185,6 +6187,15 @@ function goliathDeploymentRegression(source, assert, vm) {
   check(plan.steps[0].before,{exists:true,allow:'1',deny:'6'});
   check(plan.steps[0].after,{allow:'3',deny:'4'});
   fixtures.length=0;
+  check(planSync(guild),{steps:[],blocked:[]});
+  const makeTarget=(id,locked=false,editable=true,allow=0n,deny=0n)=>({id,type:0,permissionsLocked:locked,permissionsFor:()=>({has:()=>editable}),permissionOverwrites:{cache:new Map([['bot',{allow:{bitfield:allow,has:p=>Boolean(allow&bits[p])},deny:{bitfield:deny,has:p=>Boolean(deny&bits[p])}}]])}});
+  for(const target of [makeTarget('new'),makeTarget('synced',true),makeTarget('blocked',false,false),makeTarget('complete',false,true,3n),makeTarget('partial',false,true,5n,2n)]){fullTargets.push(target);guild.channels.cache.set(target.id,target);}
+  const full=planSync(guild,true);
+  assert.equal(full.full,true);
+  check(full.steps.map(step=>step.channelId),['new','partial']);
+  check(full.blocked,['blocked']);
+  check(full.steps[0].grants,['ViewChannel','SendMessages']);
+  check(full.steps[1].after,{allow:'7',deny:'0'});
   check(planSync(guild),{steps:[],blocked:[]});
   const roleStart=source.indexOf('function aiGoliathRolePlan(');
   const roleEnd=source.indexOf('const aiDeployApprovals',roleStart);
