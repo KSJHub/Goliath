@@ -278,6 +278,11 @@ async function applyStandardSelection(guild, member, groupId, optionIds = []) {
       if (desired.length > group.maxSelections || desired.length < group.minSelections) throw new Error(`Choose between ${group.minSelections} and ${group.maxSelections} roles.`);
       const previous = selectionFor(section, member.id, id);
       if (!desired.length && previous.length && !group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
+      if (desired.length) {
+        const fresh = await fetchFreshMember(guild, member);
+        if ((group.requiredRoleIds || []).some(id => !fresh.roles.cache.has(id))) throw new Error('You do not have the required roles for this selector.');
+        if ((group.conflictingRoleIds || []).some(id => fresh.roles.cache.has(id))) throw new Error('You have a conflicting role for this selector.');
+      }
       const desiredRoles = [];
       for (const optionId of desired) desiredRoles.push((await ensureStandardRoleSafe(guild, group, optionId)).role);
       base.assertModuleEnabled(guild.id);
