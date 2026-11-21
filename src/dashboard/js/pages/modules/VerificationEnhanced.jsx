@@ -396,7 +396,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     setBusy('delete');
     setError('');
     try {
-      await api.deleteVerificationPanel(guildId, selectedPanelId);
+      await api.deleteVerificationPanel(guildId, selectedPanelId, data?.configRevision);
       setSelectedPanelId('');
       panelDraftDirty.current = false;
       await load();
@@ -410,7 +410,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
 
   async function resetModule() {
     if (!await goliathDialog.confirm('Reset all Verification settings, analytics and panel records?', { title: 'Reset Verification?', danger: true, confirmLabel: 'Reset Verification' })) return;
-    await act('reset', () => api.resetVerification(guildId), 'Verification reset to defaults.');
+    await act('reset', () => api.resetVerification(guildId, data?.configRevision), 'Verification reset to defaults.');
     setSelectedPanelId('');
   }
 
