@@ -217,7 +217,16 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
       description: x.description || undefined,
       default: Boolean(x.roleId && member?.roles?.cache?.has(x.roleId)),
     }));
-    if (opts.length) components.push(row(new StringSelectMenuBuilder()
+    if (group.controlMode === 'buttons' && opts.length <= 15) {
+      for (let offset = 0; offset < opts.length; offset += 5) {
+        components.push(row(...opts.slice(offset, offset + 5).map(opt => {
+          const id = customId('roleSelector:pick', group.id, deploymentId || 'global', opts.indexOf(opt));
+          const control = new ButtonBuilder().setCustomId(id).setLabel(opt.label.slice(0,80)).setStyle(opt.default ? ButtonStyle.Success : ButtonStyle.Secondary);
+          if (opt.emoji) control.setEmoji(opt.emoji);
+          return control;
+        })));
+      }
+    } else if (opts.length) components.push(row(new StringSelectMenuBuilder()
       .setCustomId(customId('roleSelector:choose', group.id, deploymentId || 'global'))
       .setPlaceholder(group.selectionMode === 'multiple' ? 'Choose one or more' : 'Choose one')
       .setMinValues(Math.min(opts.length, Math.max(group.selectionMode === 'single' ? 1 : 0, group.minSelections || 0)))
@@ -372,7 +381,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
       row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
-      row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview'))),
+      row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview')), button(customId('admin:roleSelector:controlMode', selected.id), selected.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')),
       nav('admin:roleSelector:groups'),
     ],
   };
@@ -774,6 +783,14 @@ async function handleRoleSelectorInteraction(i) {
       return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
+    if (id.startsWith('admin:roleSelector:controlMode:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:controlMode'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      if (group.controlMode !== 'buttons' && group.options.filter(x => x.enabled).length > 15) throw new Error('Button selectors support up to 15 enabled options.');
+      await roleSelector.saveGroupSafe(i.guild, { ...group, controlMode: group.controlMode === 'buttons' ? 'dropdown' : 'buttons' }, { ...actor, action: 'role_selector_control_mode' });
+      await syncPanels(i.guild, group.id);
+      return respond(i, buildGroupsPanel(i.guildId, group.id));
+    }
     if (/^admin:roleSelector:(design|media|preview):/.test(id)) {
       const [, , action, groupId] = id.split(':');
       const group = roleSelector.getGroup(i.guildId, groupId);
@@ -1084,6 +1101,24 @@ async function handleRoleSelectorInteraction(i) {
     }
     if (id.startsWith('roleSelector:customHex:')) { await i.showModal(hexModal(tail(id, 'roleSelector:customHex') || 'global')); return true; }
     if (id.startsWith('roleSelector:customHexSubmit:')) { await roleSelector.applyColourSelection(i.guild, i.member, i.fields.getTextInputValue('hex'), i.fields.getTextInputValue('label')); await syncStatsDeploymentState(i.guild).catch(() => null); return i.reply({ content: emojiLabel('HEALTHY', 'Your custom colour has been applied.'), flags: 64 }); }
+    if (id.startsWith('roleSelector:pick:')) {
+      const [groupId, deploymentId, index] = splitTail(id, 'roleSelector:pick');
+      const deployment = deploymentId !== 'global' ? deploymentById(i.guildId, deploymentId) : null;
+      const allowed = deploymentAllowedGroups(i.guildId, deploymentId);
+      const group = roleSelector.getGroup(i.guildId, groupId);
+      if (!group || group.controlMode !== 'buttons' || (allowed && !allowed.includes(groupId))) throw new Error('Selector unavailable.');
+      const filter = optionFilterFor(deployment, groupId);
+      const options = group.options.filter(x => x.enabled && (!filter || filter.has(x.id))).sort((a,b) => a.order-b.order);
+      const option = options[Number(index)];
+      if (!option || options.length > 15) throw new Error('This selector has changed. Reopen it.');
+      const member = await freshMember(i);
+      const current = group.options.filter(x => x.enabled && x.roleId && member.roles.cache.has(x.roleId)).map(x => x.id);
+      const desired = group.selectionMode === 'single' ? [option.id] : current.includes(option.id) ? current.filter(x => x !== option.id) : [...current, option.id];
+      await roleSelector.applyStandardSelection(i.guild, member, groupId, desired);
+      await i.update(await resolvePayload(i.guild, memberGroupPayload(i.guild, await freshMember(i), groupId, allowed, deploymentId, deployment)));
+      await syncStatsDeploymentState(i.guild).catch(() => null);
+      return true;
+    }
     if (id.startsWith('roleSelector:choose:')) {
       const [groupId, deploymentId = 'global'] = splitTail(id, 'roleSelector:choose');
       const deployment = deploymentId !== 'global' ? deploymentById(i.guildId, deploymentId) : null; const allowed = deploymentAllowedGroups(i.guildId, deploymentId);
