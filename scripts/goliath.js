@@ -2849,7 +2849,7 @@ async function memberIntelligenceRoutingAudit() {
 async function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sharedEmojiPaletteAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, dashboardRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
+  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sharedEmojiPaletteAudit, emojiInventoryAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, dashboardRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
   const results = [];
   for (const suite of suitesToRun) results.push(await suite());
   return results.every(Boolean);
