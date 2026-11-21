@@ -186,6 +186,15 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
     group.allowRemove ? 'You may clear this category at any time.' : null,
   ].filter(Boolean).join('\n'));
 
+  if (group.appearance) {
+    const a = group.appearance;
+    if (a.title) embed.setTitle(a.title);
+    if (a.description) embed.setDescription(a.description);
+    if (a.color) embed.setColor(parseInt(a.color.slice(1), 16));
+    if (a.footer) embed.setFooter({ text: a.footer });
+    if (a.image) embed.setImage(a.image);
+    if (a.thumbnail) embed.setThumbnail(a.thumbnail);
+  }
   if (group.type === 'colour') {
     const opts = group.palette.filter((x) => x.enabled).sort((a, b) => a.order - b.order).slice(0, 24).map((x) => ({
       label: x.label,
@@ -363,6 +372,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
       row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
+      row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview'))),
       nav('admin:roleSelector:groups'),
     ],
   };
@@ -764,6 +774,38 @@ async function handleRoleSelectorInteraction(i) {
       return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
+    if (/^admin:roleSelector:(design|media|preview):/.test(id)) {
+      const [, , action, groupId] = id.split(':');
+      const group = roleSelector.getGroup(i.guildId, groupId);
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      if (action === 'preview') {
+        const payload = memberGroupPayload(i.guild, await freshMember(i), group.id);
+        return respond(i, { embeds: payload.embeds, components: [nav(customId('admin:roleSelector:groupOpen', group.id))] });
+      }
+      const fields = action === 'design' ? [['title','Title',256],['description','Description',3000],['color','HEX colour',7],['footer','Footer',2048]] : [['image','Banner image URL',2048],['thumbnail','Thumbnail URL',2048]];
+      const modal = new ModalBuilder().setCustomId(customId('admin:roleSelector:' + action + 'Submit', group.id)).setTitle(action === 'design' ? 'Selector Appearance' : 'Selector Images');
+      for (const [key,label,max] of fields) {
+        const input = new TextInputBuilder().setCustomId(key).setLabel(label).setStyle(max > 256 ? TextInputStyle.Paragraph : TextInputStyle.Short).setRequired(false).setMaxLength(max);
+        if (group.appearance?.[key]) input.setValue(group.appearance[key]);
+        modal.addComponents(row(input));
+      }
+      await i.showModal(modal); return true;
+    }
+    if (/^admin:roleSelector:(designSubmit|mediaSubmit):/.test(id)) {
+      const [, , action, groupId] = id.split(':');
+      const group = roleSelector.getGroup(i.guildId, groupId);
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      const appearance = { ...group.appearance };
+      for (const key of action === 'designSubmit' ? ['title','description','color','footer'] : ['image','thumbnail']) {
+        const value = i.fields.getTextInputValue(key).trim();
+        if (key === 'color' && value && !/^#[0-9a-f]{6}$/i.test(value)) throw new Error('Use a six-digit HEX colour.');
+        if (['image','thumbnail'].includes(key) && value) { const url = new URL(value); if (!['https:','http:'].includes(url.protocol)) throw new Error('Use an HTTP or HTTPS image URL.'); }
+        appearance[key] = value;
+      }
+      await roleSelector.saveGroupSafe(i.guild, { ...group, appearance }, { ...actor, action: 'role_selector_appearance' });
+      await syncPanels(i.guild, group.id);
+      return respond(i, buildGroupsPanel(i.guildId, group.id));
+    }
     if (id.startsWith('admin:roleSelector:limits:')) {
       const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:limits'));
       if (!group || group.builtIn) throw new Error('Select a custom selector first.');
