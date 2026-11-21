@@ -2394,14 +2394,14 @@ module.exports = {
     if(result.status==='verified')aiGoliathRoleDrafts.delete(identity.user.id+':'+guild.id);
     return result;
   },
-  async prepareDashboardSync(guild,ownerId){
+  async prepareDashboardSync(guild,ownerId,full=false){
     if(mode()!=='DEV'||!validGuildId(ownerId)||!guild)throw new Error('DEV owner context required');
     await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
     if(aiDeployJournalRead(guild.id).some(record=>record.status==='pending'||record.status==='failed'))throw new Error('Recovery required');
-    const plan=aiDeploySyncPlan(guild);
+    const plan=aiDeploySyncPlan(guild,full===true);
     const token=randomUUID();
-    aiDeployApprovals.set('dashboard:'+ownerId+':'+guild.id,{token,kind:'sync',steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
-    return {guildId:guild.id,readOnly:true,steps:plan.steps,blocked:plan.blocked,token};
+    aiDeployApprovals.set('dashboard:'+ownerId+':'+guild.id,{token,kind:'sync',full:full===true,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
+    return {guildId:guild.id,readOnly:true,full:full===true,steps:plan.steps,blocked:plan.blocked,token};
   },
 
   async confirmDashboardSync(guild,ownerId,token){
@@ -2411,7 +2411,7 @@ module.exports = {
     if(!approval||approval.token!==token||approval.expiresAt<Date.now())throw new Error('Approval expired');
     aiDeployApprovals.delete(key);
     await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
-    const plan=aiDeploySyncPlan(guild);
+    const plan=aiDeploySyncPlan(guild,approval.full===true);
     if(!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps)throw new Error('Plan changed or empty');
     return aiExecuteApprovedSync(guild,ownerId,plan);
   },
