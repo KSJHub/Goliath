@@ -2029,8 +2029,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       '**Categories:** ' + categoryCount,
       '**Goliath bot role:** ' + (botRole ? '<@&' + botRole.id + '>' : 'Unavailable'),
       '',
-      'Choose **Scan Goliath** for the bot permission baseline or **Role Templates** for recommended starting permissions.',
-      'Role and channel permission plans require explicit owner approval. Execution is DEV-only and not yet validated for production use.'
+      'Use **Deployment & Sync** to configure and maintain Goliath. Use the audit and inspection tools to review permissions.',
+      'Changes require owner approval.'
     );
   }
   const embed = new EmbedBuilder()
@@ -2038,20 +2038,19 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     .setTitle('Goliath AI • Permission Architect')
     .setDescription(lines.join('\n').slice(0, 3900))
     .addFields({ name: 'Selected guild', value: guild ? guild.name + ' • ' + guild.id : (guildId || 'No guild selected') })
-    .setFooter({ text: 'DEV • Owner-only • Inspection is read-only; approved plans can change Discord permissions' });
-  if (guild && mode() === 'DEV') lines.push('', 'Interrupted permission transactions can be inspected using **Reconcile Pending**.');
+    .setFooter({ text: 'Goliath AI • DEV • Owner only' });
   const controls = new ActionRowBuilder().addComponents(
-    navigationButton(contextualOwnerId('ai-scan', guildId), 'Scan Goliath', ButtonStyle.Primary, !guildId),
-    navigationButton(contextualOwnerId('ai-templates', guildId), 'Role Templates', ButtonStyle.Secondary),
-    navigationButton(contextualOwnerId('ai-roles', guildId), 'Inspect Roles', ButtonStyle.Secondary, !guildId),
-    navigationButton(contextualOwnerId('ai-channels', guildId), 'Inspect Channels', ButtonStyle.Secondary, !guildId),
-    navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
+    navigationButton(contextualOwnerId('ai-deploy-scan', guildId), 'Deployment & Sync', ButtonStyle.Primary, !guildId),
+    navigationButton(contextualOwnerId('ai-scan', guildId), 'Scan Goliath', ButtonStyle.Secondary, !guildId),
+    navigationButton(contextualOwnerId('ai-audit', guildId), 'Permission Audit', ButtonStyle.Secondary, !guildId),
+    navigationButton(contextualOwnerId('ai-templates', guildId), 'Role Templates', ButtonStyle.Secondary)
   );
   const rows = [controls];
-  if (guild && mode() === 'DEV') rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(contextualOwnerId('ai-reconcile', guild.id), 'Reconcile Pending', ButtonStyle.Secondary),
-    navigationButton(contextualOwnerId('ai-audit', guild.id), 'Permission Audit', ButtonStyle.Primary),
-    navigationButton(contextualOwnerId('ai-deploy-scan', guild.id), 'Goliath Deploy / Sync', ButtonStyle.Primary)
+  rows.push(new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-roles', guildId), 'Inspect Roles', ButtonStyle.Secondary, !guildId),
+    navigationButton(contextualOwnerId('ai-channels', guildId), 'Inspect Channels', ButtonStyle.Secondary, !guildId),
+    navigationButton(contextualOwnerId('ai-reconcile', guildId), 'Recovery', ButtonStyle.Secondary, !guildId),
+    navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
   ));
   if (guild && detail === 'audit') {
     const roleSelector = aiSelectRow(guild, 'role', 0);
