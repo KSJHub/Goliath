@@ -193,7 +193,6 @@ function canManageRole(guild, role) { const me = guild?.members?.me; return Bool
 function assertSafeSelectorRole(guild, role) {
   if (!role) throw new Error('The selected existing role no longer exists.');
   if (!canManageRole(guild, role)) throw new Error(`Goliath cannot safely manage @${role.name}; move it below Goliath first.`);
-  if (role.permissions.bitfield !== 0n) throw new Error(`@${role.name} has Discord permissions. Self-service selector roles must not grant permissions.`);
   return role;
 }
 function suggestRoleStyle(guild) {
