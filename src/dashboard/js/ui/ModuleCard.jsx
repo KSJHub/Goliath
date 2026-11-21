@@ -111,7 +111,7 @@ function ModuleCard({ module, theme, onOpen, onToggle, saving }) {
             background: locked ? 'rgba(250,204,21,0.12)' : enabled ? statusStyle.bg : 'rgba(100,116,139,0.10)',
             color: locked ? '#fde68a' : enabled ? statusStyle.text : theme.mutedText,
             fontWeight: 950,
-            fontSize: 13,
+            fontSize: 22,
           }}
         >
           {locked ? E.LOCK : module.icon}
@@ -153,8 +153,8 @@ function ModuleCard({ module, theme, onOpen, onToggle, saving }) {
       <div style={{ position: 'relative', display: 'grid', gap: 8 }}>
         <div>
           <strong style={{ display: 'block', fontSize: 17 }}>{module.name}</strong>
-          <span style={{ display: 'block', color: locked ? '#fde68a' : theme.mutedText, fontSize: 12, fontWeight: 850, marginTop: 5 }}>
-            {locked ? `Requires ${String(module.requiredPlan || 'pro').toUpperCase()}` : module.category}
+          <span style={{ display: 'block', color: locked ? '#fde68a' : enabled ? '#86efac' : '#fca5a5', fontSize: 12, fontWeight: 850, marginTop: 5 }}>
+            {locked ? `Requires ${String(module.requiredPlan || 'pro').toUpperCase()}` : enabled ? 'Enabled' : 'Disabled'}
           </span>
         </div>
 
