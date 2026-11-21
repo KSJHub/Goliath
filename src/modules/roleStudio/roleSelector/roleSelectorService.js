@@ -275,7 +275,7 @@ async function applyStandardSelection(guild, member, groupId, optionIds = []) {
       let section = base.getSection(guild.id); let group = section.groups?.[id];
       if (!group || group.type !== 'standard' || !group.enabled) throw new Error('Selector group is unavailable.');
       let desired = [...new Set(optionIds.map((value) => slug(value)))].filter((optionId) => (group.options || []).some((option) => option.id === optionId && option.enabled));
-      if (group.selectionMode === 'single') desired = desired.slice(0, 1);
+      if (desired.length > group.maxSelections || desired.length < group.minSelections) throw new Error(`Choose between ${group.minSelections} and ${group.maxSelections} roles.`);
       const previous = selectionFor(section, member.id, id);
       if (!desired.length && previous.length && !group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
       const desiredRoles = [];
@@ -326,7 +326,7 @@ async function clearSelection(guild, member, groupId) {
     return await withMemberGroupLock(guild.id, member.id, id, () => withMutationLock(guild.id, async () => {
       base.assertModuleEnabled(guild.id);
       const section = base.getSection(guild.id); const group = section.groups?.[id];
-      if (!group) throw new Error('Selector group not found.'); if (!group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
+      if (!group) throw new Error('Selector group not found.'); if (!group.allowRemove || (group.minSelections || 0) > 0) throw new Error('This selector does not allow clearing your selection.');
       const previous = selectionFor(section, member.id, id);
       await convergeGroupRoles(guild, member, base.roleIdsForGroup(group), [], `Goliath Role Selector · ${group.name}`);
       base.updateSection(guild.id, (current) => { const memberSelections = clone(current.memberSelections || {}); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [id]: [] }; return { ...current, memberSelections, analytics: { ...current.analytics, removals: Number(current.analytics?.removals || 0) + (previous.length ? 1 : 0) } }; }, { actorId: member.id, action: 'role_selector_clear_selection' });
