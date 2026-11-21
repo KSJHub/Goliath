@@ -1643,7 +1643,9 @@ function aiGoliathRolePayload(interaction, guild, page = 0) {
   const rows = [];
   for (const kind of ['operational','display']) {
     const select = new StringSelectMenuBuilder().setCustomId(contextualOwnerId('ai-deploy-role-'+kind,guild.id))
-      .setPlaceholder('Select '+kind+' role').addOptions([{label:'Recommend creating a dedicated role',value:'create'},...options]);
+      .setPlaceholder('Select '+kind+' role').addOptions(
+        {label:'Recommend creating a dedicated role',value:'create',default:draft[kind]==='create'},
+        ...options.map(option=>({...option,default:option.value===draft[kind]})));
     rows.push(new ActionRowBuilder().addComponents(select));
   }
   rows.push(new ActionRowBuilder().addComponents(
