@@ -1517,12 +1517,46 @@ function aiDeployRecoveryPayload(guild) {
       lines.push((step.channelId?'<#'+step.channelId+'>':step.name||step.action)+' — '+state);
     }
   }
-  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Recovery Inspection').setDescription(record?('Transaction '+record.id+'\n'+lines.slice(0,30).join('\n')+'\n'+(lines.length>30?'Additional steps are retained in journal.\n':'')+'Read-only inspection. Unresolved operations remain blocked.'): 'No unresolved deployment transactions.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Refresh',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-reconcile',guild.id),'Reconcile Scan',ButtonStyle.Secondary,!record),navigationButton(contextualOwnerId('ai-deploy-rollback-preview',guild.id),'Preview Restoration',ButtonStyle.Secondary,!record),navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'Back',ButtonStyle.Secondary))]};
+  const embed=new EmbedBuilder().setColor(record?0xF0B232:0x57F287).setTitle('Goliath • Recovery Inspection')
+    .setDescription(record?'An interrupted deployment requires review. Inspection does not modify permissions.':'All deployment transactions are resolved. No recovery action is required.');
+  if(record){
+    const result=aiDeployReconciliationState(guild,record);
+    embed.addFields({name:'Applied',value:String(result.states.filter(state=>state==='applied').length),inline:true},
+      {name:'Original',value:String(result.states.filter(state=>state==='original').length),inline:true},
+      {name:'Other / review',value:String(result.states.filter(state=>!['applied','original'].includes(state)).length),inline:true},
+      {name:'Transaction',value:record.id});
+    for(let i=0;i<Math.min(lines.length,30);i+=8)embed.addFields({name:'Recorded operations '+(i+1)+'–'+Math.min(i+8,lines.length,30),value:lines.slice(i,Math.min(i+8,30)).join('\n').slice(0,1024)});
+    if(lines.length>30)embed.addFields({name:'Additional operations',value:'Additional steps are retained in the journal.'});
+  }else embed.addFields({name:'Recovery status',value:'Clear',inline:true},{name:'Unresolved transactions',value:'0',inline:true});
+  embed.setFooter({text:'Goliath Deployment & Sync • Read-only inspection'}).setTimestamp();
+  const components=[];
+  if(record)components.push(new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-deploy-reconcile',guild.id),'Reconcile Scan',ButtonStyle.Primary),
+    navigationButton(contextualOwnerId('ai-deploy-rollback-preview',guild.id),'Preview Restoration',ButtonStyle.Secondary)));
+  components.push(new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Refresh',ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'Back',ButtonStyle.Secondary)));
+  return {content:null,embeds:[embed],components};
 }
 function aiDeployJournalHistoryPayload(guild) {
   const history=aiDeployJournalRead(guild.id);
-  const lines=history.slice(-10).reverse().map(record=>record.status.toUpperCase()+' • '+record.createdAt+' • '+record.steps.length+' steps • '+record.id);
-  return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment History').setDescription((lines.join('\n')||'No deployment transactions recorded yet.')+'\n\nUnresolved transactions block new deployments. Execution and recovery controls are still under development.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Inspect Recovery',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
+  const unresolved=history.filter(record=>record.status!=='verified').length;
+  const reconciled=history.filter(record=>record.status==='verified'&&record.outcome?.includes('reconciled')).length;
+  const embed=new EmbedBuilder().setColor(unresolved?0xF0B232:0x57F287).setTitle('Goliath • Deployment History')
+    .setDescription(unresolved?'Unresolved transactions block new deployments. Inspect recovery before continuing.':'No unresolved transactions. Deployment is available.')
+    .addFields({name:'Transactions',value:String(history.length),inline:true},{name:'Verified / completed',value:String(history.length-unresolved-reconciled),inline:true},{name:'Reconciled / unresolved',value:reconciled+' / '+unresolved,inline:true});
+  for(const record of history.slice(-10).reverse()){
+    const retained=record.steps.filter(step=>step.reconciledState==='applied').length;
+    const original=record.steps.filter(step=>step.reconciledState==='original').length;
+    const status=record.outcome==='partial-state-reconciled'?'Reconciled — progress retained':record.outcome==='original-state-reconciled'?'Reconciled — original state':record.status.toUpperCase();
+    const epoch=Math.floor(new Date(record.createdAt).getTime()/1000);
+    embed.addFields({name:status,value:(Number.isFinite(epoch)?'<t:'+epoch+':F>\n':'')+'**Recorded steps:** '+record.steps.length+(record.outcome==='partial-state-reconciled'?' • '+retained+' retained • '+original+' original':'')+'\n**Transaction:** '+record.id});
+  }
+  if(!history.length)embed.addFields({name:'History',value:'No deployment transactions recorded yet.'});
+  embed.setFooter({text:'Goliath Deployment & Sync • Latest 10 transactions'}).setTimestamp();
+  return {content:null,embeds:[embed],components:[
+    new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Inspect Recovery',ButtonStyle.Primary)),
+    new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'Refresh',ButtonStyle.Secondary),navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 const aiGoliathRoleDrafts = new Map();
 function aiDeploySavedRoles(guildId) {
