@@ -356,8 +356,8 @@ function buildUserManageAccountPanel(interaction, creator, accounts, selectedId 
   }
   if (selected) {
     components.push(new ActionRowBuilder().addComponents(
-      userAccountButton('user:social:manage-account:edit', '✏️ Edit Account', ButtonStyle.Primary),
-      userAccountButton('user:social:manage-account:toggle', selected.enabled === false ? '▶️ Resume Account' : '⏸️ Pause Account', selected.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
+      userAccountButton('user:social:manage-account:edit', `${EMOJIS.EDIT} Edit Account`, ButtonStyle.Primary),
+      userAccountButton('user:social:manage-account:toggle', selected.enabled === false ? `${EMOJIS.PLAY} Resume Account` : `${EMOJIS.PAUSE} Pause Account`, selected.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
       userAccountButton('user:social:manage-account:check', `${EMOJIS.SEARCH} Check Account`, ButtonStyle.Secondary),
       userAccountButton('user:social:manage-account:delete', `${EMOJIS.DELETE} Delete Account`, ButtonStyle.Danger),
     ));
@@ -791,7 +791,7 @@ async function handleUserManualPostLive(interaction) {
     const anyChecked = accounts.some((account) => account?.state?.lastCheckedAt);
     const anyLive = accounts.some((account) => account?.enabled !== false && account?.state?.isLive === true);
     if (anyChecked && !anyLive) {
-      await interaction.editReply({ content: '⚫ **No LIVE stream detected.** Your LIVE post was not sent.' });
+      await interaction.editReply({ content: `${EMOJIS.RULE_INACTIVE} **No LIVE stream detected.** Your LIVE post was not sent.` });
     } else {
       await interaction.editReply({ content: `${EMOJIS.SOCIAL} Manual Post LIVE is unavailable. ${state.reason}` });
     }
