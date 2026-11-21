@@ -1,12 +1,12 @@
 'use strict';
-const { navigationButton, linkButton } = require('../../../core/guild/goliathNavigation');
-const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton, linkButton, goliathNavigation, EMOJIS, emojiLabel } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
+  RoleSelectMenuBuilder,
   ChannelType,
   EmbedBuilder,
   ModalBuilder,
@@ -50,18 +50,12 @@ async function respond(i, payload) {
 }
 
 function nav(back = 'admin:roleSelector', settingsDisabled = false) {
-  return row(
-    button(back, emojiLabel('BACK', 'Back')),
-    button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary, settingsDisabled),
-  );
+  const navigation = goliathNavigation(back, 'admin:roleSelector:settings');
+  if (settingsDisabled) navigation.components[1].setDisabled(true);
+  return navigation;
 }
 
-function rootNav() {
-  return row(
-    button('admin:studio:roleStudio', emojiLabel('BACK', 'Back to Role Studio')),
-    button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
-  );
-}
+function rootNav() { return nav('admin:studio:roleStudio'); }
 
 function groups(guildId) { return roleSelector.listGroups(guildId); }
 function customGroups(guildId) { return groups(guildId).filter((g) => !g.builtIn); }
@@ -273,29 +267,32 @@ async function retireDeployment(guild, deployment) {
 
 async function buildAdminPanel(guild, requestedBy = 'Unknown User') {
   const section = roleSelector.getSection(guild.id);
-  const health = await healthService.buildHealth(guild);
   const usage = await roleSelector.getUsage(guild);
   const enabled = guildManager.isModuleEnabled(guild.id, roleSelector.MODULE);
   const deployments = deploymentList(section);
   return {
     embeds: [new EmbedBuilder()
-      .setColor(!enabled ? 0x747F8D : health.healthy ? 0x57F287 : 0xFAA61A)
-      .setTitle(emojiLabel('USER_ROLES', 'Role Selector'))
+      .setColor(enabled ? 0x57F287 : 0x747F8D)
+      .setTitle(emojiLabel('USER_ROLES', 'Role Selector Studio'))
       .setDescription([
-        `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
-        `**Groups:** ${groups(guild.id).length} (${customGroups(guild.id).length} custom)`,
-        `**Members using selectors:** ${usage.totalUsing}/${usage.totalMembers}`,
-        `**Deployments:** ${deployments.filter((d) => d.status === 'active').length} active`,
-        `**Format:** \`${roleSelector.roleNameFor(section, 'Example Role')}\``,
-        `**Acceptance:** ${health.acceptance?.ready ? `Ready ${EMOJIS.SUCCESS}` : `Not ready ${EMOJIS.WARNING}`}`,
+        'Create and manage self-service roles for your community.', '',
+        `**Role groups:** ${groups(guild.id).length}`,
+        `**Selectable roles:** ${groups(guild.id).reduce((total, g) => total + (g.type === 'colour' ? (g.palette || []).filter(x => x.enabled).length : (g.options || []).filter(x => x.enabled).length), 0)}`,
+        `**Published panels:** ${deployments.filter(d => d.status === 'active' && d.messageId).length}`,
+        `**Participating members:** ${usage.totalUsing}/${usage.totalMembers}`, '',
+        enabled ? emojiLabel('SUCCESS', 'Module enabled') : emojiLabel('ERROR', 'Module disabled'),
       ].join('\n'))
       .setFooter({ text: `Requested by ${requestedBy}` })
       .setTimestamp()],
     components: [
       row(
-        button('admin:roleSelector:groups', emojiLabel('ROLE_TAG', 'Groups'), ButtonStyle.Primary),
-        button('admin:roleSelector:style', emojiLabel('DESIGN', 'Appearance'), ButtonStyle.Primary),
-        button('admin:roleSelector:deployment', emojiLabel('WELCOME_LOCATION', 'Deployments'), ButtonStyle.Primary),
+        button('admin:roleSelector:createGroup', emojiLabel('ADD', 'Create Selector'), ButtonStyle.Success),
+        button('admin:roleSelector:groups', emojiLabel('CLIPBOARD', 'Manage Selectors'), ButtonStyle.Primary),
+        button('admin:roleSelector:deployment', emojiLabel('DEPLOY', 'Published Panels'), ButtonStyle.Primary),
+      ),
+      row(
+        button('admin:roleSelector:stats', emojiLabel('ANALYTICS', 'Analytics')),
+        button('admin:roleSelector:style', emojiLabel('DESIGN', 'Role Styling')),
       ),
       rootNav(),
     ],
@@ -341,14 +338,14 @@ function buildGroupsPanel(guildId, selectedId = null) {
   const selected = selectedId ? roleSelector.getGroup(guildId, selectedId) : null;
   if (!selected) {
     return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Groups')).setDescription(`Create and manage self-role categories.\n\n${EMOJIS.ROLE_RAINBOW} **Colours** is the protected built-in group.`)],
-      components: [groupMenu(guildId), row(button('admin:roleSelector:createGroup', emojiLabel('ADD', 'Create Group'), ButtonStyle.Success)), nav()],
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector Studio · Selectors')).setDescription(`Create and manage self-role categories.\n\n${EMOJIS.ROLE_RAINBOW} **Colours** is the protected built-in group.`)],
+      components: [groupMenu(guildId), row(button('admin:roleSelector:createGroup', emojiLabel('ADD', 'Create Selector'), ButtonStyle.Success)), nav()],
     };
   }
   if (selected.type === 'colour') return buildColourPanel(guildId, selected);
   const lines = (selected.options || []).map((x) => `${x.enabled ? EMOJIS.SUCCESS : EMOJIS.USER_LOCKED} ${x.emoji || '•'} **${x.label}** · Role: ${x.managed === false ? 'Existing role' : x.roleId ? 'Goliath-managed' : 'Auto-create'}`);
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Groups')).setDescription([
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector Studio · Selectors')).setDescription([
       `${selected.emoji || EMOJIS.ROLE_TAG} **${selected.name}**`,
       selected.description || '`No description`', '',
       `**Type:** ${selected.selectionMode === 'multiple' ? 'Multiple choices' : 'Single choice'}`,
@@ -359,15 +356,13 @@ function buildGroupsPanel(guildId, selectedId = null) {
     components: [
       groupMenu(guildId, selected.id),
       row(
-        button(customId('admin:roleSelector:options', selected.id), emojiLabel('NOTE', 'Manage Options'), ButtonStyle.Primary),
-        button(customId('admin:roleSelector:toggleMode', selected.id), selected.selectionMode === 'multiple' ? emojiLabel('CHECKBOX', 'Multiple Choices') : '1️⃣ Single Choice', ButtonStyle.Primary),
+        button(customId('admin:roleSelector:addRoles', selected.id), emojiLabel('ADD', 'Add Existing Roles'), ButtonStyle.Success),
+        button(customId('admin:roleSelector:options', selected.id), emojiLabel('EDIT', 'Edit Options'), ButtonStyle.Primary),
+        button(customId('admin:roleSelector:toggleMode', selected.id), selected.selectionMode === 'multiple' ? emojiLabel('CHECKBOX', 'Multiple Choices') : emojiLabel('CHECKBOX', 'Single Choice'), ButtonStyle.Primary),
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
-      row(
-        button('admin:roleSelector:groups', emojiLabel('BACK', 'Back')),
-        button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Group'), ButtonStyle.Danger),
-        button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
-      ),
+      row(button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
+      nav('admin:roleSelector:groups'),
     ],
   };
 }
@@ -378,7 +373,7 @@ function buildColourPanel(guildId, group) {
     label: x.label, value: x.id, emoji: x.emoji || undefined, description: x.hex, default: x.enabled,
   })));
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_RAINBOW', 'Role Selector · Groups · Colours')).setDescription([
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_RAINBOW', 'Role Selector Studio · Selectors · Colours')).setDescription([
       `**Built-in group ${EMOJIS.LOCKDOWN}**`, 'Choose preset colours and custom HEX availability.', '',
       ...palette.map((x) => `${x.enabled ? EMOJIS.SUCCESS : EMOJIS.USER_LOCKED} ${x.emoji} **${x.label}** · \`${x.hex}\``),
     ].join('\n'))],
@@ -498,11 +493,8 @@ async function buildDeploymentsPanel(i, selectedId = null) {
         button(customId('admin:roleSelector:deploy', selected.id), message ? emojiLabel('REFRESH', 'Update Panel') : emojiLabel('USER_INVITES', 'Deploy Panel'), ButtonStyle.Success, !selected.channelId || !selected.groupIds.length),
         jump ? linkButton(emojiLabel('ROLE_UP_RIGHT', 'Jump to Panel'), jump) : null,
       ),
-      row(
-        button('admin:roleSelector:deployment', emojiLabel('BACK', 'Back')),
-        button(customId('admin:roleSelector:deploymentDelete', selected.id), emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger),
-        button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
-      ),
+      row(button(customId('admin:roleSelector:deploymentDelete', selected.id), emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger)),
+      nav('admin:roleSelector:deployment'),
     ],
   };
 }
@@ -556,7 +548,7 @@ async function buildDeploymentContentPanel(i, deploymentId, groupId = null) {
       deploymentGroupFilterMenu(i.guildId, deployment, groupId),
       groupId ? deploymentOptionMenu(i.guildId, deployment, groupId) : row(button('admin:roleSelector:deploymentContentHint', 'Select a group above to limit its roles', ButtonStyle.Secondary, true)),
       row(button(customId('admin:roleSelector:deploymentOptionsAll', deployment.id, groupId || 'none'), emojiLabel('UPDATE', 'Use All Roles for Group'), ButtonStyle.Secondary, !groupId)),
-      row(button(customId('admin:roleSelector:deploymentOpen', deployment.id), emojiLabel('BACK', 'Back')), button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings'))),
+      nav(customId('admin:roleSelector:deploymentOpen', deployment.id)),
     ],
   };
 }
@@ -612,7 +604,7 @@ async function buildStats(guild) {
       `**Total selections:** ${total}`, '', `**${EMOJIS.ROLE_TROPHY} Most Selected**`,
       rows.filter((x) => x.count).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count} · ${x.groupName}`).join('\n') || '`No selections yet`',
     ].join('\n'))],
-    components: [groupMenu(guild.id, null, 'admin:roleSelector:statsGroup'), nav('admin:roleSelector:deployment', true)],
+    components: [groupMenu(guild.id, null, 'admin:roleSelector:statsGroup'), nav('admin:roleSelector:deployment')],
   };
 }
 
@@ -650,7 +642,7 @@ async function buildStatsDeploymentPanel(i) {
       `**Message:** ${message ? `Deployed ${EMOJIS.SUCCESS}` : 'Not deployed'}`, '',
       'Deploy a user-visible community leaderboard. Counts update in place; member names remain admin-only.',
     ].join('\n'))],
-    components: [row(menu), row(button('admin:roleSelector:statsDeploy', message ? emojiLabel('REFRESH', 'Update Stats Panel') : emojiLabel('USER_INVITES', 'Deploy Stats Panel'), ButtonStyle.Success, !deployment.channelId), jump ? linkButton(emojiLabel('ROLE_UP_RIGHT', 'Jump to Panel'), jump) : null), nav('admin:roleSelector:deployment', true)],
+    components: [row(menu), row(button('admin:roleSelector:statsDeploy', message ? emojiLabel('REFRESH', 'Update Stats Panel') : emojiLabel('USER_INVITES', 'Deploy Stats Panel'), ButtonStyle.Success, !deployment.channelId), jump ? linkButton(emojiLabel('ROLE_UP_RIGHT', 'Jump to Panel'), jump) : null), nav('admin:roleSelector:deployment')],
   };
 }
 
@@ -771,6 +763,32 @@ async function handleRoleSelectorInteraction(i) {
       return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
+    if (id.startsWith('admin:roleSelector:addRoles:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:addRoles'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      const remaining = 25 - (group.options || []).length;
+      if (remaining <= 0) throw new Error('This selector already has 25 options.');
+      return respond(i, {
+        embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ADD', 'Add Existing Roles')).setDescription('Choose existing Discord roles to add to this selector. Existing options are preserved.')],
+        components: [row(new RoleSelectMenuBuilder().setCustomId(customId('admin:roleSelector:addRolesSubmit', group.id)).setPlaceholder('Select existing Discord roles').setMinValues(1).setMaxValues(remaining)), nav(customId('admin:roleSelector:groupOpen', group.id))],
+      });
+    }
+    if (id.startsWith('admin:roleSelector:addRolesSubmit:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:addRolesSubmit'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      const options = [...(group.options || [])];
+      for (const roleId of new Set(i.values || [])) {
+        if (options.some(option => option.roleId === roleId)) continue;
+        const role = i.guild.roles.cache.get(roleId) || await i.guild.roles.fetch(roleId).catch(() => null);
+        if (!role || role.id === i.guild.id) throw new Error('The everyone role cannot be selected.');
+        roleSelector.assertSafeSelectorRole(i.guild, role);
+        options.push({ label: role.name.slice(0, 100), roleId: role.id, managed: false, enabled: true, order: (options.length + 1) * 10 });
+      }
+      if (options.length > 25) throw new Error('A selector can contain at most 25 options.');
+      await roleSelector.saveGroupSafe(i.guild, { ...group, options }, { ...actor, action: 'role_selector_add_existing_roles' });
+      await syncPanels(i.guild, group.id);
+      return respond(i, buildGroupsPanel(i.guildId, group.id));
+    }
     if (id.startsWith('admin:roleSelector:options:')) {
       const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:options'));
       if (!group || group.builtIn) throw new Error('Select a custom group first.');
@@ -932,7 +950,7 @@ async function handleRoleSelectorInteraction(i) {
           embeds: [new EmbedBuilder().setColor(0xFAA61A).setTitle(emojiLabel('WELCOME_LOCATION', 'Move this Role Selector panel?')).setDescription(`Current: <#${deployment.channelId}>\nNew: <#${target}>\n\nChoose what to do with the old Goliath-owned panel.`)],
           components: [
             row(button(customId('admin:roleSelector:moveRemove', deploymentId, target), emojiLabel('DELETE', 'Remove Old Panel & Move'), ButtonStyle.Danger), button(customId('admin:roleSelector:moveRetire', deploymentId, target), emojiLabel('WELCOME_PRESET', 'Retire Old Panel & Move'), ButtonStyle.Primary)),
-            row(button(customId('admin:roleSelector:deploymentOpen', deploymentId), emojiLabel('BACK', 'Back'))),
+            nav(customId('admin:roleSelector:deploymentOpen', deploymentId)),
           ],
         });
       }
@@ -966,7 +984,7 @@ async function handleRoleSelectorInteraction(i) {
     if (id === 'admin:roleSelector:stats') return respond(i, await buildStats(i.guild));
     if (id === 'admin:roleSelector:statsGroup' && i.values?.[0] !== '__none__') {
       const usage = await roleSelector.getUsage(i.guild, i.values[0]); const group = usage.groups?.[0];
-      return respond(i, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.ANALYTICS} ${group?.emoji || EMOJIS.ROLE_TAG} ${group?.name || 'Group'}`).setDescription((group?.rows || []).map((x, index) => `${index + 1}. **${x.label}** — ${x.count || 0}`).join('\n') || '`No selections yet`')], components: [nav('admin:roleSelector:deployment', true)] });
+      return respond(i, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.ANALYTICS} ${group?.emoji || EMOJIS.ROLE_TAG} ${group?.name || 'Group'}`).setDescription((group?.rows || []).map((x, index) => `${index + 1}. **${x.label}** — ${x.count || 0}`).join('\n') || '`No selections yet`')], components: [nav('admin:roleSelector:deployment')] });
     }
     if (id === 'admin:roleSelector:statsPublic') return respond(i, await buildStatsDeploymentPanel(i));
     if (id === 'admin:roleSelector:statsDeploymentChannel') {
