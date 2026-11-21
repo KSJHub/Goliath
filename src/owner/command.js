@@ -1486,12 +1486,16 @@ function aiDeployReconciliationPayload(interaction,guild){
   if(retain)aiDeployRecoveryApprovals.set(interaction.user.id+':'+guild.id,{kind:'retain-progress',token,id:record.id,states:JSON.stringify(result.states),expiresAt:Date.now()+600000});
   const counts={};
   for(const state of result.states)counts[state]=(counts[state]||0)+1;
-  return {content:null,embeds:[new EmbedBuilder().setTitle('Goliath • Reconciliation Report').setColor(0xF0B232).setDescription([
-    'Transaction '+record.id,'Recorded status: '+record.status,
-    ...Object.entries(counts).map(([state,count])=>state+': '+count),
-    result.uncertain?'Conflicting or unknown outcomes require operator investigation.':result.allOriginal?'All inspected changes match original state.':result.allApplied?'All inspected changes match applied state.':'Mixed deployment state; inspect individual operations.',
-    retain?'Retain verified snapshots and release the interrupted transaction. Remaining changes require a new sync approval.':'Conflicting or active operations remain blocked.'
-  ].join('\n'))],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId((retain?'ai-deploy-retain-':'ai-deploy-resolve-')+token,guild.id),retain?'Retain Progress':'Confirm Original State',ButtonStyle.Danger,!retain&&!eligible),navigationButton(contextualOwnerId('ai-deploy-reconcile',guild.id),'Refresh Report',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary))]};
+  const embed=new EmbedBuilder().setTitle('Goliath • Reconciliation Report').setColor(retain||eligible?0xF0B232:0xED4245)
+    .setDescription(result.uncertain?'Conflicting or unknown outcomes require operator investigation.':result.allOriginal?'All inspected changes match original state.':result.allApplied?'All inspected changes match applied state.':'Mixed deployment state; review recorded operations.')
+    .addFields({name:'Applied',value:String(counts.applied||0),inline:true},{name:'Original',value:String(counts.original||0),inline:true},{name:'Other / review',value:String(result.states.length-(counts.applied||0)-(counts.original||0)),inline:true},
+      {name:'Recorded status',value:record.status.toUpperCase(),inline:true},{name:'Transaction',value:record.id},
+      {name:'Next action',value:retain?'Retain verified snapshots and release the interrupted transaction. Remaining changes require a fresh sync approval.':eligible?'Confirm the original state to release this failed transaction.':'Conflicting or active operations remain blocked.'})
+    .setFooter({text:'Goliath Deployment & Sync • Reconciliation'}).setTimestamp();
+  const components=[];
+  if(retain||eligible)components.push(new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId((retain?'ai-deploy-retain-':'ai-deploy-resolve-')+token,guild.id),retain?'Retain Progress':'Confirm Original State',ButtonStyle.Danger)));
+  components.push(new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-reconcile',guild.id),'Refresh',ButtonStyle.Secondary),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary)));
+  return {content:null,embeds:[embed],components};
 }
 function aiDeployRecoveryPayload(guild) {
   const records=aiDeployJournalRead(guild.id);
