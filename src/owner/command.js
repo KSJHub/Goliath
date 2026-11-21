@@ -1677,12 +1677,18 @@ function aiGoliathRolePayload(interaction, guild, page = 0) {
     'Selections are temporary previews; no roles are created or assigned yet.'
   ].join('\n'))],components:rows};
 }
-function aiDeploySyncPlan(guild) {
+function aiDeploySyncPlan(guild,full=false) {
   const scan=aiGoliathDeploymentScan(guild);
   const bot=guild.members.me;
   const steps=[];
   const blocked=[];
-  for(const gap of scan.gaps){
+  const targets=full?scan.targets.filter(channel=>channel.permissionsLocked!==true).map(channel=>{
+    const effective=channel.permissionsFor(bot);
+    const required=[...new Set([...aiGoliathChannelRequirements(channel,scan.profile),...(channel.type===4?aiGoliathInheritedChildren(guild,channel.id).flatMap(child=>aiGoliathChannelRequirements(child,scan.profile)):[])])];
+    const overwrite=channel.permissionOverwrites.cache.get(bot.id);
+    return {id:channel.id,category:channel.type===4,synced:false,editable:Boolean(effective?.has('ManageRoles')),missing:required.filter(permission=>!overwrite?.allow.has(permission,false)||overwrite.deny.has(permission,false))};
+  }).filter(gap=>gap.missing.length):scan.gaps;
+  for(const gap of targets){
     const channel=guild.channels.cache.get(gap.id);
     // Do not silently desynchronise children or expose shared roles.
     if(gap.synced || !gap.editable || !gap.missing.every(p=>bot.permissions.has(p))){
@@ -1693,7 +1699,7 @@ function aiDeploySyncPlan(guild) {
     const after={allow:new PermissionsBitField(BigInt(before.allow)).add(...gap.missing).bitfield.toString(),deny:new PermissionsBitField(BigInt(before.deny)).remove(...gap.missing).bitfield.toString()};
     steps.push({action:'member-overwrite',channelId:channel.id,memberId:bot.id,grants:gap.missing,before,after,inheritedChildren:gap.category?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[]});
   }
-  return {steps,blocked};
+  return full?{steps,blocked,full:true}:{steps,blocked};
 }
 async function aiDeployApplySync(interaction,guildId,token){
   await interaction.deferUpdate();
@@ -1704,7 +1710,7 @@ async function aiDeployApplySync(interaction,guildId,token){
   const {guild}=await resolveInteractionGuild(interaction,guildId);
   if(!guild||guild.id!==guildId) throw new Error('Guild mismatch');
   await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
-  const plan=aiDeploySyncPlan(guild);
+  const plan=aiDeploySyncPlan(guild,approval.full===true);
   if(!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps) return interaction.editReply({content:'Sync plan changed or empty. Prepare a fresh preview.',embeds:[],components:[]});
   const result=await aiExecuteApprovedSync(guild,interaction.user.id,plan);
   return interaction.editReply({content:result.status==='verified'?'Verified '+result.changed+' overwrite changes. Remaining editable gaps: '+result.remaining+'; inherited or blocked gaps: '+result.blocked+'. Transaction '+result.transactionId:'Sync stopped; partial changes may exist. Review transaction '+result.transactionId,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
@@ -1746,7 +1752,7 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
       update(record=>{record.steps[index].phase='verified';});
     }
     await guild.channels.fetch();
-    const remaining=aiDeploySyncPlan(guild);
+    const remaining=aiDeploySyncPlan(guild,plan.full===true);
     update(record=>{record.status='verified';record.completedAt=new Date().toISOString();});
     return {status:'verified',transactionId:tx,changed:plan.steps.length,remaining:remaining.steps.length,blocked:remaining.blocked.length};
   }catch(error){
@@ -1755,19 +1761,19 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
   }
 }
 
-function aiDeploySyncPreview(interaction,guild,page=0){
-  const plan=aiDeploySyncPlan(guild);
+function aiDeploySyncPreview(interaction,guild,page=0,full=false){
+  const plan=aiDeploySyncPlan(guild,full);
   const token=randomUUID().replace(/-/g,'').slice(0,16);
-  aiDeployApprovals.set(interaction.user.id+':'+guild.id,{token,kind:'sync',steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
-  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Bulk Sync Preview').setDescription([
+  aiDeployApprovals.set(interaction.user.id+':'+guild.id,{token,kind:'sync',full,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
+  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle(full?'Goliath • Full Template Sync Preview':'Goliath • Bulk Sync Preview').setDescription([
     'Grant access to Goliath alone, including private channels listed here. Other member and role overwrites are retained.',
     '**Proposed changes:** '+plan.steps.length,'**Skipped (inherited or blocked):** '+plan.blocked.length,
     ...plan.steps.slice(page*10,page*10+10).map(step=>'<#'+step.channelId+'> — '+step.grants.join(', ')+(step.inheritedChildren.length?' (also affects '+step.inheritedChildren.length+' synced children)':'')),
     'Inspect all pages before confirming. Synced children are not edited separately. Confirmation grants Goliath access to listed private channels as well.'
   ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-sync-apply-'+token,guild.id),'Confirm Bulk Sync',ButtonStyle.Danger,!plan.steps.length),
-    navigationButton(contextualOwnerId('ai-sync-preview-'+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
-    navigationButton(contextualOwnerId('ai-sync-preview-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=plan.steps.length),
+    navigationButton(contextualOwnerId((full?'ai-full-sync-preview-':'ai-sync-preview-')+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
+    navigationButton(contextualOwnerId((full?'ai-full-sync-preview-':'ai-sync-preview-')+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=plan.steps.length),
     navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 function aiGoliathDevInviteUrl(client,guildId){
@@ -1801,7 +1807,8 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
       navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'History',ButtonStyle.Secondary),
       navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary)),
       new ActionRowBuilder().addComponents(
-        navigationButton(contextualOwnerId('ai-sync-preview-0',guild.id),'Preview Bulk Sync',ButtonStyle.Primary),
+        navigationButton(contextualOwnerId('ai-sync-preview-0',guild.id),'Smart Sync',ButtonStyle.Primary),
+        navigationButton(contextualOwnerId('ai-full-sync-preview-0',guild.id),'Full Template Sync',ButtonStyle.Primary),
         navigationButton(contextualOwnerId('ai-deploy-page-' + Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
         navigationButton(contextualOwnerId('ai-deploy-page-' + (page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length)),
       new ActionRowBuilder().addComponents(linkButton('Invite DEV to a Server',aiGoliathDevInviteUrl(interaction.client)),linkButton('Update DEV Guild Permissions',aiGoliathDevInviteUrl(interaction.client,guild.id)))] };
@@ -1976,7 +1983,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
       });
     }
   }
-  if (guild && action === 'ai-sync-preview') return interaction.editReply(aiDeploySyncPreview(interaction,guild,page));
+  if (guild && ['ai-sync-preview','ai-full-sync-preview'].includes(action)) return interaction.editReply(aiDeploySyncPreview(interaction,guild,page,action==='ai-full-sync-preview'));
   if (guild && action === 'ai-deploy-rollback-preview') return interaction.editReply(aiDeployRollbackPreview(interaction,guild));
   if (guild && action === 'ai-deploy-reconcile') return interaction.editReply(aiDeployReconciliationPayload(interaction,guild));
   if (guild && action === 'ai-deploy-recovery') return interaction.editReply(aiDeployRecoveryPayload(guild));
@@ -2172,8 +2179,8 @@ async function handleOwnerPanelInteraction(interaction) {
     await aiDeployApplySync(interaction,contextGuildId,id.slice('ownerpanel:ai-sync-apply-'.length));
     return true;
   }
-  if (/^ownerpanel:ai-sync-preview-\d+$/.test(id)) {
-    await handleOwnerAI(interaction,'ai-sync-preview',contextGuildId,null,Number(id.match(/\d+$/)[0]));
+  if (/^ownerpanel:ai-(?:full-)?sync-preview-\d+$/.test(id)) {
+    await handleOwnerAI(interaction,id.includes('full-sync')?'ai-full-sync-preview':'ai-sync-preview',contextGuildId,null,Number(id.match(/\d+$/)[0]));
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-rollback-preview') {
