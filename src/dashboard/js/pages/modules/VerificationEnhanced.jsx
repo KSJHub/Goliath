@@ -237,28 +237,46 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     if (loadedGuild.current !== guildId) advancedDirty.current = false;
     load();
   }, [guildId]);
-  // Re-read the shared guild configuration when returning from Discord or another tab.
-  // Never replace an unsaved panel or advanced-settings draft.
-  // Poll the same guild configuration used by Discord while this page is visible.
-  // Skip unsaved drafts and active operations so background updates cannot erase edits.
+  // Silent overview refresh: no loading state, role/channel reloads or draft loss.
   useEffect(() => {
-    if (!guildId) return undefined;
-    const timer = window.setInterval(() => {
-      if (document.hidden || busy || panelDraftDirty.current || advancedDirty.current) return;
-      load();
-    }, 15000);
-    return () => window.clearInterval(timer);
-  }, [guildId, busy, selectedPanelId]);
-
-  useEffect(() => {
-    const refreshOnReturn = () => {
-      if (!document.hidden && !panelDraftDirty.current && !advancedDirty.current && !busy) load();
-    };
-    window.addEventListener('focus', refreshOnReturn);
-    document.addEventListener('visibilitychange', refreshOnReturn);
+    if (!guildId || busy) return undefined;
+    let cancelled = false;
+    let running = false;
+    async function refresh() {
+      if (cancelled || running || document.hidden || loadedGuild.current !== guildId ||
+          panelDraftDirty.current || advancedDirty.current) return;
+      running = true;
+      try {
+        const overview = await api.getVerificationOverview(guildId);
+        if (cancelled || loadedGuild.current !== guildId ||
+            panelDraftDirty.current || advancedDirty.current) return;
+        const config = overview?.config || {};
+        const currentPanels = Array.isArray(overview?.panels) ? overview.panels : [];
+        const adapted = {
+          ...overview,
+          status: { enabled: config.enabled === true, panels: currentPanels, analytics: overview?.analytics || {} },
+          moduleConfig: { settings: config, panelTemplate: overview?.panelTemplate || {}, panels: currentPanels, analytics: overview?.analytics || {} },
+          adminConfig: config,
+        };
+        const current = currentPanels.find(panel => String(panel.panelId || panel.id) === String(selectedPanelId)) || null;
+        setData(adapted);
+        setAdvanced(config);
+        if (selectedPanelId && !current) setSelectedPanelId('');
+        setDraft(panelDraft(current, adapted.moduleConfig, adapted.adminConfig));
+      } catch {
+        // A transient background failure must not interrupt an administrator.
+      } finally {
+        running = false;
+      }
+    }
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
-      window.removeEventListener('focus', refreshOnReturn);
-      document.removeEventListener('visibilitychange', refreshOnReturn);
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
     };
   }, [guildId, busy, selectedPanelId]);
 
