@@ -445,7 +445,7 @@ router.post('/deployment/:guildId/sync/preview', requirePrivateAI, async (req,re
   const guild=req.client?.guilds?.cache?.get(req.params.guildId);
   if(!guild)return res.status(404).json({error:'Guild not connected to DEV.'});
   try{
-    const plan=await require('../command').prepareDashboardSync(guild,String(req.session.user.id));
+    const plan=await require('../command').prepareDashboardSync(guild,String(req.session.user.id),req.body?.full===true);
     return res.json(plan);
   }catch(error){
     console.error('[Deployment sync preview]',error?.message);
