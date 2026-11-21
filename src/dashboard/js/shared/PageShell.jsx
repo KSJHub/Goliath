@@ -9,6 +9,7 @@ import React, { memo } from 'react';
  * Guild-configured emojis and saved module content must not be overwritten by defaults.
  */
 export const DASHBOARD_EMOJIS = Object.freeze({
+  CHANNEL_PREVIOUS: '◀',
   MEMBERS: '👥', ACTIVE: '🟢', INACTIVE: '⚫', ROLES: '🎭', VOICE: '🔊',
   FOLDER: '📁', ROLE_TAG: '🏷️', DATE: '📅', TIMER: '⏳',
   MESSAGES: '💬', MICROPHONE: '🎙️', JOIN: '📥', LEAVE: '📤',
