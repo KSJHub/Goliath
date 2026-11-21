@@ -1712,8 +1712,24 @@ async function aiDeployApplySync(interaction,guildId,token){
   await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
   const plan=aiDeploySyncPlan(guild,approval.full===true);
   if(!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps) return interaction.editReply({content:'Sync plan changed or empty. Prepare a fresh preview.',embeds:[],components:[]});
-  const result=await aiExecuteApprovedSync(guild,interaction.user.id,plan);
-  return interaction.editReply({content:result.status==='verified'?'Verified '+result.changed+' overwrite changes. Remaining editable gaps: '+result.remaining+'; inherited or blocked gaps: '+result.blocked+'. Transaction '+result.transactionId:'Sync stopped; partial changes may exist. Review transaction '+result.transactionId,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  let result;
+  try { result=await aiExecuteApprovedSync(guild,interaction.user.id,plan); }
+  catch(error){
+    console.error('[Goliath deployment sync]',error);
+    result={status:'failed',error:String(error.message).slice(0,500),recoveryRequired:true};
+  }
+  const success=result.status==='verified';
+  const embed=new EmbedBuilder().setColor(success?0x57F287:0xED4245)
+    .setTitle('Goliath • '+(approval.full?'Full Template Sync':'Smart Sync')+' Result')
+    .setDescription(success?'Permission changes verified.':'Sync stopped. Inspect deployment history before retrying.')
+    .addFields({name:'Status',value:success?'Verified':'Recovery review required',inline:true});
+  if(success)embed.addFields({name:'Verified changes',value:String(result.changed),inline:true},{name:'Remaining changes',value:String(result.remaining),inline:true},{name:'Blocked',value:String(result.blocked),inline:true});
+  if(result.transactionId)embed.addFields({name:'Transaction',value:result.transactionId});
+  if(result.error)embed.addFields({name:'Failure reason',value:result.error});
+  embed.setFooter({text:'Goliath Deployment & Sync'}).setTimestamp();
+  return interaction.editReply({content:null,embeds:[embed],components:[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Back',ButtonStyle.Secondary))]});
 }
 async function aiExecuteApprovedSync(guild,ownerId,plan){
   const guildId=guild.id;
@@ -1757,7 +1773,7 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
     return {status:'verified',transactionId:tx,changed:plan.steps.length,remaining:remaining.steps.length,blocked:remaining.blocked.length};
   }catch(error){
     update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
-    return {status:'failed',transactionId:tx,recoveryRequired:true};
+    return {status:'failed',transactionId:tx,recoveryRequired:true,error:String(error.message).slice(0,500)};
   }
 }
 
