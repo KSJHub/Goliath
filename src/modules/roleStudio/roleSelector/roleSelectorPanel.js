@@ -211,10 +211,10 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
     if (opts.length) components.push(row(new StringSelectMenuBuilder()
       .setCustomId(customId('roleSelector:choose', group.id, deploymentId || 'global'))
       .setPlaceholder(group.selectionMode === 'multiple' ? 'Choose one or more' : 'Choose one')
-      .setMinValues(group.selectionMode === 'multiple' ? 0 : 1)
-      .setMaxValues(group.selectionMode === 'multiple' ? opts.length : 1)
+      .setMinValues(Math.min(opts.length, Math.max(group.selectionMode === 'single' ? 1 : 0, group.minSelections || 0)))
+      .setMaxValues(Math.min(opts.length, group.maxSelections || (group.selectionMode === 'multiple' ? 25 : 1)))
       .addOptions(opts)));
-    if (group.allowRemove) components.push(row(button(customId('roleSelector:clear', group.id, deploymentId || 'global'), emojiLabel('ADMIN_PURGE', 'Clear Selection'))));
+    if (group.allowRemove && !group.minSelections) components.push(row(button(customId('roleSelector:clear', group.id, deploymentId || 'global'), emojiLabel('ADMIN_PURGE', 'Clear Selection'))));
   }
   return { embeds: [embed], components: components.filter((x) => x.components.length) };
 }
@@ -350,6 +350,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
       selected.description || '`No description`', '',
       `**Type:** ${selected.selectionMode === 'multiple' ? 'Multiple choices' : 'Single choice'}`,
       `**Options:** ${(selected.options || []).length}`,
+      `**Selection limits:** ${selected.minSelections}–${selected.maxSelections}`,
       `**Members can clear:** ${selected.allowRemove ? `Yes ${EMOJIS.SUCCESS}` : 'No'}`, '',
       lines.join('\n') || '`No options yet`',
     ].join('\n').slice(0, 4096))],
@@ -361,7 +362,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
         button(customId('admin:roleSelector:toggleMode', selected.id), selected.selectionMode === 'multiple' ? emojiLabel('CHECKBOX', 'Multiple Choices') : emojiLabel('CHECKBOX', 'Single Choice'), ButtonStyle.Primary),
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
-      row(button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
+      row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
       nav('admin:roleSelector:groups'),
     ],
   };
@@ -763,6 +764,24 @@ async function handleRoleSelectorInteraction(i) {
       return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
+    if (id.startsWith('admin:roleSelector:limits:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:limits'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      await i.showModal(new ModalBuilder().setCustomId(customId('admin:roleSelector:limitsSubmit', group.id)).setTitle('Selection Limits').addComponents(
+        row(new TextInputBuilder().setCustomId('min').setLabel('Minimum selections').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(group.minSelections))),
+        row(new TextInputBuilder().setCustomId('max').setLabel('Maximum selections').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2).setValue(String(group.maxSelections)))
+      )); return true;
+    }
+    if (id.startsWith('admin:roleSelector:limitsSubmit:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:limitsSubmit'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      const min = Number(i.fields.getTextInputValue('min')), max = Number(i.fields.getTextInputValue('max'));
+      const ceiling = group.selectionMode === 'single' ? 1 : 25;
+      if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < 1 || min > max || max > ceiling) throw new Error('Enter valid selection limits for this selector.');
+      await roleSelector.saveGroupSafe(i.guild, { ...group, minSelections: min, maxSelections: max }, { ...actor, action: 'role_selector_limits' });
+      await syncPanels(i.guild, group.id);
+      return respond(i, buildGroupsPanel(i.guildId, group.id));
+    }
     if (id.startsWith('admin:roleSelector:addRoles:')) {
       const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:addRoles'));
       if (!group || group.builtIn) throw new Error('Select a custom selector first.');
