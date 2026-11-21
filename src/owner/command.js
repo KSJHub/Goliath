@@ -1299,6 +1299,7 @@ function aiDeployJournalBegin(guildId,ownerId,steps) {
   });
 }
 const aiDeployRecoveryApprovals=new Map();
+const aiDeployActiveSync=new Set();
 function aiDeployRollbackPlan(guild,record){
   const steps=[], blockers=[];
   for(const step of [...record.steps].reverse()){
@@ -1445,21 +1446,52 @@ async function aiDeployResolveOriginal(interaction,guildId,token){
   });
   return interaction.editReply({content:'Original state verified. Failed transaction released.',embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
 }
+function aiDeployCanRetain(guild,record){
+  if(!record||!['pending','failed'].includes(record.status)||aiDeployActiveSync.has(guild.id)||!record.steps.length||!record.steps.every(step=>step.action==='member-overwrite'))return false;
+  const result=aiDeployReconciliationState(guild,record);
+  return result.states.every(state=>state==='applied'||state==='original')&&record.steps.every(step=>{
+    const channel=guild.channels.cache.get(step.channelId);
+    return channel&&channel.permissionsLocked!==true&&JSON.stringify(channel.type===4?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[])===JSON.stringify(step.inheritedChildren);
+  });
+}
+async function aiDeployRetainProgress(interaction,guildId,token){
+  await interaction.deferUpdate();
+  const key=interaction.user.id+':'+guildId;
+  const approval=aiDeployRecoveryApprovals.get(key);
+  if(mode()!=='DEV'||approval?.kind!=='retain-progress'||approval.token!==token||approval.expiresAt<Date.now())return interaction.editReply({content:'Recovery approval expired.',embeds:[],components:[]});
+  aiDeployRecoveryApprovals.delete(key);
+  const {guild}=await resolveInteractionGuild(interaction,guildId);
+  if(!guild||guild.id!==guildId)throw new Error('Guild mismatch');
+  await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+  let applied=0,remaining=0;
+  aiDeployJournalUpdate(guildId,records=>{
+    const record=records.find(item=>item.id===approval.id);
+    if(!aiDeployCanRetain(guild,record))throw new Error('Recovery state changed or operation still active');
+    const states=aiDeployReconciliationState(guild,record).states;
+    if(JSON.stringify(states)!==approval.states)throw new Error('Recovery state changed');
+    applied=states.filter(state=>state==='applied').length;remaining=states.length-applied;
+    record.steps.forEach((step,index)=>{step.reconciledState=states[index];});
+    record.status='verified';record.outcome='partial-state-reconciled';record.recoveredAt=new Date().toISOString();
+  });
+  return interaction.editReply({content:null,embeds:[new EmbedBuilder().setTitle('Goliath • Recovery Reconciled').setColor(0x57F287).setDescription('Retained '+applied+' applied states. '+remaining+' original states remain unchanged. Prepare a fresh sync preview to finish deployment. No permissions changed during reconciliation.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'Back',ButtonStyle.Secondary))]});
+}
 function aiDeployReconciliationPayload(interaction,guild){
   const record=aiDeployJournalRead(guild.id).filter(item=>item.status!=='verified').at(-1);
   if(!record)return aiDeployRecoveryPayload(guild);
   const result=aiDeployReconciliationState(guild,record);
   const token=randomUUID().replace(/-/g,'').slice(0,16);
-  const eligible=record.status==='failed'&&result.allOriginal;
+  const retain=aiDeployCanRetain(guild,record);
+  const eligible=!retain&&record.status==='failed'&&result.allOriginal;
   if(eligible)aiDeployRecoveryApprovals.set(interaction.user.id+':'+guild.id,{kind:'resolve-original',token,id:record.id,expiresAt:Date.now()+600000});
+  if(retain)aiDeployRecoveryApprovals.set(interaction.user.id+':'+guild.id,{kind:'retain-progress',token,id:record.id,states:JSON.stringify(result.states),expiresAt:Date.now()+600000});
   const counts={};
   for(const state of result.states)counts[state]=(counts[state]||0)+1;
   return {content:null,embeds:[new EmbedBuilder().setTitle('Goliath • Reconciliation Report').setColor(0xF0B232).setDescription([
     'Transaction '+record.id,'Recorded status: '+record.status,
     ...Object.entries(counts).map(([state,count])=>state+': '+count),
     result.uncertain?'Conflicting or unknown outcomes require operator investigation.':result.allOriginal?'All inspected changes match original state.':result.allApplied?'All inspected changes match applied state.':'Mixed deployment state; inspect individual operations.',
-    'Failed transactions matching the original state may be explicitly released. Pending operations require operator investigation.'
-  ].join('\n'))],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-resolve-'+token,guild.id),'Confirm Original State',ButtonStyle.Danger,!eligible),navigationButton(contextualOwnerId('ai-deploy-reconcile',guild.id),'Refresh Report',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary))]};
+    retain?'Retain verified snapshots and release the interrupted transaction. Remaining changes require a new sync approval.':'Conflicting or active operations remain blocked.'
+  ].join('\n'))],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId((retain?'ai-deploy-retain-':'ai-deploy-resolve-')+token,guild.id),retain?'Retain Progress':'Confirm Original State',ButtonStyle.Danger,!retain&&!eligible),navigationButton(contextualOwnerId('ai-deploy-reconcile',guild.id),'Refresh Report',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 function aiDeployRecoveryPayload(guild) {
   const records=aiDeployJournalRead(guild.id);
@@ -1574,6 +1606,7 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
 async function aiExecuteApprovedRoles(guild,ownerId,plan,selected){
   const guildId=guild.id;
   const tx=aiDeployJournalBegin(guildId,ownerId,plan.steps);
+  aiDeployActiveSync.add(guildId);
   const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
     const record=records.find(item=>item.id===tx);
     if(!record||record.status!=='pending') throw new Error('Journal unavailable');
@@ -1774,7 +1807,7 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
   }catch(error){
     update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
     return {status:'failed',transactionId:tx,recoveryRequired:true,error:String(error.message).slice(0,500)};
-  }
+  }finally{aiDeployActiveSync.delete(guildId);}
 }
 
 function aiDeploySyncPreview(interaction,guild,page=0,full=false){
@@ -2231,6 +2264,10 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (/^ownerpanel:ai-deploy-rollback-[a-f0-9]{16}$/.test(id)) {
     await aiDeployRollback(interaction,contextGuildId,id.slice('ownerpanel:ai-deploy-rollback-'.length));
+    return true;
+  }
+  if (/^ownerpanel:ai-deploy-retain-[a-f0-9]{16}$/.test(id)) {
+    await aiDeployRetainProgress(interaction,contextGuildId,id.slice('ownerpanel:ai-deploy-retain-'.length));
     return true;
   }
   if (/^ownerpanel:ai-deploy-resolve-[a-f0-9]{16}$/.test(id)) {
