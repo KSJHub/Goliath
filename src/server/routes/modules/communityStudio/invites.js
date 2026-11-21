@@ -3,6 +3,7 @@
 const express = require('express');
 const invites = require('../../../../modules/communityStudio/invites/invites');
 
+const guildManager = require('../../../../core/guild/guildManager');
 const router = express.Router();
 const actor = (req, action) => ({ action, actorId: req.session?.user?.id || req.body?.actorId || null });
 const getClient = (req) => req.client || req.app?.get?.('goliath.client') || null;
@@ -14,7 +15,7 @@ async function getGuild(req) {
 
 router.get('/:guildId', (req, res) => {
   try {
-    const config = invites.getSection(req.params.guildId);
+    const config = { ...invites.getSection(req.params.guildId), enabled: guildManager.isModuleEnabled(req.params.guildId, 'invites') };
     res.json({ success: true, config, inviteLinks: invites.listInviteLinks(req.params.guildId), leaderboard: invites.leaderboard(req.params.guildId, Number(req.query.limit || 25)) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
