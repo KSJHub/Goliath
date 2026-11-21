@@ -5,13 +5,21 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Environment to deploy from DEV
+        description: Environment to deploy
         required: true
         default: beta
         type: choice
         options:
           - beta
           - production
+      mode:
+        description: Deploy existing target branch or promote DEV
+        required: true
+        default: current-branch
+        type: choice
+        options:
+          - current-branch
+          - promote-dev
 
 permissions:
   contents: write
@@ -30,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: dev
+          ref: ${{ inputs.mode == 'promote-dev' && 'dev' || inputs.environment }}
           fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
@@ -38,17 +46,20 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Record DEV commit
+      - name: Record selected source commit
         id: source
         shell: bash
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Validate DEV
+      - name: Validate selected source
+        env:
+          BOT_MODE: ${{ inputs.mode == 'promote-dev' && 'dev' || inputs.environment }}
         run: |
           set -euo pipefail
-          BOT_MODE=dev npm run doctor
+          npm run doctor
           npm run audit:emojis
           node scripts/goliath.js embed-graphic-headers
           node scripts/goliath.js runtime-contracts
+          if [ "$BOT_MODE" = dev ]; then
           node <<'NODE'
           const fs=require('node:fs'),assert=require('node:assert/strict');
           const maintenance=fs.readFileSync('src/owner/dev/maintenanceStatus.js','utf8');
@@ -62,6 +73,7 @@ jobs:
           assert(duplicator.includes("error?.code === 'EADDRINUSE'"));
           console.log('✅ DEV runtime hardening invariants verified');
           NODE
+          fi
           rm -rf dist
           npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
           mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
@@ -78,17 +90,27 @@ jobs:
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           fetch-depth: 0
-      - name: Promote DEV to selected environment
+      - name: Resolve deployment commit
         id: promote
         shell: bash
         env:
           TARGET_BRANCH: ${{ inputs.environment }}
           SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          DEPLOY_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           case "$TARGET_BRANCH" in beta|production) ;; *) exit 1;; esac
           git fetch --no-tags origin dev "$TARGET_BRANCH"
           TARGET_SHA="$(git rev-parse "origin/$TARGET_BRANCH")"
+          case "$DEPLOY_MODE" in
+            current-branch)
+              [ "$TARGET_SHA" = "$SOURCE_SHA" ] || { echo "Target changed after validation; retry deployment." >&2; exit 1; }
+              echo "deploy_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+            promote-dev) ;;
+            *) exit 1 ;;
+          esac
           SOURCE_TREE="$(git show -s --format=%T "$SOURCE_SHA")"
           git config user.name "Goliath Deploy"
           git config user.email "goliath-deploy@users.noreply.github.com"
@@ -225,10 +247,10 @@ jobs:
           {
             echo "## Deploy Goliath"
             echo ""
-            echo "- Source: **DEV**"
+            echo "- Mode: **${{ inputs.mode }}**"
             echo "- Target: **${{ inputs.environment }}**"
-            echo "- DEV validation: **${{ needs.preflight.result }}**"
-            echo "- Branch promotion: **${{ needs.promote.result }}**"
+            echo "- Source validation: **${{ needs.preflight.result }}**"
+            echo "- Deployment commit resolution: **${{ needs.promote.result }}**"
             echo "- VPS deployment: **${{ needs.deploy.result }}**"
             printf -- '- Deployed commit: `%s`\n' "$DEPLOY_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
