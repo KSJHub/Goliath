@@ -163,6 +163,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const advancedDirty = useRef(false);
   const loadedGuild = useRef('');
   const panelDraftDirty = useRef(false);
+  const explicitNewPanel = useRef(false);
 
   const card = useMemo(() => ({
     border: `1px solid ${theme.cardBorder}`,
@@ -211,6 +212,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         moduleConfig: { settings: config, panelTemplate: overview?.panelTemplate || {}, panels: overview?.panels || [], analytics: overview?.analytics || {} },
         adminConfig: config,
       };
+      const guildChanged = loadedGuild.current !== guildId;
+      if (guildChanged) explicitNewPanel.current = false;
       setData(adapted);
       if (loadedGuild.current !== guildId || !advancedDirty.current) {
         setAdvanced(config);
@@ -220,9 +223,12 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       setRoles(list(rolePayload, 'roles'));
       setChannels(list(channelPayload, 'channels'));
       const currentPanels = Array.isArray(overview?.panels) ? overview.panels : [];
-      const current = currentPanels.find((panel) => String(panel.panelId || panel.id) === String(selectedPanelId)) || null;
-      if (selectedPanelId && !current) setSelectedPanelId('');
-      if (!panelDraftDirty.current || loadedGuild.current !== guildId) {
+      const preferredId = guildChanged || (!selectedPanelId && !explicitNewPanel.current) ? overview?.activePanelId : selectedPanelId;
+      const current = currentPanels.find((panel) => String(panel.panelId || panel.id) === String(preferredId)) || null;
+      if (!panelDraftDirty.current || guildChanged) {
+        setSelectedPanelId(current ? String(current.panelId || current.id) : '');
+      }
+      if (!panelDraftDirty.current || guildChanged) {
         setDraft(panelDraft(current, adapted.moduleConfig, adapted.adminConfig));
         panelDraftDirty.current = false;
       }
@@ -234,7 +240,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   useEffect(() => {
-    if (loadedGuild.current !== guildId) advancedDirty.current = false;
+    if (loadedGuild.current !== guildId) { advancedDirty.current = false; panelDraftDirty.current = false; }
     load();
   }, [guildId]);
   // Silent overview refresh: no loading state, role/channel reloads or draft loss.
@@ -370,6 +376,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   function selectPanel(panelId) {
+    explicitNewPanel.current = !panelId;
     setSelectedPanelId(panelId);
     panelDraftDirty.current = false;
     const panel = panels.find((item) => String(item.panelId || item.id) === String(panelId));
@@ -384,8 +391,10 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     await act('deploy', async () => {
       const expectedConfigRevision = data?.configRevision;
       // Deploy the panel directly, avoiding a separate template write that invalidates the revision.
-      if (selectedPanelId) await api.refreshVerificationPanel(guildId, selectedPanelId, { ...draft, expectedConfigRevision });
-      else await api.deployVerificationPanel(guildId, { channelId: draft.channelId, template: draft, expectedConfigRevision });
+      const result = selectedPanelId ? await api.refreshVerificationPanel(guildId, selectedPanelId, { ...draft, expectedConfigRevision })
+        : await api.deployVerificationPanel(guildId, { channelId: draft.channelId, template: draft, expectedConfigRevision });
+      explicitNewPanel.current = false;
+      if (result?.panel?.panelId) setSelectedPanelId(String(result.panel.panelId));
       panelDraftDirty.current = false;
     }, selectedPanelId ? 'Verification panel repaired and redeployed.' : 'Verification panel deployed.');
   }
