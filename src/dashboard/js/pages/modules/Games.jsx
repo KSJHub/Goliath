@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/apiClient.js';
 import ModuleShell from '../../shared/ModuleShell.jsx';
-import { SectionCard } from '../../shared/PageShell.jsx';
+import { SectionCard, DASHBOARD_EMOJIS as E } from '../../shared/PageShell.jsx';
 import { ChannelSelect, RoleSelect, DiscordResourceSelect } from '../../ui/DiscordResourceSelects.jsx';
 
 function stamp(value, config = {}) { return value ? new Date(value).toLocaleString(config.locale || 'en-GB', { timeZone: config.timeZone || 'Europe/London' }) : 'Never'; }
@@ -132,7 +132,7 @@ export default function Games({ theme, selectedGuild, selectedGuildData }) {
               const platform = preview.platforms[key];
               return <div key={key} style={{ background: theme.softBg, border: `1px solid ${theme.cardBorder}`, borderRadius: 10, padding: 12, minWidth: 0 }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px' }}>{platform.imageUrl ? <img src={platform.imageUrl} alt="" width="22" height="22" /> : <span aria-hidden="true">{platform.fallback}</span>}{label} · {group.length}</h4>
-                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{draft.showNew !== false && draft.state.newSince[offer.id] && Date.now() >= draft.state.newSince[offer.id] && Date.now() - draft.state.newSince[offer.id] < 86400000 ? '🆕 ' : ''}{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{draft.showPlatforms !== false && offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}</span></li>)}</ul>
+                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{draft.showNew !== false && draft.state.newSince[offer.id] && Date.now() >= draft.state.newSince[offer.id] && Date.now() - draft.state.newSince[offer.id] < 86400000 ? `${E.GAME_NEW} ` : ''}{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{draft.showPlatforms !== false && offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}</span></li>)}</ul>
               </div>;
             })}
           </div>
