@@ -1,6 +1,42 @@
 import React, { memo } from 'react';
 
 /**
+ * Browser-safe dashboard icon palette. Keep shared glyphs aligned with core EMOJIS.
+ * Intentional legacy differences (do not silently change displayed icons):
+ * INACTIVE: dashboard ⚫ / Discord ⚪; REPAIR: dashboard 🔧 / Discord 🩹;
+ * BUILDER: dashboard 🛠 / Discord 🛠️ (variation selector).
+ * This module must remain browser-safe; core/guild/goliathNavigation.js imports discord.js.
+ * Guild-configured emojis and saved module content must not be overwritten by defaults.
+ */
+export const DASHBOARD_EMOJIS = Object.freeze({
+  CHANNEL_PREVIOUS: '◀',
+  GAME_NEW: '🆕',
+  WELCOME_INHERIT_TEXT: '↩',
+  MEMBERS: '👥', ACTIVE: '🟢', INACTIVE: '⚫', ROLES: '🎭', VOICE: '🔊',
+  FOLDER: '📁', ROLE_TAG: '🏷️', DATE: '📅', TIMER: '⏳',
+  MESSAGES: '💬', MICROPHONE: '🎙️', JOIN: '📥', LEAVE: '📤',
+  BOOST: '🚀', EMOJI: '😀', DND: '⛔', IDLE: '🌙',
+  REFRESH: '🔄', TEXT_CHANNEL: '#️⃣', CHART: '📊', HEALTH: '🩺',
+  REPAIR: '🔧', DELETE: '🗑️', SUGGESTIONS: '💡', UPVOTE: '👍',
+  DOWNVOTE: '👎', BIRTHDAY: '🎂',
+  SOCIAL: '📣', LINK: '🔗', ANNOUNCEMENT: '📢', DESIGN: '🎨', FEED: '📡',
+  CHANNELS: '📂', SETTINGS: '⚙️', AUTOMATION: '⚡', TEST: '🧪', DATA: '🗄️',
+  USER: '👤', LIVE: '🔴', GOODBYE: '👋',
+  BOT: '🤖', BUILDER: '🛠', PRESET: '📦', DIRECT_MESSAGE: '📨', PREVIEW: '👁',
+  TICKETS: '🎫', DOCUMENT: '📄', SECURITY: '🛡️', SAVE: '💾',
+  SYSTEM: '🧩', HISTORY: '🕘', LOCK: '🔒', UNLOCK: '🔓', SETTINGS_PLAIN: '⚙', COLOURS: '🌈',
+  ENV_DEV: '🔵', ENV_BETA: '🟡', ENV_PRODUCTION: '🟢', CROWN: '👑', FREE: '🆓',
+  STATUS_ALERT: '🔴', STATUS_UNKNOWN: '⚪', PERMISSIONS: '🔐',
+  DIAMOND: '💎', HOME: '🏠', JUSTICE: '⚖️', COMMUNITIES: '🏘️',
+  TV: '📺', NOTE: '📝', SUCCESS: '✅', ERROR: '❌', CLIPBOARD: '📋',
+  WARNING: '⚠️', INFO: 'ℹ️', RSVP_MAYBE: '❔', SPARKLES: '✨', GAMEPAD: '🎮', JOYSTICK: '🕹️', COMPUTER: '💻', ADD: '➕', PLAY: '▶️', PAUSE: '⏸️', BELL: '🔔',
+  GLOBE: '🌍', FILM: '🎞️', PREMIUM_TICKET: '🎟️', RESTORE: '♻️', TREND: '📈',
+});
+
+
+
+
+/**
  * Shared dashboard page shell + reusable UI system.
  * Keeps page titles readable while still showing selected guild context.
  */
