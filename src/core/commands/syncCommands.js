@@ -220,6 +220,7 @@ async function syncCommands() {
   const privateGuildId = commandCenterGuildId();
   const cleanupGuildIds = uniqueGuildIds([guildIds, privateGuildId]);
   const rest = new REST({ version: '10', timeout: timeoutMs() }).setToken(token);
+  const skippedGuildIds = [];
   let removedGlobalCommands = [];
   let removedGuildCommands = [];
 
@@ -227,7 +228,20 @@ async function syncCommands() {
     await putGlobalCommands(rest, clientId, publicCommands, dryRun);
   } else {
     if (!guildIds.length) throw new Error(`No guild IDs configured for ${mode}`);
-    for (const guildId of guildIds) await putGuildCommands(rest, clientId, guildId, publicCommands, dryRun);
+    const syncedGuildIds = [];
+    for (const guildId of guildIds) {
+      try {
+        await putGuildCommands(rest, clientId, guildId, publicCommands, dryRun);
+        syncedGuildIds.push(guildId);
+      } catch (error) {
+        // A stale BETA guild must not prevent deployment to accessible guilds.
+        // Keep other environments and unexpected API errors fail-closed.
+        if (mode !== 'beta' || ![50001, 10004].includes(discordErrorCode(error))) throw error;
+        skippedGuildIds.push(guildId);
+        console.warn(`[CommandSync] BETA guild ${guildId} inaccessible (Discord ${discordErrorCode(error)}); skipped. Review BETA guild configuration.`);
+      }
+    }
+    if (!syncedGuildIds.length) throw new Error(`No accessible guilds for ${mode} command synchronisation`);
   }
 
   removedGuildCommands = await cleanupRetiredGuildCommands(rest, clientId, cleanupGuildIds, dryRun);
@@ -238,6 +252,7 @@ async function syncCommands() {
     commandMode,
     dryRun,
     guildIds,
+    skippedGuildIds,
     commands: publicCommands.map((command) => command.name),
     removedGuildCommands,
     removedGlobalCommands,
