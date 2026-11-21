@@ -188,21 +188,21 @@ function refreshInProgressPanel(payload) {
   if (!title.startsWith(`${EMOJIS.QUARANTINE} User Panel Development —`)) return payload;
 
   const pages = {
-    `${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.COMMUNITIES} Community`: [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.COMMUNITIES} Community`]: [
       '**Pending buttons**',
       '• Giveaways',
       '• Invites',
       '• Leveling',
       '• Polls',
     ],
-    `${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.MESSAGES} Feedback & Messages`: [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.MESSAGES} Feedback & Messages`]: [
       '**Pending buttons**',
       '• Forms',
       '• Starboard',
       '• Suggestions',
       '• Tickets',
     ],
-    `${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.ROLES} Roles, Security & Social`: [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.ROLES} Roles, Security & Social`]: [
       '**Pending buttons**',
       '• History',
       '• My Creator Profile',
@@ -210,7 +210,7 @@ function refreshInProgressPanel(payload) {
       '• Verification',
       '• View Roles',
     ],
-    `${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.USER} Account & Utility`: [
+    [`${EMOJIS.QUARANTINE} User Panel Development — ${EMOJIS.USER} Account & Utility`]: [
       '**Pending personal tools**',
       '• Account Record',
       '',
