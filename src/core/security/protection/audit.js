@@ -1,5 +1,6 @@
 'use strict';
 
+const { EMOJIS } = require('../../ui/emojis');
 const { EmbedBuilder } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
 const { SEVERITY } = require('./events');
@@ -151,7 +152,7 @@ function buildIncidentEmbed(incident, options = {}) {
   const severity = safeString(incident.severity, SEVERITY.LOW).toUpperCase();
   const embed = new EmbedBuilder()
     .setColor(getSeverityColor(incident.severity))
-    .setTitle(options.ownerMirror ? '🚨 Goliath Security Network Alert' : '🚨 Security Incident Logged')
+    .setTitle(options.ownerMirror ? `${EMOJIS.SECURITY_SIREN} Goliath Security Network Alert` : `${EMOJIS.SECURITY_SIREN} Security Incident Logged`)
     .setDescription(`**Type:** \`${truncate(incident.type, 100, 'unknown')}\`\n**Severity:** \`${severity}\``)
     .addFields(
       { name: 'Actor', value: incident.actorId ? `${truncate(incident.actorTag, 200, 'Unknown')} (\`${incident.actorId}\`)` : 'Unknown', inline: true },
