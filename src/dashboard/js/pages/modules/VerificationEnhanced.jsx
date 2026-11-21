@@ -296,7 +296,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function saveConfig(patch) {
-    await act('config', () => api.saveVerificationConfig(guildId, patch), 'Verification configuration saved.');
+    await act('config', () => api.saveVerificationConfig(guildId, { ...patch, expectedConfigRevision: data?.configRevision }), 'Verification configuration saved.');
   }
 
   function setAdvancedPath(path, value) {
@@ -354,7 +354,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     const { enabled: _enabled, ...settingsPayload } = normalized;
     setBusy('config');
     try {
-      await api.saveVerificationConfig(guildId, { settings: settingsPayload });
+      await api.saveVerificationConfig(guildId, { settings: settingsPayload, expectedConfigRevision: data?.configRevision });
       // Only clear the dirty flag after the API confirms persistence.
       // Refresh once, rather than calling act() and loading twice.
       advancedDirty.current = false;
@@ -382,9 +382,11 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       return;
     }
     await act('deploy', async () => {
-      await api.saveVerificationTemplate(guildId, draft);
-      if (selectedPanelId) await api.refreshVerificationPanel(guildId, selectedPanelId, { ...draft, channelId: draft.channelId });
-      else await api.deployVerificationPanel(guildId, { ...draft, channelId: draft.channelId });
+      const expectedConfigRevision = data?.configRevision;
+      // Deploy the panel directly, avoiding a separate template write that invalidates the revision.
+      if (selectedPanelId) await api.refreshVerificationPanel(guildId, selectedPanelId, { ...draft, expectedConfigRevision });
+      else await api.deployVerificationPanel(guildId, { channelId: draft.channelId, template: draft, expectedConfigRevision });
+      panelDraftDirty.current = false;
     }, selectedPanelId ? 'Verification panel repaired and redeployed.' : 'Verification panel deployed.');
   }
 
