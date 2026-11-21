@@ -1,3 +1,4 @@
+const { EMOJIS } = require('../../ui/emojis');
 const {
   createServerBackup,
   listServerBackups,
@@ -190,7 +191,7 @@ async function runServerBackupCycle(client) {
   if (!guilds) {
     const error = new Error('Discord client is not ready yet.');
     sentinelScheduler.fail(schedulerId, error, { phase: 'client-unavailable' });
-    console.warn('💾 Server backup cycle skipped: Discord client is not ready yet.');
+    console.warn(`${EMOJIS.SAVE} Server backup cycle skipped: Discord client is not ready yet.`);
     return [];
   }
 
@@ -208,15 +209,15 @@ async function runServerBackupCycle(client) {
 
       if (result?.skipped) {
         skipped += 1;
-        console.log(`💾 Backup skipped: ${guild.name} | ${result.reason}`);
+        console.log(`${EMOJIS.SAVE} Backup skipped: ${guild.name} | ${result.reason}`);
       } else if (result) {
         created += 1;
-        console.log(`💾 Backup created: ${guild.name} | ${result.backupId} | old deleted: ${result.deletedOldBackups}`);
+        console.log(`${EMOJIS.SAVE} Backup created: ${guild.name} | ${result.backupId} | old deleted: ${result.deletedOldBackups}`);
       }
     } catch (error) {
       failures += 1;
       await recordAutomaticBackupAction(guild, null, error);
-      console.error(`❌ Backup failed for ${guild.name} (${guild.id}):`, error);
+      console.error(`${EMOJIS.ERROR} Backup failed for ${guild.name} (${guild.id}):`, error);
     }
   }
 
@@ -232,31 +233,31 @@ async function runServerBackupCycle(client) {
 
 function startServerBackupScheduler(client) {
   if (started) {
-    console.warn('⚠️ Server backup scheduler already running.');
+    console.warn(`${EMOJIS.WARNING} Server backup scheduler already running.`);
     return;
   }
 
   if (!isEnabled()) {
-    console.log('💾 Server backup scheduler disabled.');
+    console.log(`${EMOJIS.SAVE} Server backup scheduler disabled.`);
     return;
   }
 
   started = true;
   registerBackupScheduler();
 
-  console.log(`💾 Server backup scheduler started | every ${getIntervalDays()} day(s) | keep ${getRetentionLimit()}`);
+  console.log(`${EMOJIS.SAVE} Server backup scheduler started | every ${getIntervalDays()} day(s) | keep ${getRetentionLimit()}`);
 
   setTimeout(() => {
     runServerBackupCycle(client).catch((error) => {
       sentinelScheduler.fail(BACKUP_SCHEDULER_ID, error, { phase: 'initial-cycle' });
-      console.error('❌ Initial server backup cycle failed:', error);
+      console.error(`${EMOJIS.ERROR} Initial server backup cycle failed:`, error);
     });
   }, INITIAL_DELAY_MS).unref?.();
 
   setInterval(() => {
     runServerBackupCycle(client).catch((error) => {
       sentinelScheduler.fail(BACKUP_SCHEDULER_ID, error, { phase: 'scheduled-cycle' });
-      console.error('❌ Scheduled server backup cycle failed:', error);
+      console.error(`${EMOJIS.ERROR} Scheduled server backup cycle failed:`, error);
     });
   }, CHECK_EVERY_MS).unref?.();
 }
