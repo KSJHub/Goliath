@@ -1316,12 +1316,12 @@ function aiDeployRollbackPlan(guild,record){
       if(!step.createdRoleId && !step.roleId && !step.phase)continue;
       blockers.push('Created role requires manual review: '+step.name);continue;
     }
-    if(step.action!=='member-overwrite'){blockers.push('Unknown operation requires manual review');continue;}
+    if(!['member-overwrite','role-overwrite'].includes(step.action)){blockers.push('Unknown operation requires manual review');continue;}
     const channel=guild.channels.cache.get(step.channelId);
     const bot=guild.members.me;
-    const ow=channel?.permissionOverwrites?.cache?.get(step.memberId);
+    const ow=channel?.permissionOverwrites?.cache?.get(step.roleId||step.memberId);
     const actual={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
-    if(!channel||bot.id!==step.memberId){blockers.push(step.channelId+' unavailable');continue;}
+    if(!channel||!aiDeployOverwriteTarget(guild,step)){blockers.push(step.channelId+' unavailable');continue;}
     if(JSON.stringify(actual)===JSON.stringify(step.before))continue;
     if(!actual.exists||actual.allow!==step.after?.allow||actual.deny!==step.after?.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')){blockers.push(step.channelId+' conflict or inaccessible');continue;}
     if(channel.type===4&&JSON.stringify(aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id))!==JSON.stringify(step.inheritedChildren)){blockers.push(step.channelId+' category inheritance changed');continue;}
@@ -1378,17 +1378,17 @@ async function aiDeployRollback(interaction,guildId,token){
       const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
       await guild.channels.fetch();
       if(channel?.type===4&&JSON.stringify(aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id))!==JSON.stringify(step.inheritedChildren))throw new Error('Restoration inheritance conflict');
-      if(!ow||bot.id!==step.memberId||String(ow.allow.bitfield)!==step.after.allow||String(ow.deny.bitfield)!==step.after.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles'))throw new Error('Restoration conflict');
+      if(!ow||!aiDeployOverwriteTarget(guild,step)||String(ow.allow.bitfield)!==step.after.allow||String(ow.deny.bitfield)!==step.after.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles'))throw new Error('Restoration conflict');
       update(current=>{current.steps.find(s=>s.channelId===step.channelId).recoveryPhase='restoring';});
-      if(!step.before.exists)await channel.permissionOverwrites.delete(bot,'Goliath DEV rollback '+record.id);
+      if(!step.before.exists)await channel.permissionOverwrites.delete(aiDeployOverwriteTarget(guild,step),'Goliath DEV rollback '+record.id);
       else {
         const changes={};
         const allow=new PermissionsBitField(BigInt(step.before.allow)),deny=new PermissionsBitField(BigInt(step.before.deny));
         for(const p of step.grants)changes[p]=allow.has(p,false)?true:deny.has(p,false)?false:null;
-        await channel.permissionOverwrites.edit(bot,changes,{reason:'Goliath DEV rollback '+record.id});
+        await channel.permissionOverwrites.edit(aiDeployOverwriteTarget(guild,step),changes,{reason:'Goliath DEV rollback '+record.id});
       }
       const fresh=await guild.channels.fetch(channel.id,{force:true});
-      const restored=fresh?.permissionOverwrites?.cache?.get(bot.id);
+      const restored=fresh?.permissionOverwrites?.cache?.get(step.roleId||step.memberId);
       if(!fresh||JSON.stringify({exists:Boolean(restored),allow:String(restored?.allow?.bitfield||0n),deny:String(restored?.deny?.bitfield||0n)})!==JSON.stringify(step.before))throw new Error('Restoration verification failed');
       update(current=>{current.steps.find(s=>s.channelId===step.channelId).recoveryPhase='restored';});
     }
@@ -1401,10 +1401,10 @@ async function aiDeployRollback(interaction,guildId,token){
 }
 function aiDeployReconciliationState(guild,record){
   const states=record.steps.map(step=>{
-    if(step.action==='member-overwrite'){
+    if(['member-overwrite','role-overwrite'].includes(step.action)){
       const channel=guild.channels.cache.get(step.channelId);
-      if(!channel||guild.members.me?.id!==step.memberId)return 'unknown';
-      const ow=channel.permissionOverwrites?.cache?.get(step.memberId);
+      if(!channel||!aiDeployOverwriteTarget(guild,step))return 'unknown';
+      const ow=channel.permissionOverwrites?.cache?.get(step.roleId||step.memberId);
       const actual={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
       if(JSON.stringify(actual)===JSON.stringify(step.before))return 'original';
       if(actual.exists&&actual.allow===step.after?.allow&&actual.deny===step.after?.deny)return 'applied';
@@ -1447,7 +1447,7 @@ async function aiDeployResolveOriginal(interaction,guildId,token){
   return interaction.editReply({content:'Original state verified. Failed transaction released.',embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
 }
 function aiDeployCanRetain(guild,record){
-  if(!record||!['pending','failed'].includes(record.status)||aiDeployActiveSync.has(guild.id)||!record.steps.length||!record.steps.every(step=>step.action==='member-overwrite'))return false;
+  if(!record||!['pending','failed'].includes(record.status)||aiDeployActiveSync.has(guild.id)||!record.steps.length||!record.steps.every(step=>['member-overwrite','role-overwrite'].includes(step.action)))return false;
   const result=aiDeployReconciliationState(guild,record);
   return result.states.every(state=>state==='applied'||state==='original')&&record.steps.every(step=>{
     const channel=guild.channels.cache.get(step.channelId);
@@ -1504,9 +1504,9 @@ function aiDeployRecoveryPayload(guild) {
   if(record){
     for(const step of record.steps){
       let state='Manual investigation required';
-      if(step.action==='member-overwrite'){
+      if(['member-overwrite','role-overwrite'].includes(step.action)){
         const channel=guild.channels.cache.get(step.channelId);
-        const ow=channel?.permissionOverwrites?.cache?.get(step.memberId);
+        const ow=channel?.permissionOverwrites?.cache?.get(step.roleId||step.memberId);
         const actual={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
         if(!channel) state='Channel missing';
         else if(JSON.stringify(actual)===JSON.stringify(step.before)) state='Original state';
@@ -1748,15 +1748,32 @@ function aiGoliathRolePayload(interaction, guild, page = 0) {
     'Selections are temporary previews; no roles are created or assigned yet.'
   ].join('\n'))],components:rows};
 }
+function aiDeployOperationalTarget(guild){
+  const id=aiDeploySavedRoles(guild.id).operational;
+  const role=guild.roles.cache.get(id);
+  const bot=guild.members.me;
+  if(!role||role.managed||role.hoist||role.permissions.has('Administrator',false)||!bot?.roles.cache.has(id)||role.members.size!==1||!role.members.has(bot.id))return null;
+  return role;
+}
+function aiDeployOverwriteTarget(guild,step){
+  if(step.action==='member-overwrite')return guild.members.me?.id===step.memberId?guild.members.me:null;
+  if(step.action==='role-overwrite'){
+    const role=aiDeployOperationalTarget(guild);
+    return role?.id===step.roleId?role:null;
+  }
+  return null;
+}
 function aiDeploySyncPlan(guild,full=false) {
   const scan=aiGoliathDeploymentScan(guild);
   const bot=guild.members.me;
   const steps=[];
+  const role=aiDeployOperationalTarget(guild);
+  if(!role)return {steps,blocked:scan.targets.filter(c=>c.permissionsLocked!==true).map(c=>c.id),...(full?{full:true}:{})};
   const blocked=[];
   const targets=full?scan.targets.filter(channel=>channel.permissionsLocked!==true).map(channel=>{
     const effective=channel.permissionsFor(bot);
     const required=[...new Set([...aiGoliathChannelRequirements(channel,scan.profile),...(channel.type===4?aiGoliathInheritedChildren(guild,channel.id).flatMap(child=>aiGoliathChannelRequirements(child,scan.profile)):[])])];
-    const overwrite=channel.permissionOverwrites.cache.get(bot.id);
+    const overwrite=channel.permissionOverwrites.cache.get(role.id);
     return {id:channel.id,category:channel.type===4,synced:false,editable:Boolean(effective?.has('ManageRoles')),missing:required.filter(permission=>!overwrite?.allow.has(permission,false)||overwrite.deny.has(permission,false))};
   }).filter(gap=>gap.missing.length):scan.gaps;
   for(const gap of targets){
@@ -1765,10 +1782,10 @@ function aiDeploySyncPlan(guild,full=false) {
     if(gap.synced || !gap.editable || !gap.missing.every(p=>bot.permissions.has(p))){
       blocked.push(gap.id);continue;
     }
-    const overwrite=channel.permissionOverwrites.cache.get(bot.id);
+    const overwrite=channel.permissionOverwrites.cache.get(role.id);
     const before={exists:Boolean(overwrite),allow:String(overwrite?.allow?.bitfield||0n),deny:String(overwrite?.deny?.bitfield||0n)};
     const after={allow:new PermissionsBitField(BigInt(before.allow)).add(...gap.missing).bitfield.toString(),deny:new PermissionsBitField(BigInt(before.deny)).remove(...gap.missing).bitfield.toString()};
-    steps.push({action:'member-overwrite',channelId:channel.id,memberId:bot.id,grants:gap.missing,before,after,inheritedChildren:gap.category?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[]});
+    steps.push({action:'role-overwrite',channelId:channel.id,roleId:role.id,grants:gap.missing,before,after,inheritedChildren:gap.category?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[]});
   }
   return full?{steps,blocked,full:true}:{steps,blocked};
 }
@@ -1812,6 +1829,7 @@ async function aiDeployApplySync(interaction,guildId,token){
 async function aiExecuteApprovedSync(guild,ownerId,plan){
   const guildId=guild.id;
   const tx=aiDeployJournalBegin(guildId,ownerId,plan.steps);
+  aiDeployActiveSync.add(guildId);
   const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
     const record=records.find(item=>item.id===tx);
     if(!record||record.status!=='pending') throw new Error('Sync journal unavailable');
@@ -1824,13 +1842,13 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
       const channel=await guild.channels.fetch(step.channelId,{force:true});
       const bot=await guild.members.fetchMe({force:true});
       if(JSON.stringify(channel?.type===4?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[])!==JSON.stringify(step.inheritedChildren))throw new Error('Category inheritance changed');
-      const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
+      const ow=channel?.permissionOverwrites?.cache?.get(step.roleId||step.memberId);
       const before={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
-      if(!channel||bot.id!==step.memberId||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')||!step.grants.every(p=>bot.permissions.has(p))||JSON.stringify(before)!==JSON.stringify(step.before)) throw new Error('Channel prerequisites changed');
+      if(!channel||!aiDeployOverwriteTarget(guild,step)||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')||!step.grants.every(p=>bot.permissions.has(p))||JSON.stringify(before)!==JSON.stringify(step.before)) throw new Error('Channel prerequisites changed');
       update(record=>{record.steps[index].phase='applying';});
-      await channel.permissionOverwrites.edit(bot,Object.fromEntries(step.grants.map(p=>[p,true])),{reason:'Goliath DEV sync '+tx});
+      await channel.permissionOverwrites.edit(aiDeployOverwriteTarget(guild,step),Object.fromEntries(step.grants.map(p=>[p,true])),{reason:'Goliath DEV sync '+tx});
       const verified=await guild.channels.fetch(channel.id,{force:true});
-      const actual=verified?.permissionOverwrites?.cache?.get(bot.id);
+      const actual=verified?.permissionOverwrites?.cache?.get(step.roleId||step.memberId);
       if(!actual||String(actual.allow.bitfield)!==step.after.allow||String(actual.deny.bitfield)!==step.after.deny||!step.grants.every(p=>verified.permissionsFor(bot)?.has(p))) throw new Error('Overwrite verification failed');
       if(verified.type===4){
         await guild.channels.fetch();
@@ -1876,8 +1894,8 @@ function aiDeploySyncPreview(interaction,guild,page=0,full=false){
     const permissions=step.grants.map(p=>p.replace(/([a-z])([A-Z])/g,'$1 $2')).join(', ');
     embed.addFields({name:'Change '+(page*pageSize+index+1),value:'<#'+step.channelId+'>\n'+(step.inheritedChildren.length?'**Inherited channels:** '+step.inheritedChildren.length+'\n':'')+'**Grant:** '+permissions});
   }
-  if(!visible.length)embed.addFields({name:'Proposed permissions',value:'No editable changes required.'});
-  embed.addFields({name:'Before confirming',value:'Review every page. This grants Goliath access to listed private channels and synced children. Other member and role overwrites are preserved. Synced children are not edited separately.'})
+  if(!visible.length)embed.addFields({name:'Proposed permissions',value:'No editable changes available. Check that the saved Operations role is assigned exclusively to Goliath.'});
+  embed.addFields({name:'Before confirming',value:'Review every page. This grants the dedicated Operations role access to listed private channels and synced children. Other member and role overwrites are preserved. Synced children are not edited separately.'})
     .setFooter({text:'Goliath Deployment & Sync • Approval expires after 10 minutes'}).setTimestamp();
   const components=[new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-sync-apply-'+token,guild.id),full?'Confirm Full Template Sync':'Confirm Smart Sync',ButtonStyle.Danger,!plan.steps.length))];
