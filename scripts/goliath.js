@@ -1155,6 +1155,37 @@ async function verificationLifecycleAudit() {
       assert.equal(gate('guild', 'unknown', { channelId: 'new-channel', messageId: 'new-message' }), null, 'Unknown panel must be rejected');
     }
 
+    // Run the real verification entry point against stale Discord interactions.
+    {
+      const begin = manager.indexOf('function getRequestedPanelId(');
+      const end = manager.indexOf('async function completeVerification(', begin);
+      assert(begin >= 0 && end > begin);
+      const forbidden = () => { throw new Error('Stale interaction reached a mutation boundary'); };
+      const current = { activePanelId: 'panel-1', panels: {
+        'panel-1': { enabled: true, channelId: '200000000000000001', messageId: '300000000000000001' },
+      } };
+      const store = new Proxy({ getVerificationSection: () => current }, {
+        get: (target, key) => key in target ? target[key] : forbidden,
+      });
+      const verify = new Function('verificationStore', 'cleanId', 'parseVerifyCustomId', 'locks', 'getEffectiveVerificationSection',
+        manager.slice(begin, end) + '\nreturn verifyMember;')(
+        store, value => String(value || ''), value => ({ panelId: value.split(':').at(-1) }),
+        { has: forbidden, add: forbidden, delete: forbidden }, forbidden
+      );
+      const guild = { id: '100000000000000001', members: { fetch: forbidden } };
+      for (const [panelId, channelId, messageId] of [
+        ['panel-1','200000000000000002','300000000000000002'],
+        ['panel-1','200000000000000001','300000000000000002'],
+        ['panel-1','200000000000000002','300000000000000001'],
+        ['retired','200000000000000001','300000000000000001'],
+      ]) {
+        const result = await verify({ guild, user: { id: '400000000000000001' },
+          customId: 'verification:button:' + panelId, channelId, message: { id: messageId } });
+        assert.equal(result.ok, false);
+        assert.match(result.message, /no longer active/);
+      }
+    }
+
     // Guard the security handoff and challenge recovery against regressions.
     contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
     contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
