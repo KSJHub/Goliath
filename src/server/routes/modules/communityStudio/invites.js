@@ -30,6 +30,25 @@ router.patch('/:guildId/settings', (req, res) => {
   catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
 
+router.post('/:guildId/managed-invite', async (req, res) => {
+  try {
+    const guild = await getGuild(req); if (!guild) throw new Error('Guild is unavailable.');
+    const current = invites.getSection(guild.id).settings.officialInvite;
+    if (!current.channelId || current.channelId !== req.body?.channelId) throw new Error('Save the official invite channel before creating an invite.');
+    const result = await invites.ensureOfficialInvite(guild, actor(req, 'invites_managed_create'), false);
+    res.json({ success: true, invite: { code: result.invite.code, url: result.invite.url }, created: result.created });
+  } catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+
+router.post('/:guildId/managed-invite/validate', async (req, res) => {
+  try {
+    const guild = await getGuild(req); if (!guild) throw new Error('Guild is unavailable.');
+    const health = await invites.buildHealth(guild);
+    if (!health.healthy) throw new Error('Invite Studio validation found issues. Review the Health tab.');
+    res.json({ success: true, health });
+  } catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+
 router.post('/:guildId/sync', async (req, res) => {
   try { const guild = await getGuild(req); if (!guild) throw new Error('Guild is unavailable.'); await invites.syncGuild(guild, actor(req, 'invites_sync')); res.json({ success: true, config: invites.getSection(guild.id), inviteLinks: invites.listInviteLinks(guild.id) }); }
   catch (error) { res.status(400).json({ success: false, error: error.message }); }
