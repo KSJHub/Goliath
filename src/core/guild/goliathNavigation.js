@@ -119,6 +119,8 @@ const EMOJIS = Object.freeze({
   UPDATE: '♻️',
   REVIEW: '📋',
   CHANNEL_PREVIOUS: '◀',
+  GAME_NEW: '🆕',
+  WELCOME_INHERIT_TEXT: '↩',
   CHANNEL_NEXT: '▶',
   ROLE_PREVIOUS: '◀',
   ROLE_NEXT: '▶',
