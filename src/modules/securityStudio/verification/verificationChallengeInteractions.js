@@ -136,7 +136,8 @@ async function handleAnswerModal(interaction, parsed, manager) {
 
 async function handleStaffAction(interaction, parsed, manager) {
   const section = verificationStore.getVerificationSection(interaction.guildId);
-  if (!isStaff(interaction.member, section.settings || {})) { await interaction.reply({ content: emojiLabel('ERROR', 'You are not authorised to resolve Verification staff approvals.'), flags: MessageFlags.Ephemeral }); return true; }
+  const staffMember = await interaction.guild?.members?.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  if (!isStaff(staffMember, section.settings || {})) { await interaction.reply({ content: emojiLabel('ERROR', 'You are not authorised to resolve Verification staff approvals.'), flags: MessageFlags.Ephemeral }); return true; }
   const requiredService = {
     approve: 'resumeVerification',
     reject: 'recordVerificationFailure',
@@ -175,6 +176,12 @@ async function handleStaffAction(interaction, parsed, manager) {
         return true;
       }
     }
+  }
+  const currentStaff = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  const currentSettings = verificationStore.getVerificationSection(interaction.guildId).settings;
+  if (!guildManager.isModuleEnabled(interaction.guildId, 'verification') || !isStaff(currentStaff, currentSettings)) {
+    await interaction.reply({ content: 'Verification staff authorisation is no longer available. No action was recorded.', flags: MessageFlags.Ephemeral });
+    return true;
   }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
