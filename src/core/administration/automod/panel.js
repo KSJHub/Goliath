@@ -163,7 +163,7 @@ function canonicalState(route = 'admin:automod') {
 }
 
 const backButton = (route) => button(panelNav.buildCustomId(canonicalState(route), 'back'), emojiLabel('BACK', 'Back'), ButtonStyle.Secondary);
-const navRow = (route, nextId, settingsId = null) => row(backButton(route), ...(settingsId ? [button(settingsId, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary)] : []), button(nextId, 'Next ➡️', ButtonStyle.Secondary));
+const navRow = (route, nextId, settingsId = null) => row(backButton(route), ...(settingsId ? [button(settingsId, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary)] : []), button(nextId, `Next ${EMOJIS.NEXT}`, ButtonStyle.Secondary));
 
 function buildAutomodPanel(guild, name = 'Unknown User') {
   const config = getAutomodConfig(guild.id);
