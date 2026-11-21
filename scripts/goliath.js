@@ -481,7 +481,7 @@ function emojiInventoryAudit() {
   const total = findings.reduce((sum, item) => sum + item.count, 0);
   console.log('Scanned ' + paths.length + ' source files; ' + findings.length +
     ' files contain ' + total + ' candidate emoji-bearing lines.');
-  for (const item of findings.slice(0, 40)) console.log(' ' + item.count + '  ' + item.name);
+  for (const item of findings) console.log(' ' + item.count + '  ' + item.name);
   console.log('These are candidates, not automatically safe replacements. Preserve guild overrides and visual glyphs.');
   return true;
 }
