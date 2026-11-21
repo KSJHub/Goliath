@@ -15,7 +15,7 @@ LOCAL DEV
 
 BETA and PRODUCTION do **not** automatically follow DEV.
 
-When a deliberate promotion is required, run **Deploy Goliath** manually and select either `beta` or `production`.
+Run **Deploy Goliath** manually and select either `beta` or `production`. Choose `current-branch` (default) to deploy the existing target branch without promotion, or `promote-dev` for a deliberate full promotion.
 
 ```text
 origin/dev
@@ -121,7 +121,9 @@ beta
 production
 ```
 
-Deploy Goliath deliberately:
+With `current-branch`, the workflow validates the selected branch, checks that its SHA has not changed, and deploys that exact commit without writing to the target Git ref. Select the updated workflow definition from `dev` when dispatching.
+
+With `promote-dev`, Deploy Goliath deliberately:
 
 1. checks out and validates current `origin/dev`;
 2. creates a promotion commit on the selected target branch using the DEV application tree;
