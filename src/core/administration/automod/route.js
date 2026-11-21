@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../ui/emojis');
 
 const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
@@ -14,17 +15,17 @@ const CORE_RULE_KEYS = ['antiSpam', 'antiLinks', 'badWords', 'caps', 'mentions']
 const ADVANCED_RULE_KEYS = ['invites', 'duplicates', 'flood', 'emojiSpam', 'attachments', 'scamPatterns'];
 const ALL_RULE_KEYS = [...CORE_RULE_KEYS, ...ADVANCED_RULE_KEYS];
 const DEFAULT_DM_MESSAGES = {
-  antiSpam: '⚠️ **{server} AutoMod**\nSpam Protection triggered: {reason}',
-  antiLinks: '⚠️ **{server} AutoMod**\nLink Protection triggered: {reason}',
-  badWords: '⚠️ **{server} AutoMod**\nBad Word Filter triggered: {reason}',
-  caps: '⚠️ **{server} AutoMod**\nCaps Protection triggered: {reason}',
-  mentions: '⚠️ **{server} AutoMod**\nMention Protection triggered: {reason}',
-  invites: '⚠️ **{server} AutoMod**\nInvite Protection triggered: {reason}',
-  duplicates: '⚠️ **{server} AutoMod**\nDuplicate Message Protection triggered: {reason}',
-  flood: '⚠️ **{server} AutoMod**\nFlood Protection triggered: {reason}',
-  emojiSpam: '⚠️ **{server} AutoMod**\nEmoji Protection triggered: {reason}',
-  attachments: '⚠️ **{server} AutoMod**\nAttachment Protection triggered: {reason}',
-  scamPatterns: '⚠️ **{server} AutoMod**\nSuspicious Content Protection triggered: {reason}',
+  antiSpam: `${EMOJIS.WARNING} **{server} AutoMod**\nSpam Protection triggered: {reason}`,
+  antiLinks: `${EMOJIS.WARNING} **{server} AutoMod**\nLink Protection triggered: {reason}`,
+  badWords: `${EMOJIS.WARNING} **{server} AutoMod**\nBad Word Filter triggered: {reason}`,
+  caps: `${EMOJIS.WARNING} **{server} AutoMod**\nCaps Protection triggered: {reason}`,
+  mentions: `${EMOJIS.WARNING} **{server} AutoMod**\nMention Protection triggered: {reason}`,
+  invites: `${EMOJIS.WARNING} **{server} AutoMod**\nInvite Protection triggered: {reason}`,
+  duplicates: `${EMOJIS.WARNING} **{server} AutoMod**\nDuplicate Message Protection triggered: {reason}`,
+  flood: `${EMOJIS.WARNING} **{server} AutoMod**\nFlood Protection triggered: {reason}`,
+  emojiSpam: `${EMOJIS.WARNING} **{server} AutoMod**\nEmoji Protection triggered: {reason}`,
+  attachments: `${EMOJIS.WARNING} **{server} AutoMod**\nAttachment Protection triggered: {reason}`,
+  scamPatterns: `${EMOJIS.WARNING} **{server} AutoMod**\nSuspicious Content Protection triggered: {reason}`,
 };
 
 function getBody(req) {
