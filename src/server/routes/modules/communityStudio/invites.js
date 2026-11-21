@@ -34,7 +34,9 @@ router.post('/:guildId/managed-invite', async (req, res) => {
   try {
     const guild = await getGuild(req); if (!guild) throw new Error('Guild is unavailable.');
     const current = invites.getSection(guild.id).settings.officialInvite;
-    if (!current.channelId || current.channelId !== req.body?.channelId) throw new Error('Save the official invite channel before creating an invite.');
+    if (!current.channelId) throw new Error('Select and save the official invite channel first.');
+    // Use persisted configuration; the request body is not authoritative.
+    if (req.body?.channelId && String(req.body.channelId) !== String(current.channelId)) throw new Error('The selected channel has changed. Refresh Invite Studio before retrying.');
     const result = await invites.ensureOfficialInvite(guild, actor(req, 'invites_managed_create'), false);
     res.json({ success: true, invite: { code: result.invite.code, url: result.invite.url }, created: result.created });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
