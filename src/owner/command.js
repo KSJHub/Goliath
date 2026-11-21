@@ -1774,9 +1774,16 @@ function aiDeploySyncPlan(guild,full=false) {
 }
 async function aiDeployApplySync(interaction,guildId,token){
   await interaction.deferUpdate();
-  const key=interaction.user.id+':'+guildId;
+  const key='discord-sync:'+interaction.user.id+':'+guildId+':'+token;
   const approval=aiDeployApprovals.get(key);
-  if(mode()!=='DEV'||approval?.kind!=='sync'||approval.token!==token||approval.expiresAt<Date.now()) return interaction.editReply({content:'Sync approval expired. Prepare a new preview.',embeds:[],components:[]});
+  const reason=mode()!=='DEV'?'Sync is restricted to DEV.':!approval?'Approval not found or already consumed. A restart can invalidate approvals.':approval.kind!=='sync'||approval.token!==token?'Approval does not match this action.':approval.expiresAt<Date.now()?'The 10-minute approval window elapsed.':null;
+  if(reason){
+    if(approval?.expiresAt<Date.now())aiDeployApprovals.delete(key);
+    return interaction.editReply({content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Sync Approval Unavailable').setDescription(reason+' No changes were initiated by this confirmation.').setFooter({text:'Goliath Deployment & Sync'}).setTimestamp()],components:[new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-sync-preview-0',guildId),'Smart Sync',ButtonStyle.Primary),
+      navigationButton(contextualOwnerId('ai-full-sync-preview-0',guildId),'Full Template Sync',ButtonStyle.Primary)),
+      new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Back',ButtonStyle.Secondary))]});
+  }
   aiDeployApprovals.delete(key);
   const {guild}=await resolveInteractionGuild(interaction,guildId);
   if(!guild||guild.id!==guildId) throw new Error('Guild mismatch');
@@ -1854,7 +1861,8 @@ function aiDeploySyncPreview(interaction,guild,page=0,full=false){
   const pages=Math.max(1,Math.ceil(plan.steps.length/pageSize));
   page=Math.max(0,Math.min(pages-1,page));
   const token=randomUUID().replace(/-/g,'').slice(0,16);
-  aiDeployApprovals.set(interaction.user.id+':'+guild.id,{token,kind:'sync',full,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
+  for(const [key,approval] of aiDeployApprovals)if(approval.expiresAt<Date.now())aiDeployApprovals.delete(key);
+  aiDeployApprovals.set('discord-sync:'+interaction.user.id+':'+guild.id+':'+token,{token,kind:'sync',full,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
   const prefix=full?'ai-full-sync-preview-':'ai-sync-preview-';
   const embed=new EmbedBuilder().setColor(plan.steps.length||plan.blocked.length?0xF0B232:0x57F287)
     .setTitle('Goliath • '+(full?'Full Template Sync':'Smart Sync')+' Preview')
