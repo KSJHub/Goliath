@@ -1763,18 +1763,36 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
 
 function aiDeploySyncPreview(interaction,guild,page=0,full=false){
   const plan=aiDeploySyncPlan(guild,full);
+  const pageSize=5;
+  const pages=Math.max(1,Math.ceil(plan.steps.length/pageSize));
+  page=Math.max(0,Math.min(pages-1,page));
   const token=randomUUID().replace(/-/g,'').slice(0,16);
   aiDeployApprovals.set(interaction.user.id+':'+guild.id,{token,kind:'sync',full,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
-  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle(full?'Goliath • Full Template Sync Preview':'Goliath • Bulk Sync Preview').setDescription([
-    'Grant access to Goliath alone, including private channels listed here. Other member and role overwrites are retained.',
-    '**Proposed changes:** '+plan.steps.length,'**Skipped (inherited or blocked):** '+plan.blocked.length,
-    ...plan.steps.slice(page*10,page*10+10).map(step=>'<#'+step.channelId+'> — '+step.grants.join(', ')+(step.inheritedChildren.length?' (also affects '+step.inheritedChildren.length+' synced children)':'')),
-    'Inspect all pages before confirming. Synced children are not edited separately. Confirmation grants Goliath access to listed private channels as well.'
-  ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
-    navigationButton(contextualOwnerId('ai-sync-apply-'+token,guild.id),'Confirm Bulk Sync',ButtonStyle.Danger,!plan.steps.length),
-    navigationButton(contextualOwnerId((full?'ai-full-sync-preview-':'ai-sync-preview-')+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
-    navigationButton(contextualOwnerId((full?'ai-full-sync-preview-':'ai-sync-preview-')+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=plan.steps.length),
-    navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Back',ButtonStyle.Secondary))]};
+  const prefix=full?'ai-full-sync-preview-':'ai-sync-preview-';
+  const embed=new EmbedBuilder().setColor(plan.steps.length||plan.blocked.length?0xF0B232:0x57F287)
+    .setTitle('Goliath • '+(full?'Full Template Sync':'Smart Sync')+' Preview')
+    .setDescription('**'+guild.name+'**\n'+(full?'Apply explicit template permissions to applicable categories and independent channels.':'Resolve detected effective permission gaps.')+'\nNo changes have been applied.')
+    .addFields(
+      {name:'Proposed changes',value:String(plan.steps.length),inline:true},
+      {name:'Skipped / blocked',value:String(plan.blocked.length),inline:true},
+      {name:'Page',value:(page+1)+' / '+pages,inline:true});
+  const visible=plan.steps.slice(page*pageSize,(page+1)*pageSize);
+  for(const [index,step] of visible.entries()){
+    const permissions=step.grants.map(p=>p.replace(/([a-z])([A-Z])/g,'$1 $2')).join(', ');
+    embed.addFields({name:'Change '+(page*pageSize+index+1),value:'<#'+step.channelId+'>\n'+(step.inheritedChildren.length?'**Inherited channels:** '+step.inheritedChildren.length+'\n':'')+'**Grant:** '+permissions});
+  }
+  if(!visible.length)embed.addFields({name:'Proposed permissions',value:'No editable changes required.'});
+  embed.addFields({name:'Before confirming',value:'Review every page. This grants Goliath access to listed private channels and synced children. Other member and role overwrites are preserved. Synced children are not edited separately.'})
+    .setFooter({text:'Goliath Deployment & Sync • Approval expires after 10 minutes'}).setTimestamp();
+  const components=[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-sync-apply-'+token,guild.id),full?'Confirm Full Template Sync':'Confirm Smart Sync',ButtonStyle.Danger,!plan.steps.length))];
+  const navigation=new ActionRowBuilder();
+  if(pages>1)navigation.addComponents(
+    navigationButton(contextualOwnerId(prefix+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
+    navigationButton(contextualOwnerId(prefix+(page+1),guild.id),'Next',ButtonStyle.Secondary,page+1>=pages));
+  navigation.addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Back',ButtonStyle.Secondary));
+  components.push(navigation);
+  return {content:null,embeds:[embed],components};
 }
 function aiGoliathDevInviteUrl(client,guildId){
   if(mode()!=='DEV'||!validGuildId(client?.user?.id))throw new Error('DEV bot identity unavailable');
