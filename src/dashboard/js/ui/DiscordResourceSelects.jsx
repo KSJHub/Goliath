@@ -16,7 +16,7 @@ function SearchableResourceSelect({ theme, label, value, onChange, resources = [
   const filtered = resources.filter(item => (getResourceLabel(item) + ' ' + (item.groupName || '')).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const choices = clearable ? [{ id: '', name: placeholder }, ...filtered] : filtered;
   const close = (restoreFocus = false) => { setOpen(false); setQuery(''); if (restoreFocus) trigger.current?.focus(); };
-  const choose = item => { if (item) { onChange?.(item.id); close(true); } };
+  const choose = item => { if (item && !item.disabled) { onChange?.(item.id); close(true); } };
   useEffect(() => {
     if (!open) return;
     search.current?.focus();
@@ -48,8 +48,8 @@ function SearchableResourceSelect({ theme, label, value, onChange, resources = [
   }
   const surface = theme.menuBg || theme.dropdownBg || theme.cardBgSolid || theme.cardBg;
   return <div ref={root} style={{ position: 'relative', minWidth: 0 }}>
-    <span id={id + '-label'} style={{ display: 'block', marginBottom: 8, color: theme.textSoft || theme.cardText, fontSize: 13, fontWeight: 600 }}>{label}</span>
-    <button ref={trigger} type="button" disabled={disabled} aria-labelledby={id + '-label ' + id + '-value'} aria-haspopup="listbox" aria-expanded={open} aria-controls={id + '-list'}
+    {label ? <span id={id + '-label'} style={{ display: 'block', marginBottom: 8, color: theme.textSoft || theme.cardText, fontSize: 13, fontWeight: 600 }}>{label}</span> : null}
+    <button ref={trigger} type="button" disabled={disabled} aria-labelledby={label ? id + '-label ' + id + '-value' : id + '-value'} aria-haspopup="listbox" aria-expanded={open} aria-controls={id + '-list'}
       onClick={() => { setOpen(!open); setQuery(''); setActive(Math.max(0, resources.findIndex(item => item.id === value) + (clearable ? 1 : 0))); }}
       onKeyDown={event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setOpen(true); setActive(Math.max(0, resources.findIndex(item => item.id === value) + (clearable ? 1 : 0))); } }}
       style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', width: '100%', boxSizing: 'border-box', textAlign: 'left', border: '1px solid ' + (open ? theme.primary : theme.inputBorder || theme.cardBorder), background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, borderRadius: 12, padding: '13px 16px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1, font: 'inherit' }}>
@@ -61,11 +61,11 @@ function SearchableResourceSelect({ theme, label, value, onChange, resources = [
         <input ref={search} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={keys} role="combobox" aria-label={'Search ' + label} aria-expanded="true" aria-controls={id + '-list'} aria-autocomplete="list" aria-activedescendant={choices.length ? id + '-option-' + Math.min(active, choices.length - 1) : undefined} placeholder="Search by name or category…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: '1px solid ' + (theme.inputBorder || theme.cardBorder), background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, font: 'inherit', fontSize: 14 }} />
       </div>
-      <div ref={options} id={id + '-list'} role="listbox" aria-labelledby={id + '-label'} style={{ maxHeight: placement.height - 66, overflowY: 'auto', overscrollBehavior: 'contain', padding: 6 }}>
+      <div ref={options} id={id + '-list'} role="listbox" aria-label={label || 'Options'} style={{ maxHeight: placement.height - 66, overflowY: 'auto', overscrollBehavior: 'contain', padding: 6 }}>
         {choices.map((item, index) => <React.Fragment key={item.id}>
           {item.groupName && item.groupId !== choices[index - 1]?.groupId ? <div role="presentation" style={{ padding: '12px 10px 6px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.mutedText }}>{item.groupName}</div> : null}
-          <div id={id + '-option-' + index} role="option" aria-selected={(value || '') === item.id} data-active={active === index} onMouseEnter={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}
-            style={{ display: 'flex', gap: 10, justifyContent: 'space-between', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', color: (value || '') === item.id ? theme.primary : theme.cardText, background: active === index ? theme.softBg : (value || '') === item.id ? theme.primarySoft || theme.softBg : 'transparent', fontSize: 14, overflowWrap: 'anywhere' }}>
+          <div id={id + '-option-' + index} role="option" aria-disabled={Boolean(item.disabled)} aria-selected={(value || '') === item.id} data-active={active === index} onMouseEnter={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}
+            style={{ display: 'flex', gap: 10, justifyContent: 'space-between', borderRadius: 8, padding: '10px 12px', cursor: item.disabled ? 'not-allowed' : 'pointer', opacity: item.disabled ? 0.5 : 1, color: (value || '') === item.id ? theme.primary : theme.cardText, background: active === index ? theme.softBg : (value || '') === item.id ? theme.primarySoft || theme.softBg : 'transparent', fontSize: 14, overflowWrap: 'anywhere' }}>
             <span>{getResourceLabel(item)}</span><span aria-hidden="true">{(value || '') === item.id ? '✓' : ''}</span>
           </div>
         </React.Fragment>)}
@@ -105,3 +105,20 @@ export function EmojiSelect(props) {
 }
 
 export default DiscordResourceSelect;
+
+ // Adapter for existing single-value JSX selects, preserving their change handlers.
+export function ThemedSelect({ theme, children, value, onChange, disabled, 'aria-label': label, style }) {
+  const collect = (nodes, groupName) => React.Children.toArray(nodes).flatMap(node => {
+    if (!React.isValidElement(node)) return [];
+    if (node.type === React.Fragment) return collect(node.props.children, groupName);
+    if (node.type === 'optgroup') return collect(node.props.children, node.props.label);
+    if (node.type !== 'option') return [];
+    const name = React.Children.toArray(node.props.children).join('');
+    return [{ id: String(node.props.value ?? name), name, disabled: node.props.disabled, groupName, groupId: groupName }];
+  });
+  const resources = collect(children);
+  return <div style={{ flex: style?.flex, width: style?.width, minWidth: style?.minWidth ?? 0 }}>
+    <SearchableResourceSelect theme={theme} label={label} resources={resources} value={String(value ?? '')} disabled={disabled} clearable={false}
+      onChange={next => onChange?.({ target: { value: next }, currentTarget: { value: next } })} />
+  </div>;
+}
