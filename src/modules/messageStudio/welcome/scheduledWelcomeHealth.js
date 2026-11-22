@@ -41,14 +41,18 @@ async function buildHealth(guild) {
     else if (role.managed || role.position >= me.roles.highest.position) issues.push(`Queue role ${role.name} cannot be managed by Goliath.`);
   }
 
+  const report = await scheduledWelcome.getQueueDiagnostics(guild);
+  const alreadyWelcomedMembers = report.excluded.filter(entry => entry.reasons.includes('Already welcomed')).length;
   const stuckMemberIds = [];
-  for (const memberId of config.completedMemberIds) {
-    const member = guild.members.cache.get(memberId) || await guild.members.fetch(memberId).catch(() => null);
-    if (member?.roles?.cache?.has(config.queueRoleId)) stuckMemberIds.push(memberId);
+  if (config.removeQueueRole && config.queueRoleId) {
+    for (const memberId of config.completedMemberIds) {
+      const member = await guild.members.fetch({ user: memberId, force: true }).catch(() => null);
+      const joinedAt = member?.joinedAt?.toISOString?.();
+      if (joinedAt && config.completedMemberJoins?.[memberId] === joinedAt && member.roles?.cache?.has(config.queueRoleId)) stuckMemberIds.push(memberId);
+    }
   }
   if (stuckMemberIds.length) warnings.push(`${stuckMemberIds.length} welcomed member(s) still have the queue role and need cleanup.`);
 
-  const waitingMembers = await scheduledWelcome.getWaitingMembers(guild);
   const templateBindingHealthy = !config.templateId
     ? !templateBinding
     : Boolean(template && templateBinding && boundTemplate && templateBinding.templateId === config.templateId);
@@ -67,7 +71,8 @@ async function buildHealth(guild) {
     templateName: template?.name || null,
     templateBindingId: templateBinding?.templateId || null,
     templateBindingHealthy,
-    waitingMembers: waitingMembers.length,
+    waitingMembers: report.waiting.length,
+    alreadyWelcomedMembers,
     stuckMemberIds,
     time: config.time,
     timezone: config.timezone,
@@ -90,15 +95,13 @@ async function repair(guild, meta = {}) {
 
   // Never clear role-free delivery checkpoints during repair: they are the
   // only persistent evidence that a scheduled message was already delivered.
-  if (config.queueRoleId) {
-    const remainingCompleted = [];
-    for (const memberId of config.completedMemberIds) {
-      const member = guild.members.cache.get(memberId) || await guild.members.fetch(memberId).catch(() => null);
-      if (!member || !member.roles?.cache?.has(config.queueRoleId)) continue;
-      const result = await queue.removeQueueRole(member, config.queueRoleId, 'Scheduled Welcome repair cleanup');
-      if (!result.removed && !result.skipped) remainingCompleted.push(memberId);
+  if (config.queueRoleId && config.removeQueueRole && !Object.prototype.hasOwnProperty.call(patch, 'queueRoleId')) {
+    for (const memberId of before.stuckMemberIds) {
+      const member = await guild.members.fetch({ user: memberId, force: true }).catch(() => null);
+      const joinedAt = member?.joinedAt?.toISOString?.();
+      if (!joinedAt || config.completedMemberJoins?.[memberId] !== joinedAt) continue;
+      await queue.removeQueueRole(member, config.queueRoleId, 'Scheduled Welcome repair cleanup');
     }
-    patch.completedMemberIds = remainingCompleted;
   }
   config = scheduledWelcome.updateScheduledConfig(guild.id, patch, { ...meta, action: 'scheduled_welcome_repair' });
   scheduledWelcome.syncTemplateBinding(guild.id, config.templateId);
