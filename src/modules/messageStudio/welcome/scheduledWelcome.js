@@ -119,6 +119,7 @@ function syncTemplateBinding(guildId, templateId) {
 }
 
 function updateScheduledConfig(guildId, patch = {}, meta = {}) {
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'time') && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(String(patch.time ?? '').trim())) throw new Error('Scheduled Welcome time must use HH:mm (00:00–23:59).');
   if (patch?.enabled === true && !guildManager.isModuleEnabled(guildId, MODULE)) {
     guildManager.setModuleEnabled(guildId, MODULE, true, { ...meta, action: meta.action || 'scheduled_welcome_enable_parent' });
   }
