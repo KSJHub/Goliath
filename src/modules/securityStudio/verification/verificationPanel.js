@@ -63,12 +63,32 @@ function securityMethodsPage(g,user){
  const c=settings(g.id),s=c.security||{},order=c.flow?.orderedSecurity||[],active=SECURITY.filter(([k])=>s[k]===true);
  const icons={simple:'✅',captcha:'🧩',minigame:'🎮',accountAge:'📅',discordScreening:'📋',botProtection:'🤖',staffApproval:'👮',oneTimeChallenge:'🔑',riskBased:'🛡️',rejoinHistory:'🔄'};
  const bulk=new StringSelectMenuBuilder().setCustomId('admin:verification:securityBulk').setPlaceholder('Choose enabled security methods').setMinValues(0).setMaxValues(SECURITY.length).addOptions(SECURITY.map(([key,label])=>({label,value:key,emoji:icons[key],default:s[key]===true,description:SECURITY_HELP[key].slice(0,100)})));
+ const configure=new StringSelectMenuBuilder().setCustomId('admin:verification:methodSettings').setPlaceholder('Configure an individual security check').addOptions(SECURITY.map(([key,label])=>({label,value:key,emoji:icons[key],description:SECURITY_HELP[key].slice(0,100)})));
  const groupIcons=['🧩','🔒','🛡️'];
  const embed=emb(emojiLabel('SECURITY','Verification · Security Methods'),['Choose which checks are available during verification. Changes save immediately, except disabling every method requires confirmation.'],user).addFields(
  {name:'1 · 📊 Configuration overview',value:'**Enabled:** '+active.length+'/'+SECURITY.length+' · **Disabled:** '+(SECURITY.length-active.length)+'\n**Required flow steps:** '+order.length+'\n🟢 Enabled · 🔴 Disabled',inline:false},
  ...SECURITY_GROUPS.map(([name,keys],index)=>({name:(index+2)+' · '+groupIcons[index]+' '+name,value:keys.map(k=>(s[k]===true?'🟢':'🔴')+' **'+SECURITY.find(([id])=>id===k)[1]+'**\n'+SECURITY_HELP[k]).join('\n\n'),inline:false})),
- {name:'5 · ℹ️ Available controls',value:'**Method selector:** Select every method you want enabled. Unselected methods are disabled on submission.\n**Enable All:** Enable all available methods.\n**Disable All:** Disable every method after confirmation.\n**Flow & AI:** Configure required checks separately. Changing availability does not change the saved flow.',inline:false});
- return {embeds:[embed],components:[row(bulk),row(button('admin:verification:securityEnableAll',emojiLabel('ENABLED','Enable All'),ButtonStyle.Success,active.length===SECURITY.length),button('admin:verification:securityDisableAll',emojiLabel('DISABLED','Disable All'),ButtonStyle.Danger,active.length===0)),row(button('admin:verification:page:flow','🔄 Flow & AI')),finalNav('security')]};
+ {name:'5 · ℹ️ Available controls',value:'**Method selector:** Select every method you want enabled. Unselected methods are disabled on submission.\n**Enable All:** Enable all available methods.\n**Disable All:** Disable every method after confirmation.\n**Configure a check:** Edit individual settings using the second dropdown.\n**Advanced:** Configure required checks separately. Changing availability does not change the saved flow.',inline:false});
+ return {embeds:[embed],components:[row(bulk),row(configure),row(button('admin:verification:securityEnableAll',emojiLabel('ENABLED','Enable All'),ButtonStyle.Success,active.length===SECURITY.length),button('admin:verification:securityDisableAll',emojiLabel('DISABLED','Disable All'),ButtonStyle.Danger,active.length===0)),row(button('admin:verification:page:flow','🔍 Advanced')),finalNav('security')]};
+}
+const METHOD_NUMBERS={
+ captcha:[['captchaConfig','timeLimitSeconds','Time limit (seconds)',15,900],['captchaConfig','maxChallengeAttempts','Maximum attempts',1,20]],
+ minigame:[['minigameConfig','timeLimitSeconds','Time limit (seconds)',1,900],['minigameConfig','rounds','Rounds',1,10]],
+ accountAge:[['','minimumAccountAgeDays','Minimum account age (days)',0,3650]],
+ staffApproval:[['staffApprovalConfig','timeoutMinutes','Approval timeout (minutes)',1,10080]],
+ oneTimeChallenge:[['oneTimeChallengeConfig','timeLimitSeconds','Time limit (seconds)',15,1800],['oneTimeChallengeConfig','maxChallengeAttempts','Maximum attempts',1,20]],
+ rejoinHistory:[['rejoinConfig','lookbackDays','History window (days)',1,3650],['rejoinConfig','elevateAfterFailures','Escalate after failures',1,1000]]
+};
+function methodSettingsPage(g,user,key){
+ const method=SECURITY.find(([k])=>k===key);if(!method)throw new Error('Unknown security method.');
+ const s=settings(g.id).security,fields=METHOD_NUMBERS[key]||[];
+ const embed=emb('🛡️ Verification · '+method[1],[SECURITY_HELP[key]],user).addFields({name:'1 · Current status',value:s[key]?'🟢 Enabled':'🔴 Disabled'});
+ if(fields.length)embed.addFields({name:'2 · Method limits',value:fields.map(([group,k,label])=>'**'+label+':** '+(group?s[group][k]:s[k])).join('\n')});
+ return {embeds:[embed],components:[...(fields.length?[row(button('admin:verification:editMethodLimits:'+key,'⚙️ Edit Limits',ButtonStyle.Primary))]:[]),finalNav('securityMethods')]};
+}
+function methodLimitsModal(guildId,key){
+ const fields=METHOD_NUMBERS[key],s=settings(guildId).security;if(!fields?.length)throw new Error('No editable limits for this method.');
+ return new ModalBuilder().setCustomId('admin:verification:saveMethodLimits:'+key).setTitle('Edit Check Limits').addComponents(...fields.map(([group,k,label,min,max])=>row(new TextInputBuilder().setCustomId(k).setLabel(label+' ['+min+'–'+max+']').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(5).setValue(String(group?s[group][k]:s[k])))));
 }
 function securityPolicyPage(g,user){
  const c=settings(g.id),s=c.security||{},repeat=s.allowReverification!==false,quarantine=s.quarantineOnLimit!==false;
@@ -178,6 +198,13 @@ async function handleVerificationAdminInteraction(i){const id=String(i.customId|
  await respond(i,{embeds:[embed],components:[row(button('admin:verification:applyProtectionPreset:'+key,'✅ Apply Preset',ButtonStyle.Success),button('admin:verification:page:security','✖️ Cancel',ButtonStyle.Secondary)),finalNav('security')]});return true;
  }
  if(id.startsWith('admin:verification:applyProtectionPreset:')){const key=id.split(':').at(-1),methods=PROTECTION_PRESETS[key];if(!Array.isArray(methods))throw new Error('Unknown preset.');const c=settings(i.guildId),security={...c.security};for(const [k] of SECURITY)security[k]=methods.includes(k);const monitoring=key!=='basic';save(i.guildId,{security,flow:{...c.flow,orderedSecurity:methods.map(k=>FLOW_KEYS[k]),failClosed:true,resetActiveSessionOnLeave:true,retainSecurityHistory:true},intelligence:{...c.intelligence,enabled:monitoring,initialScan:true,continuousScan:monitoring,logFlags:true,logErrors:true,logSuccessfulScans:false}},i.user.id);await respond(i,securityPage(i.guild,user));return true;}
+ if(id==='admin:verification:methodSettings'){await respond(i,methodSettingsPage(i.guild,user,i.values?.[0]));return true;}
+ if(id.startsWith('admin:verification:editMethodLimits:')){await i.showModal(methodLimitsModal(i.guildId,id.split(':').pop()));return true;}
+ if(id.startsWith('admin:verification:saveMethodLimits:')){
+ const key=id.split(':').pop(),fields=METHOD_NUMBERS[key],security={...settings(i.guildId).security};if(!fields?.length)throw new Error('Unknown method limits.');
+ for(const [group,k,label,min,max] of fields){const raw=i.fields.getTextInputValue(k).trim(),n=Number(raw);if(!/^\d+$/.test(raw)||!Number.isSafeInteger(n)||n<min||n>max)throw new Error(label+' must be between '+min+' and '+max+'.');if(group)security[group]={...security[group],[k]:n};else security[k]=n;}
+ save(i.guildId,{security},i.user.id);if(i.isFromMessage?.())await respond(i,methodSettingsPage(i.guild,user,key));else await i.reply({content:'✅ Check limits saved.',flags:64});return true;
+ }
  if(id==='admin:verification:editSecurityLimits'){await i.showModal(securityLimitsModal(i.guildId));return true;}
  if(id==='admin:verification:saveSecurityLimits'){
  const c=settings(i.guildId),security={...c.security};
