@@ -110,7 +110,7 @@ function normalPresetPanel(guild,userId,scope){
     row(menu),
     row(button(prefix+'saveAs:'+scope,'Save As',ButtonStyle.Success),button(prefix+'save:'+scope,'Save',ButtonStyle.Primary,!has),button(prefix+'load:'+scope,'Load',ButtonStyle.Primary,!has)),
     row(button(prefix+'rename:'+scope,'Rename',ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,'Duplicate',ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,'Delete',ButtonStyle.Danger,!has)),
-    row(button(prefix+'default:'+scope,'Set as Default',ButtonStyle.Primary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary)),
+    row(button(prefix+'default:'+scope,'Set as Default',ButtonStyle.Primary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary)),
     row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='dm'?'dm':'instant'),'Back'))
   ]};
 }
@@ -352,6 +352,23 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
   if(action==='open')return updatePanel(interaction,panel());
   if(action==='prev'||action==='next'){setSelection(guildId,userId,scope,{presetPage:Math.max(0,(state.presetPage||0)+(action==='next'?1:-1))});return updatePanel(interaction,panel());}
   if(action==='saveAs')return interaction.showModal(normalPresetNameModal(scope,action));
+  if(action==='import'){
+    const field=new TextInputBuilder().setCustomId('json').setLabel('Preset JSON').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000);
+    return interaction.showModal(new ModalBuilder().setCustomId('admin:welcome:normal:importSubmit:'+scope).setTitle('Import Welcome Presets').addComponents(row(field)));
+  }
+  if(action==='importSubmit'&&interaction.isModalSubmit?.()){
+    let data;try{data=JSON.parse(interaction.fields.getTextInputValue('json'));}catch{throw new Error('Invalid JSON. Paste a Welcome preset export.');}
+    if(data?.version!==1||data.scope!==scope||!Array.isArray(data.presets)||data.presets.length>100)throw new Error('Expected a version 1 export for this workspace, with at most 100 presets.');
+    const imported=data.presets.map(v=>{
+      if(typeof v?.name!=='string'||typeof v?.content!=='string'||!v.name.trim()||v.name.trim().length>80||!v.content.trim()||v.content.length>2000)throw new Error('Every preset must have a name (1–80 characters) and message (1–2000 characters).');
+      return {name:v.name.trim(),content:v.content.trim()};
+    });
+    const names=new Set();
+    for(const v of imported){const key=v.name.toLowerCase();if(names.has(key))throw new Error('Duplicate names in import.');names.add(key);}
+    if(data.defaultMessage!==undefined&&(typeof data.defaultMessage!=='string'||!data.defaultMessage.trim()||data.defaultMessage.length>2000))throw new Error('Invalid default message.');
+    mutate(all=>{if(Object.values(all).some(v=>names.has(v.name.toLowerCase())))throw new Error('An imported preset name already exists. Rename it before importing.');for(const v of imported)all[require('node:crypto').randomUUID()]=v;return all;});
+    return interaction.reply({...panel(),ephemeral:true});
+  }
   if(action==='export'){const attachment=new AttachmentBuilder(Buffer.from(JSON.stringify({version:1,scope,presets:Object.values(presets),defaultMessage:config.normalDefaults?.[scope]||normalDefault(scope)},null,2)),{name:'welcome-'+scope+'-presets.json'});return interaction.reply({files:[attachment],ephemeral:true});}
   if(action==='restore')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xfaa61a).setTitle('Restore original normal message?').setDescription('This resets the normal-message default and activates it. Saved presets and Embed Studio templates are retained.')],components:[row(button('admin:welcome:normal:confirmRestore:'+scope,'Confirm Restore',ButtonStyle.Danger),button('admin:welcome:normal:open:'+scope,'Cancel'))]});
   if(action==='confirmRestore'){const content=normalDefault(scope);welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:content},normalMessages:{...s.normalMessages,[scope]:content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:userId,action:'welcome_normal_default_restore'});return updatePanel(interaction,panel());}
