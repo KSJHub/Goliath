@@ -22,7 +22,12 @@ async function getQueuedMembers(guild, config = {}) {
       if (!id) continue;
       // Verify membership against Discord rather than trusting a possibly stale cache
       // after a restart or a missed leave event.
-      const member = await guild.members.fetch({ user: id, force: true }).catch(() => null);
+      const member = await guild.members.fetch({ user: id, force: true }).catch(error => {
+        // Discord Unknown Member is a confirmed departure. All other lookup
+        // failures leave queue eligibility unknown and must prevent completion.
+        if (Number(error?.code) === 10007) return null;
+        throw new Error(`Scheduled Welcome member lookup failed for ${id}: ${error?.message || error}`);
+      });
       if (!member || (entry?.joinedAt && entry.joinedAt !== member.joinedAt?.toISOString?.())) continue;
       if (config.ignoreBots !== false && member.user?.bot) continue;
       members.push(member);
