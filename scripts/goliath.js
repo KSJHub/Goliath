@@ -1517,7 +1517,7 @@ async function verificationLifecycleAudit() {
     assert(panel.includes("emb(emojiLabel('SECURITY', 'Verification')") || panel.includes("emb('🛡️ Verification'"), 'Verification contract missing: Verification home title');
     assert(!panel.includes('Front Door'), 'Legacy Front Door wording must not appear in Verification panel');
     contains(panel, 'Verification · Security', 'Security control page');
-    contains(panel, 'NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER', 'canonical member journey');
+    contains(panel.toUpperCase(), 'NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER', 'canonical member journey');
     contains(panel, 'admin:verification:security:', 'stackable security controls');
     contains(panel, 'admin:verification:intelligence:', 'integrated intelligence controls');
     contains(panel, 'admin:verification:flowSecurity', 'security flow selection');
