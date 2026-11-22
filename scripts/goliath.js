@@ -2721,6 +2721,52 @@ function welcomeEmbedDeliveryAudit() {
     assert(panel.includes('ephemeral:true') || panel.includes('ephemeral: true'), 'Welcome Preview must remain private/ephemeral.');
     
     const scheduled = read('src/modules/messageStudio/welcome/scheduledWelcome.js');
+
+    // Exercise the real delivery implementation with isolated in-memory dependencies.
+    const probe = `
+      const assert = require('node:assert/strict');
+      const fs = require('node:fs');
+      const source = fs.readFileSync('src/modules/messageStudio/welcome/scheduledWelcome.js','utf8');
+      (async () => {
+        for (const roleMode of [false,true]) {
+          const id='123456789012345678', other='123456789012345679', channelId='123456789012345680', roleId='123456789012345681';
+          let state={}, fail=true, sent=[], members=[];
+          const channel={isTextBased:()=>true,send:async p=>{if(p.content && fail){fail=false;throw Error('injected mention failure');}sent.push(p);return {id:'123456789012345682'};}};
+          const guild={id:'audit',client:{},channels:{cache:new Map([[channelId,channel]])},roles:{cache:new Map([[roleId,{}]])}};
+          const member=(id)=>({id,guild,joinedAt:new Date('2026-01-01T00:00:00Z'),user:{bot:false},roles:{cache:new Map([[roleId,{}]])}});
+          members=[member(id)];
+          guild.members={fetch:async ({user})=>members.find(m=>m.id===user),cache:new Map()};
+          const deps={
+            '../../../core/guild/guildManager':{isModuleEnabled:(_g,m)=>m==='welcome',setModuleEnabled:()=>{}},
+            '../../../core/guild/moduleSectionManager':{getModuleSection:()=>state,updateModuleSection:(_g,_m,fn)=>{state=JSON.parse(JSON.stringify(fn(state)));}},
+            '../../utilityStudio/emojis/emojiPayload':{resolveMessagePayload:async (_c,_g,p)=>p},
+            '../embed/embedTemplates':{getBinding:()=>null},
+            './scheduledWelcomeQueue':{cleanId:v=>v||null,getQueuedMembers:async()=>members,removeQueueRole:async()=>({removed:true})},
+            './scheduledWelcomeMessage':{splitIntoBatches:m=>m.length?[m]:[],buildTemplateBatchPayload:async(_g,m)=>({panelPayload:{embeds:[{members:m.map(x=>x.id)}]},mentionsPayload:{content:m.map(x=>x.id).join(' ')}})}
+          };
+          const load=()=>{const mod={exports:{}};new Function('require','module','exports',source)(key=>{if(!(key in deps))throw Error(key);return deps[key];},mod,mod.exports);return mod.exports;};
+          let welcome=load();
+          welcome.updateScheduledConfig(guild.id,{enabled:true,channelId,queueRoleId:roleMode?roleId:null,removeQueueRole:false});
+          if(!roleMode)welcome.enqueueScheduledMember(members[0]);
+          const first=await welcome.runScheduledWelcome(guild,{force:true});
+          assert.equal(first.sendFailed,1);assert.equal(sent.length,1);
+          assert.ok(welcome.getScheduledConfig(guild.id).pendingMembers[id].panelSentAt);
+          welcome=load();
+          members.push(member(other));
+          if(!roleMode)welcome.enqueueScheduledMember(members[1]);
+          const retry=await welcome.runScheduledWelcome(guild,{force:true});
+          assert.equal(retry.welcomed,2);
+          assert.equal(sent.filter(p=>p.embeds).length,2);
+          assert.deepEqual(sent.filter(p=>p.embeds).map(p=>p.embeds[0].members),[[id],[other]]);
+          assert.equal(sent.filter(p=>p.content).length,2);
+          assert.equal((await welcome.runScheduledWelcome(guild,{force:true})).empty,true);
+          assert.equal(sent.length,4);
+        }
+      })().catch(e=>{console.error(e);process.exitCode=1;});
+    `;
+    const recovery = spawnSync(process.execPath, ['-e', probe], { cwd: root, encoding: 'utf8', timeout: 15000 });
+    assert.equal(recovery.status, 0, recovery.stderr || recovery.error?.message || 'Scheduled Welcome recovery failed');
+
     const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
     const route = read('src/server/routes/modules/messageStudio/welcome.js');
     
