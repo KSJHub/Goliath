@@ -52,42 +52,55 @@ async function logEvent(g,section,type,content){
   if(!configured)return false;
   const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
   if(!c?.send)return false;
+  const raw=String(content).trim();
   const styles={
-    join:{emoji:'⏳',title:'Verification Pending',color:0xfefefe,status:'Unverified'},
-    attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress'},
+    join:{emoji:'⏳',title:'Verification Pending',color:0xfefefe,status:'Unverified',access:'Restricted'},
+    attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress',access:'Restricted'},
     success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
     failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
+    roles:{emoji:'🛡️',title:'Verification Roles Confirmed',color:0x2ecc71,status:'Confirmed',access:'Granted'},
     quarantine:{emoji:'🚨',title:'Member Quarantined',color:0xe74c3c,status:'Quarantined',access:'Restricted'},
     error:{emoji:'⚠️',title:'Verification Error',color:0xe74c3c,status:'Action required'},
-    bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6,status:'Recorded'}
+    bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6,status:'Recorded'},
+    staff:{emoji:'🛡️',title:'Verification Staff Decision',color:0x5865f2,status:'Recorded'},
+    intelligence:{emoji:'🧠',title:'Verification Intelligence',color:0x5865f2,status:'Recorded'},
+    raid:{emoji:'🚨',title:'Verification Raid Event',color:0xe74c3c,status:'Recorded'}
   };
-  const style=styles[type]||{emoji:'📋',title:'Verification Event',color:0x5865f2,status:'Recorded'};
-  const raw=String(content).trim();
+  let style=styles[type]||{emoji:'📋',title:'Verification Event',color:0x5865f2,status:'Recorded'};
+  const method=raw.match(/(?:started |incorrect )(captcha|minigame|one time challenge|one_time_challenge|staff approval|staff_approval)/i)?.[1];
+  const methodLabel=method?({'captcha':'CAPTCHA','minigame':'Mini-game','one time challenge':'One-time Challenge','staff approval':'Staff Approval'}[method.toLowerCase().replace(/_/g,' ')]||'Security Check'):null;
+  if(type==='attempt'&&methodLabel)style={...style,title:methodLabel+' Started'};
+  if(type==='attempt'&&raw.includes('completed Discord Membership Screening'))style={...style,title:'Membership Screening Complete'};
+  if(type==='failure'&&raw.includes('Challenge remains active.'))style={...style,title:'Incorrect '+(methodLabel||'Security')+' Answer',status:'Retry available'};
   const mention=raw.match(/<@!?(\d{15,25})>/);
   const userId=mention?.[1]||null;
   const member=userId?(g.members?.cache?.get(userId)||await g.members?.fetch?.(userId).catch(()=>null)):null;
   const username=member?.user?.username||null;
-  const details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
+  let details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
   const isDefaultJoin=type==='join'&&userId&&/^<@!?\d{15,25}> entered Verification\.?$/i.test(details);
+  if(isDefaultJoin)details='Member entered Verification and is awaiting the required security checks.';
   const timestamp=Math.floor(Date.now()/1000);
   const joinedAt=member?.joinedTimestamp||null;
-  const joinedSeconds=Number.isFinite(joinedAt)&&joinedAt>0?Math.floor(joinedAt/1000):timestamp;
-  const logFooter='Goliath Verification •';
+  const joinedSeconds=Number.isFinite(joinedAt)&&joinedAt>0?Math.floor(joinedAt/1000):null;
+  // A visible, identical section divider establishes a shared natural embed width.
+  const sectionRule='━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
   const embed=new EmbedBuilder()
     .setColor(style.color)
     .setAuthor({name:`${g.name||'Server'} • Security`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
     .setTitle(`${style.emoji} ${style.title}`)
+    .setDescription(sectionRule)
     .addFields(
-      ...(userId?[{name:'👤 Member',value:`<@${userId}>`,inline:false},{name:'🏷️ Discord Username',value:username?`\`${username.replace(/`/g,'') .slice(0,80)}\``:'Unavailable',inline:true},{name:'🆔 User ID',value:`\`${userId}\``,inline:true}]:[]),
+      {name:'👤 Member',value:userId?`<@${userId}>`:'Not applicable',inline:false},
+      {name:'🏷️ Discord Username',value:username?`\`${username.replace(/`/g,'').slice(0,32)}\``:'Unavailable',inline:true},
+      {name:'🆔 User ID',value:userId?`\`${userId}\``:'Not applicable',inline:true},
       {name:'🔐 Status',value:style.status,inline:true},
-      ...(style.access?[{name:'🛡️ Access',value:style.access,inline:true}]:[]),
-      {name:'🕒 Event Time',value:`<t:${timestamp}:F> • <t:${timestamp}:R>`,inline:false},
-      ...(type==='join'?[{name:'📅 Joined Server',value:`<t:${joinedSeconds}:F>`,inline:false}]:[])
+      {name:'🛡️ Access',value:style.access||'Not applicable',inline:true},
+      {name:'📅 Joined Server',value:joinedSeconds?`<t:${joinedSeconds}:d>`:'Unavailable',inline:true},
+      {name:'🕒 Event Time',value:`<t:${timestamp}:t> • <t:${timestamp}:R>`,inline:true},
+      {name:'📋 Event Details',value:(details||'No additional details.').slice(0,1024),inline:false}
     )
-    .setFooter({text:logFooter})
+    .setFooter({text:'Goliath Verification'})
     .setTimestamp();
-  if(type==='join'&&isDefaultJoin)embed.setDescription('This member has entered the server and is awaiting verification. Access remains limited until the required security checks are complete.');
-  else if(details)embed.setDescription(details.slice(0,4096));
   try{
     await c.send({embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}});
     return true;
