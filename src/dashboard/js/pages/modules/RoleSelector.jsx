@@ -157,7 +157,8 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <strong>{channels.find(c=>String(c.id)===d.channelId)?.name || d.channelId || 'No channel'} · {d.messageId ? d.status : 'Unpublished'}</strong>
         <p>{d.groupIds.map(id=>groups.find(g=>g.id===id)?.name || id).join(', ')}</p>
         <button style={btn(theme)} onClick={()=>setPanelDraft({...d,optionIdsByGroup:{...d.optionIdsByGroup}})}>Edit</button>
-        <button disabled={busy} style={btn(theme,'primary')} onClick={()=>run(()=>api.request(`${baseApi(guildId)}/deployments/${encodeURIComponent(d.id)}/publish`,{method:'POST'}),'Panel published.')}>Publish / Update</button>
+        <button disabled={busy} style={btn(theme,'primary')} onClick={()=>run(()=>api.request(`${baseApi(guildId)}/deployments/${encodeURIComponent(d.id)}/publish`,{method:'POST'}),'Panel published.')}>{d.status==='retired'?'Reactivate':'Publish / Update'}</button>
+        <button disabled={busy || d.status==='retired'} style={btn(theme)} onClick={async()=>{if(await goliathDialog.confirm('Retire this panel? Existing member roles are retained.',{title:'Retire panel?'})) await run(()=>api.request(`${baseApi(guildId)}/deployments/${encodeURIComponent(d.id)}/retire`,{method:'POST'}),'Panel retired.');}}>Retire</button>
         <button disabled={busy} style={btn(theme,'danger')} onClick={async()=>{if(await goliathDialog.confirm('Delete this panel? Existing member roles are retained.',{title:'Delete panel?',danger:true})) {const result=await run(()=>api.request(`${baseApi(guildId)}/deployments/${encodeURIComponent(d.id)}`,{method:'DELETE'}),'Panel deleted.');if(result && panelDraft.id===d.id)setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});}}}>Delete</button>
       </div>)}
       <h3>{panelDraft.id ? 'Edit panel' : 'Create panel'}</h3>
