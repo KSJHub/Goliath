@@ -95,6 +95,15 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const acceptance = health.acceptance || { ready: false, checks: [], failed: [] };
   const selectedUsage = usage.groups?.find((group) => group.groupId === selectedGroupId);
 
+  function togglePreview(key) {
+    setPreviewChoices(old => {
+      const next = editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old, key];
+      const min = Math.max(0, Number(editDraft.minSelections) || 0);
+      const max = editDraft.selectionMode === 'single' ? 1 : Math.max(1, Number(editDraft.maxSelections) || 25);
+      if (next.length > max || (next.length < min && next.length < old.length) || (!next.length && !editDraft.allowRemove)) return old;
+      return next;
+    });
+  }
   function chooseGroup(group) { if (!group) return; setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); setPreviewChoices([]); }
   async function saveSelectedGroup() {
     if (!selectedGroup || selectedGroup.id === 'colours') return;
@@ -195,11 +204,12 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
           <p>{editDraft.appearance?.description || editDraft.description}</p>
           {editDraft.appearance?.thumbnail && /^https?:\/\//i.test(editDraft.appearance.thumbnail) && <img alt="Preview thumbnail" src={editDraft.appearance.thumbnail} style={{width:72,height:72,objectFit:'contain'}} />}
           {editDraft.appearance?.image && /^https?:\/\//i.test(editDraft.appearance.image) && <img alt="Preview banner" src={editDraft.appearance.image} style={{maxWidth:'100%',maxHeight:240,objectFit:'contain'}} />}
-          {editDraft.controlMode !== 'buttons' ? <ThemedSelect theme={theme} value="" onChange={event => { const key = event.target.value; if (key) setPreviewChoices(old => editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old,key]); }}><option value="">Choose an option</option>{parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => <option key={o.id || String(index)} value={o.id || String(index)}>{previewChoices.includes(o.id || String(index)) ? E.SUCCESS + ' ' : ''}{o.label}</option>)}</ThemedSelect> : parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => {
+          {editDraft.controlMode !== 'buttons' ? <ThemedSelect theme={theme} value="" onChange={event => { const key = event.target.value; if (key) togglePreview(key); }}><option value="">Choose an option</option>{parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => <option key={o.id || String(index)} value={o.id || String(index)}>{previewChoices.includes(o.id || String(index)) ? E.SUCCESS + ' ' : ''}{o.label}</option>)}</ThemedSelect> : parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => {
             const key = o.id || String(index);
-            return <button type="button" key={key} style={btn(theme,previewChoices.includes(key) ? 'primary' : 'default')} onClick={() => setPreviewChoices(old => editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old,key])}>{o.emoji} {o.label}</button>;
+            return <button type="button" key={key} style={btn(theme,previewChoices.includes(key) ? 'primary' : 'default')} onClick={() => togglePreview(key)}>{o.emoji} {o.label}</button>;
           })}
-          {editDraft.allowRemove && <button type="button" style={btn(theme)} onClick={() => setPreviewChoices([])}>Clear selection</button>}
+          {editDraft.allowRemove && !Number(editDraft.minSelections) && <button type="button" style={btn(theme)} onClick={() => setPreviewChoices([])}>Clear selection</button>}
+          <p>Selected: {previewChoices.length} · Minimum: {editDraft.minSelections || 0} · Maximum: {editDraft.selectionMode === 'single' ? 1 : editDraft.maxSelections || 25}</p>
           <p>{editDraft.appearance?.footer}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button disabled={busy || !editDraft.name.trim()} onClick={saveSelectedGroup} style={btn(theme, 'primary')}>Save Group</button><button disabled={busy} onClick={deleteSelectedGroup} style={btn(theme, 'danger')}>Delete Group</button></div>
