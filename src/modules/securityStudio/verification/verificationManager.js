@@ -78,7 +78,7 @@ async function logEvent(g,section,type,content){
   const username=member?.user?.username||null;
   let details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
   const isDefaultJoin=type==='join'&&userId&&/^<@!?\d{15,25}> entered Verification\.?$/i.test(details);
-  if(isDefaultJoin)details='Member entered Verification and is awaiting the required security checks.';
+  if(isDefaultJoin)details='Member is awaiting the required Goliath security checks.';
   const timestamp=Math.floor(Date.now()/1000);
   const joinedAt=member?.joinedTimestamp||null;
   const joinedSeconds=Number.isFinite(joinedAt)&&joinedAt>0?Math.floor(joinedAt/1000):null;
@@ -118,7 +118,14 @@ async function recordFailure(m,section,step,reason){const a=verificationStore.re
 async function assignPendingRoles(m,reason='Goliath pending verification role assigned'){const section=getEffectiveVerificationSection(m.guild.id);if(!section.enabled)return {assigned:[],failed:[],skipped:true};const markFailure=async message=>{history(m.guild.id,m.id,'role_error',{stage:'pending',reason:message});setSession(m.guild.id,m.id,{state:'review',activeSecurityMethod:null,activeChallenge:null});await logEvent(m.guild,section,'error',`⚠️ Verification Pending-role assignment failed for ${m.user?.tag||m.id}: ${message}`);return {assigned:[],failed:[{reason:message}],review:true,skipped:false};};const ids=roleIds(section.settings,'pending');const roles=await fetchRoles(m.guild,ids);if(ids.length!==roles.length)return markFailure('Configured Pending roles are missing');if(!roles.length)return {assigned:[],failed:[],skipped:true};try{const t=await applyRoleTransition(m,roles,[],reason);if(!roles.every(role=>t.member.roles.cache.has(role.id)))return markFailure('Pending role assignment could not be confirmed');return {assigned:t.added,failed:[],skipped:false};}catch(e){return markFailure(String(e?.message||e));}}
 async function assignArrivalRoles(m){return assignPendingRoles(m,'Goliath pending verification role assigned');}
 async function handleMemberJoin(m){const section=getEffectiveVerificationSection(m.guild.id);if(!section.enabled)return {handled:false,assigned:[]};const s=section.settings;if(m.user?.bot){const roles=await fetchRoles(m.guild,roleIds(s,'bot'));if(s.botPolicy?.allowConfiguredBots===false){history(m.guild.id,m.id,'bot_role_assignment_skipped',{reason:'Configured bot roles disabled by policy'});await logEvent(m.guild,section,'bot',`🤖 ${m.user.tag||m.id} joined; Verification bot-role assignment was skipped by policy.`);return {handled:true,bot:true,skipped:true,assigned:[]};}try{const t=roles.length?await applyRoleTransition(m,roles,[],'Goliath approved bot role'): {added:[]};history(m.guild.id,m.id,'bot_joined',{assigned:t.added.map(r=>r.id)});return {handled:true,bot:true,assigned:t.added};}catch(e){history(m.guild.id,m.id,'bot_role_error',{reason:e.message});return {handled:true,bot:true,assigned:[],failed:[{reason:e.message}]};}}
-const bypass=isBypass(m,s),required=bypass?[]:enabledSecurity(s);const verifiedIds=roleIds(s,'verified');const alreadyVerified=bypass;verificationStore.resetActiveSession(m.guild.id,m.id);setSession(m.guild.id,m.id,{state:alreadyVerified?'verified':'pending',requiredSecurity:required,completedSecurity:[],startedAt:null,verifiedAt:alreadyVerified?now():null,flags:[],activeChallenge:null,activeSecurityMethod:null,staffApprovalContinuationPending:false,staffActionProcessingPending:false,raidPressure:false,securityConfigRevision:section.configRevision});history(m.guild.id,m.id,'member_joined',{bypass,alreadyVerified,requiredSecurity:required});await logEvent(m.guild,section,'join',`🚪 ${m} entered Verification${bypass?' using an authorised bypass':''}.`);await reconcileDiscordScreening(m,section,'member_join');if(bypass)return {handled:true,bypass:true,alreadyVerified,assigned:[]};return assignPendingRoles(m,'Goliath pending verification role assigned on join');}
+const bypass=isBypass(m,s),required=bypass?[]:enabledSecurity(s);const verifiedIds=roleIds(s,'verified');const alreadyVerified=bypass;verificationStore.resetActiveSession(m.guild.id,m.id);setSession(m.guild.id,m.id,{state:alreadyVerified?'verified':'pending',pendingLogSent:false,requiredSecurity:required,completedSecurity:[],startedAt:null,verifiedAt:alreadyVerified?now():null,flags:[],activeChallenge:null,activeSecurityMethod:null,staffApprovalContinuationPending:false,staffActionProcessingPending:false,raidPressure:false,securityConfigRevision:section.configRevision});history(m.guild.id,m.id,'member_joined',{bypass,alreadyVerified,requiredSecurity:required});if(!bypass){await reconcileDiscordScreening(m,section,'member_join');if(!(hasDiscordScreening(m.guild)&&(s.security?.discordScreening===true||s.flow?.discordScreeningGate===true))&&m.pending!==true)await logVerificationPending(m,section);}if(bypass)return {handled:true,bypass:true,alreadyVerified,assigned:[]};return assignPendingRoles(m,'Goliath pending verification role assigned on join');}
+async function logVerificationPending(m,section){
+  const session=verificationStore.getSession(m.guild.id,m.id);
+  if(!session||session.state==='verified'||session.pendingLogSent===true)return;
+  setSession(m.guild.id,m.id,{pendingLogSent:true});
+  const delivered=await logEvent(m.guild,section,'join',`🚪 ${m} entered Verification.`);
+  if(!delivered)setSession(m.guild.id,m.id,{pendingLogSent:false});
+}
 async function reconcileDiscordScreening(m,section,source,observedTransition=false){
   if(!m?.guild?.id||m.user?.bot||!section.enabled||m.pending!==false)return {handled:false};
   if(!observedTransition&&!(hasDiscordScreening(m.guild)&&(section.settings.security?.discordScreening===true||section.settings.flow?.discordScreeningGate===true)))return {handled:false};
@@ -129,6 +136,7 @@ async function reconcileDiscordScreening(m,section,source,observedTransition=fal
   history(gid,uid,'discord_screening_completed',{source});
   verificationStore.incrementAnalytics(gid,{screeningCompleted:1,lastScreeningCompletedAt:now()});
   await logEvent(m.guild,section,'attempt',renderMessage(section.messages.screeningCompletedLog,m));
+  await logVerificationPending(m,section);
   return {handled:true,screeningCompleted:true};
 }
 async function handleMemberUpdate(oldM,newM){if(!newM?.guild?.id||newM.user?.bot||!(oldM?.pending===true&&newM.pending===false))return {handled:false};return reconcileDiscordScreening(newM,getEffectiveVerificationSection(newM.guild.id),'member_update',true);}
