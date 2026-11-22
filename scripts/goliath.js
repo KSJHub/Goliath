@@ -1510,7 +1510,7 @@ async function verificationLifecycleAudit() {
     contains(manager, 'quarantine', 'quarantine health validation');
     
     // The canonical Verification admin surface must be the rehauled module.
-    for (const section of ['roles', 'security', 'intelligence', 'flow', 'messages', 'logs', 'settings']) {
+    for (const section of ['roles', 'security', 'flow', 'messages', 'logs', 'settings']) {
       contains(panel, `'${section}'`, `admin section ${section}`);
       contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
     }
@@ -1520,6 +1520,11 @@ async function verificationLifecycleAudit() {
     contains(panel.toUpperCase(), 'NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER', 'canonical member journey');
     contains(panel, 'admin:verification:security:', 'stackable security controls');
     contains(panel, 'admin:verification:intelligence:', 'integrated intelligence controls');
+    contains(panel, 'Verification · Flow & Intelligence', 'combined workspace');
+    contains(panel, 'admin:verification:intelligenceSelect', 'combined intelligence configuration selector');
+    contains(panel, 'admin:verification:flowPolicySelect', 'combined session policy selector');
+    contains(panel, "function intelligencePage(g,user){return flowPage(g,user);}", 'legacy intelligence route forwards to combined workspace');
+    assert(!panel.includes("button('admin:verification:page:intelligence'"), 'Separate Intelligence navigation must not return.');
     contains(panel, 'admin:verification:flowSecurity', 'security flow selection');
     contains(panel, 'Verification · Logs', 'Verification logging page');
     
