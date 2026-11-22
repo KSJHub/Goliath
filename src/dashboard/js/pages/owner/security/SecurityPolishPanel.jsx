@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 function arr(value) {
@@ -190,7 +191,7 @@ export default function SecurityPolishPanel({ theme, security = {}, guilds = [],
         <div style={card(theme)}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <strong>Guild Risk</strong>
-            <select value={filter} onChange={(event) => setFilter(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 10, padding: '7px 9px', fontWeight: 850 }}>
+            <ThemedSelect theme={theme} value={filter} onChange={(event) => setFilter(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 10, padding: '7px 9px', fontWeight: 850 }}>
               <option value="all">All</option>
               <option value="risky">Risky</option>
               <option value="critical">Critical</option>
@@ -198,7 +199,7 @@ export default function SecurityPolishPanel({ theme, security = {}, guilds = [],
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
-            </select>
+            </ThemedSelect>
           </div>
           {data.filteredGuilds.length ? data.filteredGuilds.slice(0, 12).map((guild) => <GuildRiskRow key={guild.guildId || guild.id || guild.guildName} theme={theme} guild={guild} />) : <span style={{ color: theme.mutedText }}>No guilds match this risk filter.</span>}
         </div>
