@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -315,20 +316,20 @@ export default function BillingAdmin({ theme }) {
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
               <label style={{ display: 'grid', gap: 6, color: theme.mutedText, fontWeight: 900 }}>Plan
-                <select value={grantForm.plan} onChange={(event) => setGrantForm((current) => ({ ...current, plan: event.target.value, duration: event.target.value === 'lifetime' ? 'lifetime' : current.duration }))} style={inputStyle(theme)}>
+                <ThemedSelect theme={theme} value={grantForm.plan} onChange={(event) => setGrantForm((current) => ({ ...current, plan: event.target.value, duration: event.target.value === 'lifetime' ? 'lifetime' : current.duration }))} style={inputStyle(theme)}>
                   <option value="free">Basic</option>
                   <option value="plus">Plus</option>
                   <option value="pro">Pro</option>
                   <option value="lifetime">Lifetime</option>
-                </select>
+                </ThemedSelect>
               </label>
               <label style={{ display: 'grid', gap: 6, color: theme.mutedText, fontWeight: 900 }}>Duration
-                <select value={grantForm.duration} disabled={grantForm.plan === 'lifetime' || grantForm.plan === 'free'} onChange={(event) => setGrantForm((current) => ({ ...current, duration: event.target.value }))} style={inputStyle(theme)}>
+                <ThemedSelect theme={theme} value={grantForm.duration} disabled={grantForm.plan === 'lifetime' || grantForm.plan === 'free'} onChange={(event) => setGrantForm((current) => ({ ...current, duration: event.target.value }))} style={inputStyle(theme)}>
                   <option value="30">30 Days</option>
                   <option value="90">90 Days</option>
                   <option value="180">180 Days</option>
                   <option value="lifetime">Lifetime</option>
-                </select>
+                </ThemedSelect>
               </label>
             </div>
             <button type="submit" disabled={busy || !grantForm.guildId.trim()} style={{ border: '1px solid rgba(250,204,21,0.42)', background: busy ? 'rgba(250,204,21,0.08)' : 'rgba(250,204,21,0.15)', color: '#fde68a', borderRadius: 12, padding: '12px 14px', fontWeight: 950, cursor: busy ? 'not-allowed' : 'pointer' }}>
@@ -342,24 +343,24 @@ export default function BillingAdmin({ theme }) {
           <form onSubmit={generateCodes} style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,130px),1fr))', gap: 12 }}>
               <label style={{ display: 'grid', gap: 6, color: theme.mutedText, fontWeight: 900 }}>Plan
-                <select value={form.plan} onChange={(event) => setForm((current) => ({ ...current, plan: event.target.value, duration: event.target.value === 'lifetime' ? 'lifetime' : current.duration }))} style={inputStyle(theme)}>
+                <ThemedSelect theme={theme} value={form.plan} onChange={(event) => setForm((current) => ({ ...current, plan: event.target.value, duration: event.target.value === 'lifetime' ? 'lifetime' : current.duration }))} style={inputStyle(theme)}>
                   <option value="plus">Plus</option>
                   <option value="pro">Pro</option>
                   <option value="lifetime">Lifetime</option>
-                </select>
+                </ThemedSelect>
               </label>
               <label style={{ display: 'grid', gap: 6, color: theme.mutedText, fontWeight: 900 }}>Duration
-                <select value={form.duration} disabled={form.plan === 'lifetime'} onChange={(event) => setForm((current) => ({ ...current, duration: event.target.value }))} style={inputStyle(theme)}>
+                <ThemedSelect theme={theme} value={form.duration} disabled={form.plan === 'lifetime'} onChange={(event) => setForm((current) => ({ ...current, duration: event.target.value }))} style={inputStyle(theme)}>
                   <option value="1m">1 Month</option>
                   <option value="3m">3 Months</option>
                   <option value="6m">6 Months</option>
                   <option value="lifetime">Lifetime</option>
-                </select>
+                </ThemedSelect>
               </label>
               <label style={{ display: 'grid', gap: 6, color: theme.mutedText, fontWeight: 900 }}>Quantity
-                <select value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: Number(event.target.value) }))} style={inputStyle(theme)}>
+                <ThemedSelect theme={theme} value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: Number(event.target.value) }))} style={inputStyle(theme)}>
                   {[1, 5, 10, 25, 100].map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
+                </ThemedSelect>
               </label>
             </div>
             <button type="submit" disabled={busy} style={{ border: '1px solid rgba(34,197,94,0.42)', background: busy ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.18)', color: '#bbf7d0', borderRadius: 12, padding: '12px 14px', fontWeight: 950, cursor: busy ? 'not-allowed' : 'pointer' }}>
