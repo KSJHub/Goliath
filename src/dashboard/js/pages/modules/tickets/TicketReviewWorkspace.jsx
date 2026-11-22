@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 function asObject(value) {
@@ -206,22 +207,22 @@ export default function TicketReviewWorkspace({ theme, ticket, acting = false, r
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 12 }}>
         <div style={{ display: 'grid', gap: 10, padding: 13, border: `1px solid ${theme.cardBorder}`, borderRadius: 14, background: 'rgba(15,23,42,0.24)' }}>
           <strong>Assign Ticket</strong>
-          <select value={assignedUserId} onChange={(event) => setAssignedUserId(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 11px', fontWeight: 850 }}>
+          <ThemedSelect theme={theme} value={assignedUserId} onChange={(event) => setAssignedUserId(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 11px', fontWeight: 850 }}>
             <option value="">Select staff role/member ID</option>
             {roles.map((role) => <option key={role.id} value={role.id}>{role.name || role.id}</option>)}
-          </select>
+          </ThemedSelect>
           <button type="button" disabled={acting || !assignedUserId || !onAssign} onClick={assignTicket} style={buttonStyle(theme, 'primary', acting || !assignedUserId || !onAssign)}>Assign</button>
         </div>
 
         <div style={{ display: 'grid', gap: 10, padding: 13, border: `1px solid ${theme.cardBorder}`, borderRadius: 14, background: 'rgba(15,23,42,0.24)' }}>
           <strong>Update Workflow State</strong>
-          <select value={status} onChange={(event) => setStatus(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 11px', fontWeight: 850 }}>
+          <ThemedSelect theme={theme} value={status} onChange={(event) => setStatus(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 11px', fontWeight: 850 }}>
             <option value="open">Open</option>
             <option value="claimed">Claimed</option>
             <option value="waiting_user">Waiting User</option>
             <option value="in_review">In Review</option>
             <option value="closed">Closed</option>
-          </select>
+          </ThemedSelect>
           <button type="button" disabled={acting || !onStatus} onClick={updateStatus} style={buttonStyle(theme, 'soft', acting || !onStatus)}>Update Status</button>
         </div>
       </div>
