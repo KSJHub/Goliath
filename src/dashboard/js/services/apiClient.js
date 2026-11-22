@@ -141,7 +141,7 @@ export const api = {
   saveVerificationTemplate: (guildId, payload) => request(`/api/verification/${guildId}/template`, { method: 'POST', body: JSON.stringify(payload) }),
   deployVerificationPanel: (guildId, payload = {}) => request(`/api/verification/${guildId}/deploy`, {
     method: 'POST',
-    body: JSON.stringify({ channelId: payload.channelId, panelId: payload.panelId, template: payload.template || payload }),
+    body: JSON.stringify({ channelId: payload.channelId, panelId: payload.panelId, template: payload.template || payload, expectedConfigRevision: payload.expectedConfigRevision }),
   }),
   refreshVerificationPanel: (guildId, panelId, payload = {}) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}/redeploy`, { method: 'POST', body: JSON.stringify(payload) }),
   deleteVerificationPanel: (guildId, panelId, expectedConfigRevision) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}`, { method: 'DELETE', body: JSON.stringify({ expectedConfigRevision }) }),
