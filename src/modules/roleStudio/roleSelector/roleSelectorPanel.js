@@ -756,6 +756,26 @@ function splitTail(id, prefix) {
   return value == null ? [] : value.split(':');
 }
 
+function buildCreationGuide(guildId, group) {
+  const count = group.options.filter(o => o.enabled).length;
+  const id = group.id;
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ADD', 'Selector Creation Guide')).setDescription([
+      '**1. Configuration** — ' + group.name + ' · ' + group.selectionMode,
+      '**2. Options** — ' + count + ' enabled options. Add existing roles or configure options.',
+      '**3. Appearance** — Configure the embed and control style.',
+      '**4. Preview** — Test without assigning roles.',
+      '**5. Publishing** — Choose a deployment and its selector groups.'
+    ].join('\n\n'))],
+    components: [
+      row(button(customId('admin:roleSelector:addRoles', id), emojiLabel('ADD', 'Add Roles'), ButtonStyle.Primary), button(customId('admin:roleSelector:groupOpen', id), emojiLabel('EDIT', 'Configure Options'))),
+      row(button(customId('admin:roleSelector:design', id), emojiLabel('DESIGN', 'Appearance')), button(customId('admin:roleSelector:controlMode', id), group.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')),
+      row(button(customId('admin:roleSelector:preview', id), emojiLabel('PREVIEW', 'Preview'), ButtonStyle.Primary, !count), button('admin:roleSelector:deployment', 'Publishing', ButtonStyle.Success, !count)),
+      nav('admin:roleSelector:groups')
+    ]
+  };
+}
+
 function buildInteractivePreview(i, group) {
   const preview = state(i).preview;
   const selected = new Set(preview.selected);
@@ -802,7 +822,12 @@ async function handleRoleSelectorInteraction(i) {
         name: i.fields.getTextInputValue('name'), emoji: i.fields.getTextInputValue('emoji'), description: i.fields.getTextInputValue('description'), selectionMode: mode, allowRemove: true, options: [],
       }, { ...actor, action: 'role_selector_create_group' });
       await syncPanels(i.guild, group.id);
-      return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
+      return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildCreationGuide(i.guildId, group), flags: 64 });
+    }
+    if (id.startsWith('admin:roleSelector:guide:')) {
+      const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:guide'));
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      return respond(i, buildCreationGuide(i.guildId, group));
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
     if (id.startsWith('admin:roleSelector:dependencies:')) {
