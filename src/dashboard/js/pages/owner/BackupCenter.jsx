@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 import useOwnerBackups from '../../hooks/useOwnerBackups.js';
@@ -84,7 +85,7 @@ export default function BackupCenter({ theme }) {
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
+          <ThemedSelect theme={theme}
             value={environmentFilter}
             onChange={(event) => changeEnvironment(event.target.value)}
             style={inputStyle(theme)}
@@ -92,7 +93,7 @@ export default function BackupCenter({ theme }) {
             {ENVIRONMENTS.map((environment) => (
               <option key={environment.value} value={environment.value}>{environment.label}</option>
             ))}
-          </select>
+          </ThemedSelect>
 
           <button type="button" onClick={() => refresh()} disabled={loading} style={buttonStyle(loading)}>
             {loading ? 'Refreshing...' : 'Refresh Status'}
@@ -143,7 +144,7 @@ export default function BackupCenter({ theme }) {
           <form onSubmit={handleManualBackup} style={{ display: 'grid', gap: 10 }}>
             <label style={labelStyle(theme)}>
               Environment
-              <select
+              <ThemedSelect theme={theme}
                 value={manualForm.environment}
                 onChange={(event) => setManualForm((current) => ({ ...current, environment: event.target.value }))}
                 style={inputStyle(theme)}
@@ -151,7 +152,7 @@ export default function BackupCenter({ theme }) {
                 <option value="DEV">DEV</option>
                 <option value="BETA">BETA</option>
                 <option value="PRODUCTION">PRODUCTION</option>
-              </select>
+              </ThemedSelect>
             </label>
 
             <label style={labelStyle(theme)}>
