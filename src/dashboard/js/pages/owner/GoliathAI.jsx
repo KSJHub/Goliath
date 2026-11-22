@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/apiClient.js';
 
@@ -823,10 +824,10 @@ export default function GoliathAI({ theme }) {
         <h3>Deploy Goliath roles</h3>
         <p>Choose separate operational and display roles. Existing role permissions will not be changed. Owner intervention may be needed for hierarchy.</p>
         {['operational','display'].map(kind=><label key={kind} style={{display:'block',margin:'8px 0'}}>{kind==='operational'?'Operational role':'Visible display role'}
-          <select disabled={deploymentBusy} value={roleSelection[kind]} onChange={event=>{setRoleSelection(previous=>({...previous,[kind]:event.target.value}));setRoleApproval(null);}}>
+          <ThemedSelect theme={theme} disabled={deploymentBusy} value={roleSelection[kind]} onChange={event=>{setRoleSelection(previous=>({...previous,[kind]:event.target.value}));setRoleApproval(null);}}>
             <option value="">Select role</option><option value="create">Create recommended role</option>
             {deployment.candidates.filter(role=>role.hoist===(kind==='display')).map(role=><option key={role.id} value={role.id}>{role.name}</option>)}
-          </select>
+          </ThemedSelect>
         </label>)}
         <button type="button" disabled={deploymentBusy||deployment.recoveryRequired||!roleSelection.operational||!roleSelection.display||(roleSelection.operational!=='create'&&roleSelection.operational===roleSelection.display)} onClick={()=>deployRoles()}>Preview Role Deployment</button>
         {roleApproval&&roleApproval.guildId===deployment.guildId&&<div>
@@ -847,15 +848,15 @@ export default function GoliathAI({ theme }) {
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Server source filter" value={guildFilter} onChange={event => setGuildFilter(event.target.value)}
+        <ThemedSelect theme={theme} aria-label="Server source filter" value={guildFilter} onChange={event => setGuildFilter(event.target.value)}
           style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827' }}>
           <option value="all">All available servers</option>
           <option value="connected">Goliath-connected servers</option>
           <option value="mine">Servers I own or manage</option>
-        </select>
-        <select aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setRoleSelection({operational:'',display:''}); setRoleApproval(null); setRoleResult(null); setSyncApproval(null); setSyncAcknowledged(false); setSyncResult(null); setDeploymentError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        </ThemedSelect>
+        <ThemedSelect theme={theme} aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setRoleSelection({operational:'',display:''}); setRoleApproval(null); setRoleResult(null); setSyncApproval(null); setSyncAcknowledged(false); setSyncResult(null); setDeploymentError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {availableOptions.length ? availableOptions.map((guild) => <option key={guild.value} value={guild.value}>{guild.label}</option>) : <option value="">No servers available in this filter</option>}
-        </select>
+        </ThemedSelect>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
         <button type="button" onClick={runAudit} disabled={!selectedConnected?.auditAvailable || auditing} style={{ border: 0, borderRadius: 10, padding: '10px 16px', background: '#2563eb', color: 'white' }}>{auditing ? 'Scanning…' : 'Scan permissions'}</button>
       </div>
@@ -1121,16 +1122,16 @@ export default function GoliathAI({ theme }) {
           {categoriesForEditor.length > 0 && <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
             <strong>Add a channel to an existing blueprint category</strong>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-              <select aria-label="Blueprint category" value={targetCategoryIndex} onChange={event => setTargetCategoryIndex(event.target.value)}
+              <ThemedSelect theme={theme} aria-label="Blueprint category" value={targetCategoryIndex} onChange={event => setTargetCategoryIndex(event.target.value)}
                 style={{ flex: '1 1 160px', minWidth: 0, color: 'white', background: '#111827', borderRadius: 8, padding: 9 }}>
                 {categoriesForEditor.map((category, index) => <option value={String(index)} key={index}>{category.name}</option>)}
-              </select>
+              </ThemedSelect>
               <input aria-label="New channel name" value={newSingleChannel} maxLength={100} onChange={event => setNewSingleChannel(event.target.value)}
                 placeholder="Channel name" style={{ flex: '1 1 160px', minWidth: 0, color: 'white', background: '#111827', borderRadius: 8, padding: 9 }}/>
-              <select aria-label="New channel type" value={newSingleType} onChange={event => setNewSingleType(event.target.value)}
+              <ThemedSelect theme={theme} aria-label="New channel type" value={newSingleType} onChange={event => setNewSingleType(event.target.value)}
                 style={{ background: '#111827', color: 'white', borderRadius: 8, padding: 9 }}>
                 {['text', 'voice', 'forum', 'announcement', 'stage'].map(type => <option key={type} value={type}>{type}</option>)}
-              </select>
+              </ThemedSelect>
             </div>
             <button type="button" onClick={addChannelToExistingCategory} disabled={!newSingleChannel.trim()}
               style={{ marginTop: 10, background: '#334155', color: 'white', padding: '10px 14px', border: 0, borderRadius: 10 }}>Add channel to blueprint</button>
