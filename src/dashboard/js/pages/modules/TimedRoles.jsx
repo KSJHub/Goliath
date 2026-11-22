@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -220,10 +221,10 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
             <input type="number" min="5" max="1440" value={settings.scanIntervalMinutes || 60} onChange={(event) => setConfig((current) => ({ ...current, settings: { ...(current?.settings || {}), scanIntervalMinutes: Number(event.target.value) } }))} onBlur={(event) => saveSettings({ scanIntervalMinutes: Number(event.target.value) })} style={fieldStyle(theme)} />
           </label>
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Progression mode
-            <select value={settings.progressionMode || 'highest_only'} onChange={(event) => saveSettings({ progressionMode: event.target.value })} style={fieldStyle(theme)}>
+            <ThemedSelect theme={theme} value={settings.progressionMode || 'highest_only'} onChange={(event) => saveSettings({ progressionMode: event.target.value })} style={fieldStyle(theme)}>
               <option value="highest_only">Keep highest milestone only</option>
               <option value="keep_all">Keep all earned milestones</option>
-            </select>
+            </ThemedSelect>
           </label>
           <label style={{ color: theme.mutedText, fontWeight: 850, alignSelf: 'end', paddingBottom: 12 }}><input type="checkbox" checked={settings.includeBots === true} onChange={(event) => saveSettings({ includeBots: event.target.checked })} /> Include bots</label>
           <label style={{ color: theme.mutedText, fontWeight: 850, alignSelf: 'end', paddingBottom: 12 }}><input type="checkbox" checked={settings.announcePromotions === true} onChange={(event) => saveSettings({ announcePromotions: event.target.checked })} /> Announce promotions</label>
@@ -245,7 +246,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Name<input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} style={fieldStyle(theme)} /></label>
           <RoleSelect theme={theme} resources={roles} value={draft.roleId} onChange={(roleId) => setDraft((current) => ({ ...current, roleId, removeRoleIds: current.removeRoleIds.filter((id) => id !== roleId) }))} label="Award Role" disabled={roles.length === 0} />
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Duration<input type="number" min="1" value={draft.value} onChange={(event) => setDraft((current) => ({ ...current, value: Number(event.target.value) }))} style={fieldStyle(theme)} /></label>
-          <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Unit<select value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} style={fieldStyle(theme)}>{['minutes', 'hours', 'days', 'weeks', 'months', 'years'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>
+          <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Unit<ThemedSelect theme={theme} value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} style={fieldStyle(theme)}>{['minutes', 'hours', 'days', 'weeks', 'months', 'years'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</ThemedSelect></label>
         </div>
         <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Cleanup roles (optional)
           <select multiple size={Math.min(6, Math.max(3, cleanupRoles.length))} value={draft.removeRoleIds} onChange={(event) => setDraft((current) => ({ ...current, removeRoleIds: Array.from(event.target.selectedOptions, (option) => option.value) }))} style={fieldStyle(theme)}>
