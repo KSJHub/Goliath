@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient.js';
@@ -166,8 +167,8 @@ export default function Automation({ theme, selectedGuild, selectedGuildData }) 
         <h3 style={{ margin: 0 }}>Create Safe Rule</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 10 }}>
           <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>Name</span><input value={name} onChange={(event) => setName(event.target.value)} style={field(theme)} /></label>
-          <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>Trigger</span><select value={trigger} onChange={(event) => setTrigger(event.target.value)} style={field(theme)}>{registry.triggers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
-          <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>Action</span><select value={action} onChange={(event) => setAction(event.target.value)} style={field(theme)}>{safeActions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+          <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>Trigger</span><ThemedSelect theme={theme} value={trigger} onChange={(event) => setTrigger(event.target.value)} style={field(theme)}>{registry.triggers.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</ThemedSelect></label>
+          <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>Action</span><ThemedSelect theme={theme} value={action} onChange={(event) => setAction(event.target.value)} style={field(theme)}>{safeActions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</ThemedSelect></label>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" onClick={saveRule} disabled={saving || !guildId} style={button(theme, saving || !guildId)}>Save Rule</button>
