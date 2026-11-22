@@ -435,8 +435,18 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,250px),1fr))', gap: 14 }}>
           <ChannelSelect theme={theme} resources={channels} value={adminConfig.verificationChannelId || draft.channelId} onChange={(value) => saveConfig({ verificationChannelId: value || null })} label="Verification Channel" />
           <ChannelSelect theme={theme} resources={channels} value={adminConfig.logChannelId || settings.logChannelId || ''} onChange={(value) => saveConfig({ logChannelId: value || null })} label="Log Channel" />
-          <RoleSelect theme={theme} resources={usableRoles} value={adminConfig.verifiedRoleIds?.[0] || settings.verifiedRoleId || ''} onChange={(value) => saveConfig({ verifiedRoleIds: value ? [value] : [] })} label="Verified Role" />
-          <RoleSelect theme={theme} resources={usableRoles} value={adminConfig.pendingRoleIds?.[0] || settings.unverifiedRoleId || ''} onChange={(value) => saveConfig({ pendingRoleIds: value ? [value] : [] })} label="Pending Role" />
+          {['pending','verified','bot','bypass','quarantine','staff'].map(type => {
+            const ids = advanced?.roles?.[type] || [];
+            return <fieldset key={type} style={{ border: '1px solid '+theme.cardBorder, borderRadius: 12, padding: 12 }}>
+              <legend>{type.charAt(0).toUpperCase()+type.slice(1)} roles · {ids.length}</legend>
+              {ids.map(id => <div key={id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ flex: 1 }}>{roles.find(role => String(role.id)===id)?.name || id}</span>
+                <button type="button" disabled={!!busy} style={buttonStyle(theme,'danger')} onClick={() => setAdvancedPath('roles.'+type,ids.filter(value => value!==id))}>Remove</button>
+              </div>)}
+              <RoleSelect theme={theme} resources={usableRoles.filter(role => !ids.includes(String(role.id)))} value="" label={'Add '+type+' role'} onChange={value => { if(value) setAdvancedPath('roles.'+type,[...new Set([...ids,String(value)])]); }} />
+            </fieldset>;
+          })}
+          <p style={{ color: theme.mutedText }}>Role changes require Save Advanced Settings. Removing a configured role does not delete the Discord role.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" disabled={busy} onClick={() => saveConfig({ dmOnVerify: adminConfig.dmOnVerify === false })} style={buttonStyle(theme)}>{adminConfig.dmOnVerify === false ? 'Enable DM' : 'Disable DM'}</button>
@@ -542,8 +552,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <h2 id="verification-section-4" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>4 · 👮 Staff Approval</h2>
         <p style={{ color: theme.mutedText, margin: 0 }}>Optional per server. Choose which staff role can approve members when this method is enabled.</p>
         <Toggle theme={theme} label="Require Staff Approval" checked={readPath(advanced, 'security.staffApproval')} onChange={(v) => toggleSecurity('staffApproval', v)} />
-        <RoleSelect theme={theme} resources={usableRoles} value={advanced?.roles?.staff?.[0] || ''} label="Staff approval role"
-          onChange={(value) => setAdvancedPath('roles.staff', value ? [value] : [])} />
+        <p style={{ color: theme.mutedText }}>Configure all staff approval roles in General &amp; Roles above. {(advanced?.roles?.staff || []).length} role(s) configured.</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
           {['allowApprove', 'allowReject', 'allowQuarantine'].map((key) => <Toggle key={key} theme={theme} label={key.replace('allow', 'Allow ')}
             checked={readPath(advanced, `security.staffApprovalConfig.${key}`)}
