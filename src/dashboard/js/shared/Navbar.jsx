@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../ui/DiscordResourceSelects.jsx';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -641,7 +642,7 @@ function Navbar({
             <div style={styles.guildWrap}>
               {mobileExpanded ? (
                 <div style={styles.guildSelectWrap}>
-                  <select
+                  <ThemedSelect theme={theme}
                     value={selectedGuild || ''}
                     onChange={(event) => {
                       const guildId = event.target.value || '';
@@ -655,7 +656,7 @@ function Navbar({
                         {guild.name}
                       </option>
                     ))}
-                  </select>
+                  </ThemedSelect>
 
                   <span style={styles.guildChevron}>▾</span>
                 </div>
