@@ -41,8 +41,13 @@ async function buildHealth(guild) {
     else if (role.managed || role.position >= me.roles.highest.position) issues.push(`Queue role ${role.name} cannot be managed by Goliath.`);
   }
 
-  const report = await scheduledWelcome.getQueueDiagnostics(guild);
-  const alreadyWelcomedMembers = report.excluded.filter(entry => entry.reasons.includes('Already welcomed')).length;
+  let report = null;
+  try {
+    report = await scheduledWelcome.getQueueDiagnostics(guild);
+  } catch (error) {
+    issues.push(`Scheduled Welcome queue inspection failed: ${error.message || error}`);
+  }
+  const alreadyWelcomedMembers = report ? report.excluded.filter(entry => entry.reasons.includes('Already welcomed')).length : null;
   const stuckMemberIds = [];
   if (config.removeQueueRole && config.queueRoleId) {
     for (const memberId of config.completedMemberIds) {
@@ -71,7 +76,8 @@ async function buildHealth(guild) {
     templateName: template?.name || null,
     templateBindingId: templateBinding?.templateId || null,
     templateBindingHealthy,
-    waitingMembers: report.waiting.length,
+    waitingMembers: report ? report.waiting.length : null,
+    queueInspectionHealthy: report !== null,
     alreadyWelcomedMembers,
     stuckMemberIds,
     time: config.time,
