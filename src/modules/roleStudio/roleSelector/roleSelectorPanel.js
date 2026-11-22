@@ -169,12 +169,13 @@ function optionFilterFor(deployment, groupId) {
   return Array.isArray(value) ? new Set(value.map(String)) : null;
 }
 
-function applyBoundSelectorTemplate(guild, slot, fallback, member = null) {
+function applyBoundSelectorTemplate(guild, slot, fallback, member = null, groupId = null) {
   const templates = require('../../messageStudio/embed/embedTemplates');
   try {
   const { buildVariableMap } = require('../../../core/guild/guildVariables');
   const variables = buildVariableMap({guild, member, user:member?.user}, false);
-  const template = templates.renderBinding(guild.id, 'role_selector', slot, variables);
+  const individualSlot = groupId && slot === 'member_group' ? `member_group_${groupId}` : null;
+  const template = (individualSlot && templates.renderBinding(guild.id, 'role_selector', individualSlot, variables)) || templates.renderBinding(guild.id, 'role_selector', slot, variables);
   if (!template) return fallback;
   const source = template.panels?.[0] || template.embed;
   if (!source) return fallback;
@@ -263,7 +264,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
       .addOptions(opts)));
     if (group.allowRemove && !group.minSelections) components.push(row(button(customId('roleSelector:clear', group.id, deploymentId || 'global'), emojiLabel('ADMIN_PURGE', 'Clear Selection'))));
   }
-  return { embeds: [applyBoundSelectorTemplate(guild, 'member_group', embed, member)], components: components.filter((x) => x.components.length) };
+  return { embeds: [applyBoundSelectorTemplate(guild, 'member_group', embed, member, group.id)], components: components.filter((x) => x.components.length) };
 }
 
 async function freshMember(i) { return i.guild.members.fetch(i.user.id).catch(() => i.member); }
