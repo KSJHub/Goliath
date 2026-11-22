@@ -169,10 +169,28 @@ function optionFilterFor(deployment, groupId) {
   return Array.isArray(value) ? new Set(value.map(String)) : null;
 }
 
+function applyBoundSelectorTemplate(guild, slot, fallback) {
+  const templates = require('../../messageStudio/embed/embedTemplates');
+  const template = templates.renderBinding(guild.id, 'role_selector', slot, {});
+  if (!template) return fallback;
+  const source = template.panels?.[0] || template.embed;
+  if (!source) return fallback;
+  const embed = new EmbedBuilder();
+  if (source.title) embed.setTitle(source.title);
+  if (source.description) embed.setDescription(source.description);
+  if (source.color) embed.setColor(source.color);
+  if (source.fields?.length) embed.addFields(source.fields);
+  if (source.footer?.text) embed.setFooter({text:source.footer.text,...(source.footer.iconURL?{iconURL:source.footer.iconURL}:{})});
+  if (source.author?.name) embed.setAuthor({name:source.author.name,...(source.author.iconURL?{iconURL:source.author.iconURL}:{})});
+  if (source.imageURL) embed.setImage(source.imageURL);
+  if (source.thumbnailURL) embed.setThumbnail(source.thumbnailURL);
+  return embed;
+}
+
 function memberLauncherPayload(guild, allowedIds = null, deploymentId = null) {
   if (!guildManager.isModuleEnabled(guild.id, roleSelector.MODULE)) return memberDisabledPayload();
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('USER_ROLES', 'Choose Your Roles')).setDescription('Choose a category below. Each category manages only its own roles, so changing one selection never removes roles from another category.')],
+    embeds: [applyBoundSelectorTemplate(guild, 'member_launcher', new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('USER_ROLES', 'Choose Your Roles')).setDescription('Choose a category below. Each category manages only its own roles, so changing one selection never removes roles from another category.'))],
     components: [memberCategoryMenu(guild, allowedIds, null, deploymentId ? customId('roleSelector:openGroup', deploymentId) : 'roleSelector:openGroup')],
   };
 }
