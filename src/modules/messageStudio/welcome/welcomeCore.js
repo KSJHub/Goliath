@@ -102,6 +102,10 @@ async function releaseDeferredWelcome(member) {
     const config = getWelcomeSection(member.guild.id);
     const pending = config.deferredWelcomes[member.id];
     if (!pending) return { skipped: true, reason: 'not_queued' };
+    if (pending.joinedAt && config.completedInstantJoins?.[member.id] === pending.joinedAt) {
+      clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt);
+      return { skipped: true, reason: 'already_welcomed' };
+    }
     if (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.()) {
       // A delayed update for the old membership must not erase a newer join's queue.
       // Departure cleanup is responsible for removing genuinely abandoned entries.
@@ -178,6 +182,7 @@ async function deliverWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
   const config = getWelcomeSection(member.guild.id); if (!options.force && !guildManager.isModuleEnabled(member.guild.id, MODULE)) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled', errors: [] }; } if (config.ignoreBots && member.user.bot) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot', errors: [] }; }
   if (!options.force && !options.previewOnly && !options.bypassVerificationGate) {
+    if (config.completedInstantJoins?.[member.id] === member.joinedAt?.toISOString?.() && member.joinedAt) return { publicSent: false, dmSent: false, skipped: true, reason: 'already_welcomed', errors: [] };
     const needsVerification = config.waitForVerification && guildManager.isModuleEnabled(member.guild.id, 'verification');
     const verificationStore = needsVerification ? require('../../securityStudio/verification/verificationStore') : null;
     // Discord membership screening is independent of the optional Welcome
@@ -282,7 +287,7 @@ async function buildHealthReport(guild) {
   const dmMissingBinding = Boolean(!dmUsesPublicTemplate && configuredDmTemplate && (!dmBinding || dmBinding.templateId !== configuredDmTemplate.templateId));
   const dmSourceMismatch = Boolean(!dmUsesPublicTemplate && dmTemplate && normalizeMessageSource(config.dmMessageSource, dmTemplate.templateId) !== config.dmMessageSource);
 
-  const mentionRoles = cleanDiscordIds(config.mentionRoleIds).map((roleId) => ({ roleId, role: guild.roles.cache.get(roleId) || null }));
+  const mentionRoles = cleanDiscordIds(config.mentionRoleIds).filter(roleId => roleId !== guild.id).map((roleId) => ({ roleId, role: guild.roles.cache.get(roleId) || null }));
   const missingMentionRoles = mentionRoles.filter(({ role }) => !role);
   const blockedMentionRoles = mentionRoles.filter(({ role }) => role && !role.mentionable && !canMentionEveryone);
 
@@ -303,6 +308,7 @@ async function buildHealthReport(guild) {
     dmBindingMismatch ? `DM Welcome binding (${dmBinding.templateId}) does not match configured template (${config.dmTemplateId}).` : null,
     dmMissingBinding ? `DM Welcome template ${configuredDmTemplate.templateId} is configured but not canonically bound.` : null,
     dmSourceMismatch ? `DM Welcome source ${config.dmMessageSource} does not match template ${dmTemplate.templateId}.` : null,
+    config.mentionRoleIds.includes(guild.id) ? 'The everyone role cannot be used as a Welcome notification role.' : null,
     config.allowRolePings && !config.mentionRoleIds.length ? 'Role notifications are enabled but no roles are selected.' : null,
     ...missingMentionRoles.map(({ roleId }) => `Welcome notification role ${roleId} no longer exists.`),
     ...blockedMentionRoles.map(({ role }) => `${role.name}: role is not mentionable and Goliath lacks Mention Everyone in the welcome channel.`),
@@ -334,6 +340,8 @@ async function buildHealthReport(guild) {
     dmUsesPublicTemplate,
     dmBindingHealthy: !staleInheritedDmBinding && !dmBindingMissingTemplate && !dmBindingMismatch && !dmMissingBinding && !dmSourceMismatch,
     countMode: config.ignoreBots ? 'humans_only' : 'all_members',
+    deferredWaiting: Object.keys(config.deferredWelcomes).length,
+    deferredPartial: Object.values(config.deferredWelcomes).filter(entry => entry?.publicSent === true || entry?.dmSent === true).length,
     warnings,
     healthy: warnings.length === 0,
   };
