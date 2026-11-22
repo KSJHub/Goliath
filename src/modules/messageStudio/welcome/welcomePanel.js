@@ -82,42 +82,18 @@ function templatePageButtons(guild,userId,scope,activeTemplateId){
 function customTemplateId(scope){return scope==='dm'?'welcome_custom_dm':'welcome_custom_public';}
 function customTemplateName(scope){return scope==='dm'?'Custom DM Welcome':'Custom Public Welcome';}
 function customEditorModal(guildId,scope){
-  const template=embedTemplateManager.getTemplate(guildId,customTemplateId(scope));
-  const embed=template?.embed||{};
-  for(const [label,value,limit] of [['message text',template?.content,1800],['embed title',embed.title,256],['embed description',embed.description,3500],['embed footer',embed.footer?.text,200]]){
-    if(String(value||'').replace(/^\u200b$/,'').length>limit)throw new Error(`Saved custom Welcome ${label} exceeds the editor limit (${limit} characters). Edit the original template before saving here to avoid losing text.`);
-  }
-  const colour=typeof embed.color==='number'&&Number.isInteger(embed.color)&&embed.color>=0&&embed.color<=0xffffff?`#${embed.color.toString(16).padStart(6,'0')}`:typeof embed.color==='string'&&/^#?[0-9a-fA-F]{6}$/.test(embed.color)?`#${embed.color.replace(/^#/,'')}`:'#5865F2';
-  const input=(id,label,value,maxLength,style=TextInputStyle.Short,required=false,placeholder=null)=>{const field=new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(maxLength);if(placeholder)field.setPlaceholder(placeholder);const initial=String(value||'').replace(/^\u200b$/,'').slice(0,maxLength);if(initial)field.setValue(initial);return field;};
-  return new ModalBuilder().setCustomId(scope==='dm'?'admin:welcome:customDmSubmit':'admin:welcome:customPublicSubmit').setTitle(scope==='dm'?'Edit DM Welcome':'Edit Public Welcome').addComponents(
-    row(input('content','Message text',template?.content,1800,TextInputStyle.Paragraph,false,'Optional text above the embed')),
-    row(input('title','Embed title',embed.title,256,TextInputStyle.Short,false,'Optional heading for your welcome')),
-    row(input('description','Embed description',embed.description,3500,TextInputStyle.Paragraph,false,'Write your welcome message here')),
-    row(input('footer','Embed footer',embed.footer?.text,200,TextInputStyle.Short,false,'Optional footer text')),
-    row(input('color','Embed colour (hex)',colour,7,TextInputStyle.Short,false,'Example: #5865F2'))
-  );
+  const config=welcome.getWelcomeSection(guildId);
+  const saved=config.normalMessages?.[scope];
+  const legacy=embedTemplateManager.getTemplate(guildId,customTemplateId(scope));
+  const initial=saved||legacy?.content|| (scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.');
+  const field=new TextInputBuilder().setCustomId('content').setLabel('Welcome message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setValue(initial);
+  return new ModalBuilder().setCustomId(scope==='dm'?'admin:welcome:customDmSubmit':'admin:welcome:customPublicSubmit').setTitle(scope==='dm'?'Edit DM Message':'Edit Public Message').addComponents(row(field));
 }
 function saveCustomWelcome(interaction,scope){
-  const field=id=>interaction.fields.getTextInputValue(id).trim();
-  const content=field('content'),title=field('title'),description=field('description'),footer=field('footer');
-  const enteredColor=field('color')||'#5865F2';
-  const color=/^[0-9a-fA-F]{6}$/.test(enteredColor)?`#${enteredColor}`:enteredColor;
-  if(!content&&!title&&!description)throw new Error('Add message text, an embed title, or an embed description.');
-  if(content.length>1800)throw new Error('Message text must be 1800 characters or fewer.');
-  if(title.length>256)throw new Error('Embed title must be 256 characters or fewer.');
-  if(description.length>3500)throw new Error('Embed description must be 3500 characters or fewer.');
-  if(footer.length>200)throw new Error('Embed footer must be 200 characters or fewer.');
-  if(title.length+description.length+footer.length>6000)throw new Error('Combined embed text exceeds Discord’s 6000-character limit.');
-  if(!/^#[0-9a-fA-F]{6}$/.test(color))throw new Error('Embed colour must contain exactly six hexadecimal digits (for example, 5865F2 or #5865F2).');
-  const guildId=interaction.guild.id,slot=scope==='dm'?'dm_welcome':'welcome',templateId=customTemplateId(scope);
-  const existing=embedTemplateManager.getTemplate(guildId,templateId);
-  const saved=embedTemplateManager.saveTemplate(guildId,{
-    ...(existing||{}),templateId,name:customTemplateName(scope),module:'welcome',templateType:scope==='dm'?'dmWelcome':'welcome',content,
-    embed:{...(existing?.embed||{}),title,description:description||(content?'\u200b':''),color,footer:{...(existing?.embed?.footer||{}),text:footer}},
-    tags:['welcome','custom']
-  });
-  welcome.bindWelcomeTemplate(guildId,saved.templateId,slot,{actorId:interaction.user.id});
-  welcome.updateConfig(guildId,scope==='dm'?{dmMessageSource:'custom'}:{messageSource:'custom'},{actorId:interaction.user.id});
+  const content=interaction.fields.getTextInputValue('content').trim();
+  if(!content||content.length>2000)throw new Error('Enter a message of 1–2000 characters.');
+  const guildId=interaction.guild.id;
+  welcome.updateWelcomeSection(guildId,section=>({...section,normalMessages:{...section.normalMessages,[scope]:content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:section.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:interaction.user.id,action:'welcome_normal_message_save'});
   clearSelection(guildId,interaction.user.id,scope);
 }
 
