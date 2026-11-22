@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 function list(value) {
@@ -156,17 +157,17 @@ export default function TicketTranscriptCentre({ theme, tickets = [] }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(min(100%, 180px), 0.4fr) minmax(min(100%, 180px), 0.4fr)', gap: 10 }}>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by user, ticket ID, title, staff or transcript text..." style={fieldStyle(theme)} />
-        <select value={filterType} onChange={(event) => setFilterType(event.target.value)} style={fieldStyle(theme)}>
+        <ThemedSelect theme={theme} value={filterType} onChange={(event) => setFilterType(event.target.value)} style={fieldStyle(theme)}>
           <option value="all">All types</option>
           {data.types.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} style={fieldStyle(theme)}>
+        </ThemedSelect>
+        <ThemedSelect theme={theme} value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} style={fieldStyle(theme)}>
           <option value="all">All statuses</option>
           <option value="closed">Closed</option>
           <option value="archived">Archived</option>
           <option value="open">Open</option>
           <option value="claimed">Claimed</option>
-        </select>
+        </ThemedSelect>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(min(100%, 320px), 0.8fr) minmax(0, 1.2fr)', gap: 14, alignItems: 'start' }}>
