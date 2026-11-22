@@ -645,7 +645,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           </ThemedSelect>
         </label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button type="button" disabled={Boolean(busy)} onClick={() => { panelDraftDirty.current = true; setDraft((current) => ({ ...DEFAULT_PANEL_DRAFT, channelId: current.channelId })); setNotice('Default design loaded into the editor. Review it, then redeploy to apply changes in Discord.'); setError(''); }} style={buttonStyle(theme, 'secondary')}>Load Default Design</button>
+          <button type="button" disabled={Boolean(busy) || !data?.defaultPanelTemplate} onClick={async () => { if (!await goliathDialog.confirm('Load the shared default design into the editor? The live panel will not change until redeployed.',{title:'Restore Default Design'})) return; panelDraftDirty.current = true; setDraft((current) => ({ ...data.defaultPanelTemplate, channelId: current.channelId })); setNotice('Default design loaded into the editor. Review it, then redeploy to apply changes in Discord.'); setError(''); }} style={buttonStyle(theme, 'secondary')}>Load Default Design</button>
           <button type="button" disabled={busy === 'deploy'} onClick={deploy} style={buttonStyle(theme, 'success')}>{busy === 'deploy' ? 'Working...' : selectedPanelId ? 'Repair / Redeploy Panel' : 'Deploy New Panel'}</button>
           {selectedPanelId ? <button type="button" disabled={busy} onClick={removePanel} style={buttonStyle(theme, 'danger')}>Delete Panel</button> : null}
         </div>
