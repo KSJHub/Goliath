@@ -336,10 +336,10 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
   const parts=customId.split(':'),scope=parts.at(-1),action=parts[3],guildId=interaction.guild.id,userId=interaction.user.id;
   if(!['public','dm','scheduled'].includes(scope))throw new Error('Invalid message workspace.');
   const limit=scope==='scheduled'?1800:2000;
-  const config=welcome.getWelcomeSection(guildId),presets=config.normalPresets?.[scope]||{},state=getSelection(guildId,userId,scope),selected=state.presetId,current=presets[selected];
+  const config=welcome.getWelcomeSection(guildId),presets=config.normalPresets?.[scope]||{},state=getSelection(guildId,userId,scope),selected=state.presetId,current=Object.hasOwn(presets,state.presetId)?presets[selected]:null;
   const panel=()=>normalPresetPanel(interaction.guild,userId,scope);
   const mutate=fn=>welcome.updateWelcomeSection(guildId,s=>({...s,normalPresets:{...s.normalPresets,[scope]:fn({...s.normalPresets?.[scope]})}}),{actorId:userId,action:'welcome_normal_preset'});
-  if(parts[2]==='normalSelect'&&interaction.isStringSelectMenu?.()){const id=interaction.values?.[0];if(!presets[id])throw new Error('Preset unavailable.');setSelection(guildId,userId,scope,{presetId:id});return updatePanel(interaction,panel());}
+  if(parts[2]==='normalSelect'&&interaction.isStringSelectMenu?.()){const id=interaction.values?.[0];if(!Object.hasOwn(presets,id))throw new Error('Preset unavailable.');setSelection(guildId,userId,scope,{presetId:id});return updatePanel(interaction,panel());}
   if(parts[2]==='normalName'&&interaction.isModalSubmit?.()){
     const name=interaction.fields.getTextInputValue('name').trim();
     if(!name||name.length>80)throw new Error('Enter a valid preset name.');
