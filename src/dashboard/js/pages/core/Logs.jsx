@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -252,7 +253,7 @@ function Button({ theme, children, onClick, disabled = false }) {
 
 function ChannelSelect({ theme, channels, value, onChange, disabled = false }) {
   return (
-    <select
+    <ThemedSelect theme={theme}
       value={value || ''}
       onChange={(event) => onChange(event.target.value || null)}
       disabled={disabled}
@@ -273,7 +274,7 @@ function ChannelSelect({ theme, channels, value, onChange, disabled = false }) {
       {channels.map((channel) => (
         <option key={channel.id} value={channel.id}>#{channel.name}</option>
       ))}
-    </select>
+    </ThemedSelect>
   );
 }
 
