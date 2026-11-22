@@ -281,8 +281,7 @@ async function retireDeployment(guild, deployment) {
     if (!value) return false;
     const { message } = await fetchDeployment(guild, value);
     if (!owned(guild, message)) return false;
-    await message.edit(memberDisabledPayload()).catch(() => null);
-    return true;
+    try { await message.edit(memberDisabledPayload()); return true; } catch (error) { console.error('[RoleSelectorPanel] Unable to retire deployment', error); return false; }
   });
 }
 
@@ -383,9 +382,8 @@ function buildGroupsPanel(guildId, selectedId = null) {
         button(customId('admin:roleSelector:toggleMode', selected.id), selected.selectionMode === 'multiple' ? emojiLabel('CHECKBOX', 'Multiple Choices') : emojiLabel('CHECKBOX', 'Single Choice'), ButtonStyle.Primary),
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
-      row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger)),
+      row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger), button(customId('admin:roleSelector:dependencies', selected.id), emojiLabel('SETTINGS', 'Role Dependencies')), button(customId('admin:roleSelector:guide', selected.id), emojiLabel('ADD', 'Creation Guide'))),
       row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview')), button(customId('admin:roleSelector:controlMode', selected.id), selected.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')),
-      row(button(customId('admin:roleSelector:dependencies', selected.id), emojiLabel('SETTINGS', 'Role Dependencies'))),
       nav('admin:roleSelector:groups'),
     ],
   };
