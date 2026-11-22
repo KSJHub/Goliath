@@ -58,12 +58,11 @@ router.post('/:guildId/message-source', async (req, res) => {
 router.post('/:guildId/custom-message', async (req, res) => {
   try {
     const guildId = getGuildId(req); const slot = String(req.body?.slot || 'welcome').trim() === 'dm_welcome' ? 'dm_welcome' : 'welcome';
-    const templateId = customTemplateId(slot); const title = String(req.body?.title || '').trim(); const description = String(req.body?.description || '').trim(); const content = String(req.body?.content || '').trim(); const footer = String(req.body?.footer || '').trim(); const color = String(req.body?.color || '#5865F2').trim();
-    if (!title && !description && !content) throw new Error('Custom Welcome needs message content, a title, or a description.');
-    const saved = embedTemplates.saveTemplate(guildId, { templateId, name: customTemplateName(slot), module: 'welcome', templateType: slot === 'dm_welcome' ? 'dmWelcome' : 'welcome', content, embed: { title, description: description || (content ? '\u200b' : ''), color, footer: { text: footer, iconURL: '' }, fields: [], buttons: [] }, tags: ['welcome', 'custom'] });
-    welcome.bindWelcomeTemplate(guildId, saved.templateId, slot, { actorId: getActorId(req) });
-    welcome.updateConfig(guildId, slot === 'dm_welcome' ? { dmMessageSource: 'custom' } : { messageSource: 'custom' }, { actorId: getActorId(req) });
-    return success(res, { template: saved, ...(await buildOverview(req, guildId)) });
+    const scope = slot === 'dm_welcome' ? 'dm' : 'public';
+    const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+    if (!content || content.length > 2000) throw new Error('Enter a normal message of 1–2000 characters.');
+    welcome.updateWelcomeSection(guildId, section => ({ ...section, normalMessages: { ...section.normalMessages, [scope]: content }, ...(scope === 'dm' ? { dmMessageSource: 'custom', dmTemplateId: section.dmTemplateId || 'dm_welcome_default' } : { messageSource: 'custom' }) }), { actorId: getActorId(req), action: 'welcome_normal_message_save' });
+    return success(res, await buildOverview(req, guildId));
   } catch (error) { return failure(res, error, 400); }
 });
 
