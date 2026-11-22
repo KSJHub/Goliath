@@ -359,7 +359,13 @@ async function startupWelcome(client) {
         const pendingIds = Object.keys(getWelcomeSection(guild.id).deferredWelcomes || {});
         for (const memberId of pendingIds) {
           try {
-            const member = await guild.members.fetch({ user: memberId, force: true });
+            const pending = getWelcomeSection(guild.id).deferredWelcomes[memberId];
+            if (!pending) continue;
+            const member = await guild.members.fetch({ user: memberId, force: true }).catch(error => {
+              if (Number(error?.code) !== 10007) throw error;
+              clearDeferredWelcome(guild.id, memberId, pending.joinedAt);
+              return null;
+            });
             if (!member) continue;
             const result = await releaseDeferredWelcome(member);
             if (result?.errors?.length) warnings.push(`Deferred welcome ${memberId}: ${result.errors.join('; ')}`);
