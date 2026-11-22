@@ -1310,7 +1310,9 @@ async function verificationLifecycleAudit() {
       ${lockSource}
       const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
       const roles={verified:['verified'],auto:[],pending:[],verifying:[],quarantine:['quarantine']};
-      const config={configRevision:1,settings:{roles}};
+      const config={configRevision:1,settings:{roles},messages:{successLog:'Verification complete'}};
+      const auditEvents=[];
+      const audit=async(guild,config,type,content,userId)=>{auditEvents.push({type,content,userId});};
       const roleIds=(settings,key)=>settings.roles[key]||[];
       const unique=values=>[...new Set(values)];
       const fetchRoles=async(guild,ids)=>ids.map(id=>({id}));
@@ -1357,6 +1359,7 @@ async function verificationLifecycleAudit() {
         ${quarantineSource}
         return{complete,quarantineVerificationMember};
       })(id=>{
+        if(id==='./verificationManager')return{renderMessage:(template)=>template};
         if(id==='../../../core/security/protection/quarantine')return sharedQuarantine;
         if(id==='../../roleStudio/autoRoles/autoRoles')return{releaseDeferredJoinRoles:async()=>true};
         if(id==='../../communityStudio/invites/invites')return{releaseDeferredInviteRoles:async()=>true};
@@ -1373,6 +1376,8 @@ async function verificationLifecycleAudit() {
         release();
         const finished=await finishing;
         assert.equal(finished.complete,true);
+        assert.ok(auditEvents.some(event=>event.type==='success'&&event.userId==='member'));
+        assert.ok(auditEvents.some(event=>event.type==='roles'&&event.userId==='member'));
         assert.equal(state,'verified');
         assert.equal(transitions,1);
         reset();
