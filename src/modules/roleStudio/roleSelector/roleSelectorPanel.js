@@ -203,8 +203,8 @@ function memberLauncherPayload(guild, allowedIds = null, deploymentId = null) {
   };
 }
 
-function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymentId = null, deployment = null) {
-  roleSelector.assertModuleEnabled(guild.id);
+function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymentId = null, deployment = null, simulation = null) {
+  if (!simulation) roleSelector.assertModuleEnabled(guild.id);
   const group = roleSelector.getGroup(guild.id, groupId);
   if (!group || !roleSelector.isGroupMemberUsable(group) || (Array.isArray(allowedIds) && !allowedIds.includes(group.id))) throw new Error('That selector is unavailable on this panel.');
 
@@ -230,7 +230,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
       value: x.hex,
       emoji: x.emoji || undefined,
       description: `${x.hex} · ${x.family}`.slice(0, 100),
-      default: Boolean(group.managedRoles?.[x.hex]?.roleId && member?.roles?.cache?.has(group.managedRoles[x.hex].roleId)),
+      default: simulation ? simulation.has(x.hex) : Boolean(group.managedRoles?.[x.hex]?.roleId && member?.roles?.cache?.has(group.managedRoles[x.hex].roleId)),
     }));
     if (opts.length) components.push(row(new StringSelectMenuBuilder().setCustomId(customId('roleSelector:colourChoose', deploymentId || 'global')).setPlaceholder('Choose a colour').setMinValues(1).setMaxValues(1).addOptions(opts)));
     components.push(row(
@@ -244,7 +244,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
       value: x.id,
       emoji: x.emoji || undefined,
       description: x.description || undefined,
-      default: Boolean(x.roleId && member?.roles?.cache?.has(x.roleId)),
+      default: simulation ? simulation.has(x.id) : Boolean(x.roleId && member?.roles?.cache?.has(x.roleId)),
     }));
     if (group.controlMode === 'buttons' && opts.length <= 15) {
       for (let offset = 0; offset < opts.length; offset += 5) {
@@ -432,6 +432,7 @@ function buildColourPanel(guildId, group) {
         button('admin:roleSelector:toggleHex', group.customHexEnabled ? emojiLabel('DESIGN', 'Custom HEX: On') : emojiLabel('DESIGN', 'Custom HEX: Off')),
         button('admin:roleSelector:colourClearToggle', group.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
+      row(button(customId('admin:roleSelector:preview', group.id), emojiLabel('PREVIEW', 'Preview'))),
       nav(),
     ],
   };
@@ -810,8 +811,8 @@ function buildCreationGuide(guildId, group) {
 function buildInteractivePreview(i, group) {
   const preview = state(i).preview;
   const selected = new Set(preview.selected);
-  const roleIds = new Set(group.options.filter(o => selected.has(o.id) && o.roleId).map(o => o.roleId));
-  const payload = memberGroupPayload(i.guild, { roles: { cache: roleIds } }, group.id);
+  const roleIds = new Set((group.options || []).filter(o => selected.has(o.id) && o.roleId).map(o => o.roleId));
+  const payload = memberGroupPayload(i.guild, { roles: { cache: roleIds } }, group.id, null, null, null, selected);
   // Replace every member control with an admin-only simulation control.
   const controls = payload.components.slice(1).map(r => {
     for (const c of r.components) {
@@ -819,6 +820,9 @@ function buildInteractivePreview(i, group) {
       if (original.startsWith('roleSelector:pick:')) c.setCustomId('admin:roleSelector:previewPick:' + original.split(':').pop());
       else if (original.startsWith('roleSelector:choose:')) c.setCustomId('admin:roleSelector:previewChoose');
       else if (original.startsWith('roleSelector:clear:')) c.setCustomId('admin:roleSelector:previewClear');
+      else if (original.startsWith('roleSelector:colourChoose:')) c.setCustomId('admin:roleSelector:previewChoose');
+      else if (original.startsWith('roleSelector:customHex:')) c.setCustomId('admin:roleSelector:previewHex');
+      else throw new Error('Unsupported preview control.');
     }
     return r;
   });
@@ -884,11 +888,25 @@ async function handleRoleSelectorInteraction(i) {
       await roleSelector.saveGroupSafe(i.guild, { ...group, [key]: values }, { ...actor, action: 'role_selector_dependencies' });
       return respond(i, buildGroupsPanel(i.guildId, group.id));
     }
+    if (id === 'admin:roleSelector:previewHex') {
+      const group = roleSelector.getGroup(i.guildId, state(i).preview?.groupId);
+      if (group?.type !== 'colour' || !group.customHexEnabled) throw new Error('Reopen the colour preview.');
+      await i.showModal(hexModal().setCustomId('admin:roleSelector:previewHexSubmit')); return true;
+    }
+    if (id === 'admin:roleSelector:previewHexSubmit') {
+      const preview = state(i).preview;
+      const group = roleSelector.getGroup(i.guildId, preview?.groupId);
+      if (group?.type !== 'colour' || !group.customHexEnabled) throw new Error('Reopen the colour preview.');
+      const hex = i.fields.getTextInputValue('hex').trim().replace(/^#/, '').toUpperCase();
+      if (!/^[0-9A-F]{6}$/.test(hex)) throw new Error('Use a six-digit HEX colour.');
+      preview.selected = ['#' + hex];
+      return respond(i, buildInteractivePreview(i, group));
+    }
     if (id === 'admin:roleSelector:previewChoose' || id === 'admin:roleSelector:previewClear' || id.startsWith('admin:roleSelector:previewPick:')) {
       const preview = state(i).preview;
       const group = preview && roleSelector.getGroup(i.guildId, preview.groupId);
-      if (!group || group.builtIn) throw new Error('Reopen the selector preview.');
-      const options = group.options.filter(o => o.enabled);
+      if (!group) throw new Error('Reopen the selector preview.');
+      const options = group.type === 'colour' ? group.palette.filter(o => o.enabled).map(o => ({ ...o, id: o.hex })) : group.options.filter(o => o.enabled);
       let desired = preview.selected;
       if (id === 'admin:roleSelector:previewClear') desired = [];
       else if (id === 'admin:roleSelector:previewChoose') desired = [...new Set(i.values || [])];
@@ -898,7 +916,7 @@ async function handleRoleSelectorInteraction(i) {
         if (!option) throw new Error('Reopen the selector preview.');
         desired = group.selectionMode === 'single' ? [option.id] : desired.includes(option.id) ? desired.filter(x => x !== option.id) : [...desired, option.id];
       }
-      if (desired.some(x => !options.some(o => o.id === x)) || desired.length < (group.minSelections || 0) || desired.length > group.maxSelections) throw new Error('Selection does not meet the configured limits.');
+      if (desired.some(x => !options.some(o => o.id === x)) || desired.length < (group.minSelections || 0) || desired.length > (group.maxSelections || (group.selectionMode === 'multiple' ? 25 : 1))) throw new Error('Selection does not meet the configured limits.');
       preview.selected = desired;
       return respond(i, buildInteractivePreview(i, group));
     }
@@ -913,7 +931,7 @@ async function handleRoleSelectorInteraction(i) {
     if (/^admin:roleSelector:(design|media|preview):/.test(id)) {
       const [, , action, groupId] = id.split(':');
       const group = roleSelector.getGroup(i.guildId, groupId);
-      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      if (!group || (group.builtIn && action !== 'preview')) throw new Error('Select a custom selector first.');
       if (action === 'preview') {
         state(i).preview = { groupId: group.id, selected: [] };
         return respond(i, buildInteractivePreview(i, group));
