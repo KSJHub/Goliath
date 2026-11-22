@@ -386,6 +386,8 @@ function emojiLabel(key, label, { position = 'before' } = {}) {
 const UI_ACTIONS = Object.freeze({
   back: Object.freeze({ label: 'Back', emoji: EMOJIS.BACK, style: ButtonStyle.Secondary }),
   settings: Object.freeze({ label: 'Settings', emoji: EMOJIS.SETTINGS, style: ButtonStyle.Secondary }),
+  clear: Object.freeze({ label: 'Clear', emoji: EMOJIS.CLOSE_X, style: ButtonStyle.Secondary }),
+  clearAll: Object.freeze({ label: 'Clear All', emoji: EMOJIS.CLOSE_X, style: ButtonStyle.Secondary }),
   builder: Object.freeze({ label: 'Builder', emoji: EMOJIS.BUILDER, style: ButtonStyle.Primary }),
   panels: Object.freeze({ label: 'Panels', emoji: EMOJIS.PANELS, style: ButtonStyle.Primary }),
   presets: Object.freeze({ label: 'Presets', emoji: EMOJIS.PRESETS, style: ButtonStyle.Primary }),
@@ -469,11 +471,12 @@ function paginationButtons(kind, previousId, nextId, options = {}) {
   ];
 }
 
-function goliathNavigation(backId, settingsId) {
+function goliathNavigation(backId, settingsId, { clearId, clearAll = false } = {}) {
   if (!backId) throw new Error('goliathNavigation requires a Back destination.');
   if (!settingsId) throw new Error('goliathNavigation requires a Settings destination.');
   return new ActionRowBuilder().addComponents(
     actionButton(backId, 'back'),
+    ...(clearId ? [actionButton(clearId, clearAll ? 'clearAll' : 'clear')] : []),
     actionButton(settingsId, 'settings'),
   );
 }
