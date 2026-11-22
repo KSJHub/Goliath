@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useEffect, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -86,9 +87,9 @@ function SegmentEditor({ theme, segment, index, roles, channels, onChange, onRem
         {canRemove ? <SecondaryButton danger onClick={onRemove}>Remove</SecondaryButton> : null}
       </div>
       <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>What should it show?
-        <select value={segment.type} onChange={(event) => onChange(defaultSegment(event.target.value))} style={control(theme)}>
+        <ThemedSelect theme={theme} value={segment.type} onChange={(event) => onChange(defaultSegment(event.target.value))} style={control(theme)}>
           {TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
+        </ThemedSelect>
       </label>
 
       {segment.type === 'members' ? <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -102,9 +103,9 @@ function SegmentEditor({ theme, segment, index, roles, channels, onChange, onRem
 
       {segment.type === 'role' ? <>
         <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Roles to count
-          <select multiple value={options.roleIds || []} onChange={(event) => updateOptions({ roleIds: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 150 }}>
+          <ThemedSelect theme={theme} multiple value={options.roleIds || []} onChange={(event) => updateOptions({ roleIds: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 150 }}>
             {roles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.memberCount || 0})</option>)}
-          </select>
+          </ThemedSelect>
         </label>
         <div style={{ display: 'grid', gap: 8 }}><strong>Optional status filter</strong><div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           {STATUS_OPTIONS.map(([value, label]) => <Toggle key={value} label={label} checked={(options.statuses || []).includes(value)} onChange={(checked) => updateOptions({ statuses: checkboxSet(options.statuses, value, checked) })} />)}
@@ -113,14 +114,14 @@ function SegmentEditor({ theme, segment, index, roles, channels, onChange, onRem
 
       {segment.type === 'voice' ? <>
         <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Voice channel filter
-          <select value={options.mode || 'all'} onChange={(event) => updateOptions({ mode: event.target.value })} style={control(theme)}>
+          <ThemedSelect theme={theme} value={options.mode || 'all'} onChange={(event) => updateOptions({ mode: event.target.value })} style={control(theme)}>
             <option value="all">All voice channels</option><option value="whitelist">Only selected channels</option><option value="blacklist">All except selected channels</option>
-          </select>
+          </ThemedSelect>
         </label>
         {options.mode !== 'all' ? <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Voice channels
-          <select multiple value={options.channelIds || []} onChange={(event) => updateOptions({ channelIds: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 120 }}>
+          <ThemedSelect theme={theme} multiple value={options.channelIds || []} onChange={(event) => updateOptions({ channelIds: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 120 }}>
             {voiceChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}
-          </select>
+          </ThemedSelect>
         </label> : null}
       </> : null}
 
@@ -135,9 +136,9 @@ function SegmentEditor({ theme, segment, index, roles, channels, onChange, onRem
 
       {segment.type === 'datetime' ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
         <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Display
-          <select value={options.format || 'weekday-short'} onChange={(event) => updateOptions({ format: event.target.value })} style={control(theme)}>
+          <ThemedSelect theme={theme} value={options.format || 'weekday-short'} onChange={(event) => updateOptions({ format: event.target.value })} style={control(theme)}>
             <option value="weekday-short">Sat, 12 Sep</option><option value="weekday-long">Saturday, 12 September</option><option value="date">12/09/2026</option><option value="time">05:30</option><option value="date-time">12/09 05:30</option>
-          </select>
+          </ThemedSelect>
         </label>
         <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Timezone<input value={options.timeZone || 'Europe/London'} onChange={(event) => updateOptions({ timeZone: event.target.value })} style={control(theme)} /></label>
       </div> : null}
@@ -149,9 +150,9 @@ function SegmentEditor({ theme, segment, index, roles, channels, onChange, onRem
       </div> : null}
 
       {(segment.type === 'messages' || segment.type === 'voiceMinutes') ? <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Time period
-        <select value={options.periodDays || 0} onChange={(event) => updateOptions({ periodDays: Number(event.target.value) || null })} style={control(theme)}>
+        <ThemedSelect theme={theme} value={options.periodDays || 0} onChange={(event) => updateOptions({ periodDays: Number(event.target.value) || null })} style={control(theme)}>
           <option value="0">All tracked time</option><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option>
-        </select>
+        </ThemedSelect>
       </label> : null}
 
       {isGoalType ? <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Countdown to a goal <span style={{ color: theme.mutedText, fontWeight: 600 }}>Optional — leave blank for the normal count.</span><input type="number" min="1" value={options.goal || ''} onChange={(event) => updateOptions({ goal: event.target.value ? Number(event.target.value) : null })} style={control(theme)} /></label> : null}
@@ -321,8 +322,8 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'grid', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} style={control(theme)} /></label>
-            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<select value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">{E.VOICE} Voice Channel</option><option value="text">{E.TEXT_CHANNEL} Text Channel</option></select></label>
-            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Update frequency<select value={draft.frequencyMinutes} onChange={(event) => setDraft({ ...draft, frequencyMinutes: Number(event.target.value) })} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
+            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<ThemedSelect theme={theme} value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">{E.VOICE} Voice Channel</option><option value="text">{E.TEXT_CHANNEL} Text Channel</option></ThemedSelect></label>
+            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Update frequency<ThemedSelect theme={theme} value={draft.frequencyMinutes} onChange={(event) => setDraft({ ...draft, frequencyMinutes: Number(event.target.value) })} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></ThemedSelect></label>
           </div>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel text<input value={draft.template} onChange={(event) => setDraft({ ...draft, template: event.target.value })} maxLength={100} style={control(theme)} /><span style={{ color: theme.mutedText, fontWeight: 600 }}>Use <code>{'{value}'}</code> for one counter. With multiple counters use <code>{'{1}'}</code>, <code>{'{2}'}</code>, <code>{'{3}'}</code>, <code>{'{4}'}</code>. Emojis and normal text are supported.</span></label>
           {draft.segments.map((segment, index) => <SegmentEditor key={index} theme={theme} segment={segment} index={index} roles={roles} channels={channels} canRemove={draft.segments.length > 1} onRemove={() => setDraft({ ...draft, segments: draft.segments.filter((_, itemIndex) => itemIndex !== index) })} onChange={(next) => setDraft({ ...draft, segments: draft.segments.map((item, itemIndex) => itemIndex === index ? next : item) })} />)}
@@ -340,7 +341,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'grid', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter category name<input value={config?.settings?.categoryName || `${E.CHART} SERVER STATS`} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), categoryName: event.target.value } })} onBlur={(event) => saveSettings({ categoryName: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default timezone<input value={config?.settings?.timeZone || 'Europe/London'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), timeZone: event.target.value } })} onBlur={(event) => saveSettings({ timeZone: event.target.value })} style={control(theme)} /></label>
-          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default update frequency<select value={config?.settings?.defaultFrequencyMinutes || 10} onChange={(event) => { const value = Number(event.target.value); setConfig({ ...config, settings: { ...(config?.settings || {}), defaultFrequencyMinutes: value } }); saveSettings({ defaultFrequencyMinutes: value }); }} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default update frequency<ThemedSelect theme={theme} value={config?.settings?.defaultFrequencyMinutes || 10} onChange={(event) => { const value = Number(event.target.value); setConfig({ ...config, settings: { ...(config?.settings || {}), defaultFrequencyMinutes: value } }); saveSettings({ defaultFrequencyMinutes: value }); }} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></ThemedSelect></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Activity retention (days)<input type="number" min="1" max="365" value={config?.settings?.retentionDays || 30} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), retentionDays: Number(event.target.value) } })} onBlur={(event) => saveSettings({ retentionDays: Number(event.target.value) })} style={control(theme)} /></label>
           <div><PrimaryButton onClick={toggleModule} disabled={busy}>{config?.enabled === false ? `${E.PLAY} Enable Server Counters` : `${E.PAUSE} Disable Server Counters`}</PrimaryButton></div>
         </div>
@@ -355,14 +356,14 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
             <Toggle label="Ignore bots" checked={config?.ignoreBots !== false} onChange={(checked) => setConfig({ ...config, ignoreBots: checked })} />
           </div>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Ignored channels
-            <select multiple value={config?.ignoredChannels || []} onChange={(event) => setConfig({ ...config, ignoredChannels: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 140 }}>
+            <ThemedSelect theme={theme} multiple value={config?.ignoredChannels || []} onChange={(event) => setConfig({ ...config, ignoredChannels: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 140 }}>
               {channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}
-            </select>
+            </ThemedSelect>
           </label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Ignored roles
-            <select multiple value={config?.ignoredRoles || []} onChange={(event) => setConfig({ ...config, ignoredRoles: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 140 }}>
+            <ThemedSelect theme={theme} multiple value={config?.ignoredRoles || []} onChange={(event) => setConfig({ ...config, ignoredRoles: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 140 }}>
               {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-            </select>
+            </ThemedSelect>
           </label>
           <div><PrimaryButton onClick={saveTrackingFilters} disabled={busy}>Save Filters</PrimaryButton></div>
         </div>
