@@ -91,10 +91,10 @@ const methodValue=(c,[section,group,k])=>group?c[section]?.[group]?.[k]:c[sectio
 function methodSettingsPage(g,user,key){
  const method=SECURITY.find(([k])=>k===key);if(!method)throw new Error('Unknown security method.');
  const c=settings(g.id),s=c.security,fields=METHOD_NUMBERS[key]||[],flags=METHOD_TOGGLES[key]||[],components=[];
- const embed=emb('🛡️ Verification · '+method[1],[SECURITY_HELP[key]],user).addFields({name:'1 · Current status',value:(s[key]?'🟢 Enabled':'🔴 Disabled')+'\nChange enabled checks using the Security Checks menu.'});
+ const embed=emb('🛡️ Verification · '+method[1],[SECURITY_HELP[key]],user).addFields({name:'1 · Current status',value:(s[key]?'🟢 Enabled':'🔴 Disabled')+'\nRequired in flow: '+((c.flow?.orderedSecurity||[]).includes(FLOW_KEYS[key])?'Yes':'No')});
  if(fields.length)embed.addFields({name:'2 · Method limits',value:fields.map(([group,k,label])=>'**'+label+':** '+(group?s[group][k]:s[k])).join('\n')});
  if(flags.length)embed.addFields({name:'Options',value:flags.map(f=>(methodValue(c,f)===true?'🟢':'🔴')+' '+f[3]).join('\n')});
- const controls=[...(fields.length?[button('admin:verification:editMethodLimits:'+key,'⚙️ Edit Limits',ButtonStyle.Primary)]:[]),...flags.map((f,n)=>toggle('admin:verification:methodToggle:'+key+':'+n,f[3],methodValue(c,f)===true))];
+ const controls=[toggle('admin:verification:methodEnabled:'+key,method[1],s[key]===true),...(fields.length?[button('admin:verification:editMethodLimits:'+key,'⚙️ Edit Limits',ButtonStyle.Primary)]:[]),...flags.map((f,n)=>toggle('admin:verification:methodToggle:'+key+':'+n,f[3],methodValue(c,f)===true))];
  if(controls.length)components.push(row(...controls));
  if(['captcha','minigame'].includes(key)){
  const config=s[key+'Config'];embed.addFields({name:'Difficulty',value:title(config.difficulty||'normal')});
@@ -227,6 +227,12 @@ async function handleVerificationAdminInteraction(i){const id=String(i.customId|
  await respond(i,{embeds:[embed],components:[row(button('admin:verification:applyProtectionPreset:'+key,'✅ Apply Preset',ButtonStyle.Success),button('admin:verification:page:security','✖️ Cancel',ButtonStyle.Secondary)),finalNav('security')]});return true;
  }
  if(id.startsWith('admin:verification:applyProtectionPreset:')){const key=id.split(':').at(-1),methods=PROTECTION_PRESETS[key];if(!Array.isArray(methods))throw new Error('Unknown preset.');const c=settings(i.guildId),security={...c.security};for(const [k] of SECURITY)security[k]=methods.includes(k);const monitoring=key!=='basic';save(i.guildId,{security,flow:{...c.flow,orderedSecurity:methods.map(k=>FLOW_KEYS[k]),failClosed:true,resetActiveSessionOnLeave:true,retainSecurityHistory:true},intelligence:{...c.intelligence,enabled:monitoring,initialScan:true,continuousScan:monitoring,logFlags:true,logErrors:true,logSuccessfulScans:false}},i.user.id);await respond(i,securityPage(i.guild,user));return true;}
+ if(id.startsWith('admin:verification:methodEnabled:')){
+ const key=id.split(':').pop();if(!SECURITY.some(([k])=>k===key))throw new Error('Unknown security method.');
+ const c=settings(i.guildId),security={...c.security};
+ if(security[key]===true&&(c.flow?.orderedSecurity||[]).includes(FLOW_KEYS[key]))throw new Error('This check is required in Advanced Protection. Remove it from required checks before disabling it.');
+ security[key]=security[key]!==true;save(i.guildId,{security},i.user.id);await respond(i,methodSettingsPage(i.guild,user,key));return true;
+ }
  if(id.startsWith('admin:verification:methodToggle:')){
  const [, , ,key,n]=id.split(':'),f=METHOD_TOGGLES[key]?.[Number(n)];if(!f)throw new Error('Unknown method option.');
  const [section,group,k]=f,c=settings(i.guildId),next={...c[section]},value=methodValue(c,f)!==true;
