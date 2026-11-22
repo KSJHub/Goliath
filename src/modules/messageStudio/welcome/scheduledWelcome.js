@@ -72,7 +72,7 @@ function normalizeScheduledConfig(value = {}) {
     ...clone(source),
     enabled: source.enabled === true,
     queueRoleId: queue.cleanId(source.queueRoleId),
-    pendingMembers: Object.fromEntries(Object.entries(source.pendingMembers && typeof source.pendingMembers === 'object' && !Array.isArray(source.pendingMembers) ? source.pendingMembers : {}).filter(([id]) => queue.cleanId(id)).map(([id, entry]) => [id, { joinedAt: typeof entry?.joinedAt === 'string' ? entry.joinedAt : null, queuedAt: typeof entry?.queuedAt === 'string' ? entry.queuedAt : now() }])),
+    pendingMembers: Object.fromEntries(Object.entries(source.pendingMembers && typeof source.pendingMembers === 'object' && !Array.isArray(source.pendingMembers) ? source.pendingMembers : {}).filter(([id]) => queue.cleanId(id)).map(([id, entry]) => [id, { joinedAt: typeof entry?.joinedAt === 'string' ? entry.joinedAt : null, queuedAt: typeof entry?.queuedAt === 'string' ? entry.queuedAt : now(), panelSentAt: typeof entry?.panelSentAt === 'string' ? entry.panelSentAt : null, panelMessageId: queue.cleanId(entry?.panelMessageId) }])),
     channelId: queue.cleanId(source.channelId),
     time: cleanTime(source.time),
     timezone: cleanTimezone(source.timezone),
@@ -274,10 +274,34 @@ async function executeScheduledWelcome(guild, options = {}) {
     let checkpointSaved = false;
     try {
       const built = await messages.buildTemplateBatchPayload(guild, batch, config);
-      const payload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, built, 'welcome');
-      await channel.send(payload);
+      const panelPayload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, built.panelPayload, 'welcome');
+      const currentConfig = getScheduledConfig(guild.id);
+      const panelAlreadySent = batch.every((member) => {
+        const entry = currentConfig.pendingMembers[member.id];
+        return entry && entry.joinedAt === (member.joinedAt?.toISOString?.() || null) && entry.panelSentAt;
+      });
+      if (!panelAlreadySent) {
+        const panelMessage = await channel.send(panelPayload);
+        messagesSent += 1;
+        // Save the panel checkpoint before sending the ping message. If the
+        // mention send fails, a retry sends only the missing mention line.
+        const checkpoint = getScheduledConfig(guild.id);
+        const pendingMembers = { ...checkpoint.pendingMembers };
+        for (const member of batch) {
+          const entry = pendingMembers[member.id];
+          const joinedAt = member.joinedAt?.toISOString?.() || null;
+          if (entry && entry.joinedAt === joinedAt) {
+            pendingMembers[member.id] = { ...entry, panelSentAt: now(), panelMessageId: queue.cleanId(panelMessage?.id) };
+          }
+        }
+        updateScheduledConfig(guild.id, { pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_panel_checkpoint' });
+      }
+      const mentionPayload = built.mentionsPayload;
+      if (mentionPayload.content) {
+        await channel.send(mentionPayload);
+        messagesSent += 1;
+      }
       delivered = true;
-      messagesSent += 1;
       welcomed += batch.length;
       // Persist successful delivery before attempting role cleanup. A role
       // removal failure must never make an already-sent welcome eligible again.
@@ -287,13 +311,10 @@ async function executeScheduledWelcome(guild, options = {}) {
       for (const member of batch) {
         const queuedJoin = pendingMembers[member.id]?.joinedAt;
         const deliveredJoin = member.joinedAt?.toISOString?.() || null;
-        // Do not erase a fresh queue entry created by a rejoin while this batch was sending.
         if (!queuedJoin || queuedJoin === deliveredJoin) {
           delete pendingMembers[member.id];
           completed.add(member.id);
-        }
-        // A newer join remains eligible even if the older batch just sent.
-        else completed.delete(member.id);
+        } else completed.delete(member.id);
       }
       const completedMemberJoins = { ...checkpoint.completedMemberJoins };
       for (const member of batch) {
@@ -306,7 +327,6 @@ async function executeScheduledWelcome(guild, options = {}) {
       if (config.queueRoleId && config.removeQueueRole) {
         for (const member of batch) {
           const currentMember = await guild.members.fetch({ user: member.id, force: true }).catch(() => null);
-          // The member could have left and rejoined while the message was sending.
           if (!currentMember || !member.joinedAt?.toISOString?.() || currentMember.joinedAt?.toISOString?.() !== member.joinedAt.toISOString()) continue;
           const removal = await queue.removeQueueRole(currentMember, config.queueRoleId);
           if (!removal.removed && !removal.skipped) {
