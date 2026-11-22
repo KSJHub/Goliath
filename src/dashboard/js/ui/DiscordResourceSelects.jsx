@@ -1,3 +1,4 @@
+import { createTheme } from './theme.js';
 import { createPortal } from 'react-dom';
 import React, { useEffect, useId, useRef, useState } from 'react';
 
@@ -6,7 +7,7 @@ function getResourceLabel(item, fallback = 'Unnamed') {
 }
 
 
-function SearchableResourceSelect({ theme, label, value, onChange, resources = [], placeholder = 'Choose an option', disabled = false, clearable = true }) {
+function SearchableResourceSelect({ theme = createTheme(), label, ariaLabel, value, onChange, resources = [], placeholder = 'Choose an option', disabled = false, clearable = true }) {
   const id = useId();
   const popup = useRef(null);
   const [placement, setPlacement] = useState({ top: 0, left: 0, width: 0, height: 340 });
@@ -49,7 +50,7 @@ function SearchableResourceSelect({ theme, label, value, onChange, resources = [
   const surface = theme.menuBg || theme.dropdownBg || theme.cardBgSolid || theme.cardBg;
   return <div ref={root} style={{ position: 'relative', minWidth: 0 }}>
     {label ? <span id={id + '-label'} style={{ display: 'block', marginBottom: 8, color: theme.textSoft || theme.cardText, fontSize: 13, fontWeight: 600 }}>{label}</span> : null}
-    <button ref={trigger} type="button" disabled={disabled} aria-labelledby={label ? id + '-label ' + id + '-value' : id + '-value'} aria-haspopup="listbox" aria-expanded={open} aria-controls={id + '-list'}
+    <button ref={trigger} type="button" disabled={disabled} aria-label={ariaLabel} aria-labelledby={!ariaLabel && label ? id + '-label ' + id + '-value' : ariaLabel ? undefined : id + '-value'} aria-haspopup="listbox" aria-expanded={open} aria-controls={id + '-list'}
       onClick={() => { setOpen(!open); setQuery(''); setActive(Math.max(0, resources.findIndex(item => item.id === value) + (clearable ? 1 : 0))); }}
       onKeyDown={event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setOpen(true); setActive(Math.max(0, resources.findIndex(item => item.id === value) + (clearable ? 1 : 0))); } }}
       style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', width: '100%', boxSizing: 'border-box', textAlign: 'left', border: '1px solid ' + (open ? theme.primary : theme.inputBorder || theme.cardBorder), background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, borderRadius: 12, padding: '13px 16px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1, font: 'inherit' }}>
@@ -58,10 +59,10 @@ function SearchableResourceSelect({ theme, label, value, onChange, resources = [
     </button>
     {open ? createPortal(<div ref={popup} style={{ position: 'fixed', top: placement.top, left: placement.left, width: placement.width, zIndex: 1000, background: surface, border: '1px solid ' + (theme.menuBorder || theme.cardBorder), borderRadius: 14, boxShadow: theme.shadow, overflow: 'hidden' }}>
       <div style={{ padding: 10, borderBottom: '1px solid ' + theme.cardBorder }}>
-        <input ref={search} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={keys} role="combobox" aria-label={'Search ' + label} aria-expanded="true" aria-controls={id + '-list'} aria-autocomplete="list" aria-activedescendant={choices.length ? id + '-option-' + Math.min(active, choices.length - 1) : undefined} placeholder="Search by name or category…"
+        <input ref={search} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={keys} role="combobox" aria-label={'Search ' + (ariaLabel || label || 'options')} aria-expanded="true" aria-controls={id + '-list'} aria-autocomplete="list" aria-activedescendant={choices.length ? id + '-option-' + Math.min(active, choices.length - 1) : undefined} placeholder="Search by name or category…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: '1px solid ' + (theme.inputBorder || theme.cardBorder), background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, font: 'inherit', fontSize: 14 }} />
       </div>
-      <div ref={options} id={id + '-list'} role="listbox" aria-label={label || 'Options'} style={{ maxHeight: placement.height - 66, overflowY: 'auto', overscrollBehavior: 'contain', padding: 6 }}>
+      <div ref={options} id={id + '-list'} role="listbox" aria-label={ariaLabel || label || 'Options'} style={{ maxHeight: placement.height - 66, overflowY: 'auto', overscrollBehavior: 'contain', padding: 6 }}>
         {choices.map((item, index) => <React.Fragment key={item.id}>
           {item.groupName && item.groupId !== choices[index - 1]?.groupId ? <div role="presentation" style={{ padding: '12px 10px 6px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.mutedText }}>{item.groupName}</div> : null}
           <div id={id + '-option-' + index} role="option" aria-disabled={Boolean(item.disabled)} aria-selected={(value || '') === item.id} data-active={active === index} onMouseEnter={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(item)}
@@ -107,14 +108,15 @@ export function EmojiSelect(props) {
 export default DiscordResourceSelect;
 
  // Adapter for existing single-value JSX selects, preserving their change handlers.
-export function ThemedSelect({ theme, children, value, onChange, disabled, multiple = false, size, 'aria-label': label, style }) {
-  const collect = (nodes, groupName) => React.Children.toArray(nodes).flatMap(node => {
+export function ThemedSelect({ theme: suppliedTheme, children, value, onChange, disabled, multiple = false, size, 'aria-label': label, style }) {
+  const theme = suppliedTheme || createTheme();
+  const collect = (nodes, groupName, groupDisabled = false) => React.Children.toArray(nodes).flatMap(node => {
     if (!React.isValidElement(node)) return [];
-    if (node.type === React.Fragment) return collect(node.props.children, groupName);
-    if (node.type === 'optgroup') return collect(node.props.children, node.props.label);
+    if (node.type === React.Fragment) return collect(node.props.children, groupName, groupDisabled);
+    if (node.type === 'optgroup') return collect(node.props.children, node.props.label, groupDisabled || node.props.disabled);
     if (node.type !== 'option') return [];
     const name = React.Children.toArray(node.props.children).join('');
-    return [{ id: String(node.props.value ?? name), name, disabled: node.props.disabled, groupName, groupId: groupName }];
+    return [{ id: String(node.props.value ?? name), name, disabled: groupDisabled || node.props.disabled, groupName, groupId: groupName }];
   });
   const resources = collect(children);
   if (multiple) {
@@ -123,8 +125,8 @@ export function ThemedSelect({ theme, children, value, onChange, disabled, multi
       {resources.map(item => <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, color: theme.inputText, background: selected.has(item.id) ? theme.primarySoft : 'transparent', opacity: disabled || item.disabled ? 0.5 : 1 }}><input type="checkbox" checked={selected.has(item.id)} disabled={disabled || item.disabled} onChange={event => { const next = new Set(selected); if (event.target.checked) next.add(item.id); else next.delete(item.id); const selectedOptions = resources.filter(option => next.has(option.id)).map(option => ({ value: option.id })); onChange?.({ target: { selectedOptions, value: selectedOptions[0]?.value || '' } }); }} />{item.name}</label>)}
     </div>;
   }
-  return <div style={{ flex: style?.flex, width: style?.width, minWidth: style?.minWidth ?? 0 }}>
-    <SearchableResourceSelect theme={theme} label={label} resources={resources} value={String(value ?? '')} disabled={disabled} clearable={false}
+  return <div style={{ flex: style?.flex, width: style?.width, maxWidth: style?.maxWidth, marginLeft: style?.marginLeft, minWidth: style?.minWidth ?? 0 }}>
+    <SearchableResourceSelect theme={theme} ariaLabel={label} resources={resources} value={String(value ?? '')} disabled={disabled} clearable={false}
       onChange={next => onChange?.({ target: { value: next }, currentTarget: { value: next } })} />
   </div>;
 }
