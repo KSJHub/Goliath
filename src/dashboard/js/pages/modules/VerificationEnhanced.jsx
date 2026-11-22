@@ -472,6 +472,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           <ChannelSelect theme={theme} resources={channels} value={advanced?.threadLogging?.channelId || ''} onChange={value => setAdvancedPath('threadLogging.channelId',value || null)} label="Staff-only thread channel" />
           <Toggle theme={theme} label="Archive on success" checked={advanced?.threadLogging?.archiveOnSuccess !== false} onChange={value => setAdvancedPath('threadLogging.archiveOnSuccess',value)} />
           <Toggle theme={theme} label="Lock on success" checked={advanced?.threadLogging?.lockOnSuccess === true} onChange={value => setAdvancedPath('threadLogging.lockOnSuccess',value)} />
+          <Toggle theme={theme} label="Archive on terminal failure" checked={advanced?.threadLogging?.archiveOnFailure === true} onChange={value => setAdvancedPath('threadLogging.archiveOnFailure',value)} />
+          <Toggle theme={theme} label="Archive on quarantine" checked={advanced?.threadLogging?.archiveOnQuarantine === true} onChange={value => setAdvancedPath('threadLogging.archiveOnQuarantine',value)} />
         </div>
         <div style={{ color: theme.mutedText }}>Example: Verification • {advanced?.threadLogging?.naming === 'id' ? '123456789012345678' : advanced?.threadLogging?.naming === 'username' ? 'member' : 'member • 123456789012345678'}<br/>Screening Complete → Pending → Security Checks → Success → Roles Confirmed.<br/>Archived threads are not deleted. Failed and quarantined cases remain accessible in thread history.</div>
         <button type="button" disabled={!!busy} onClick={saveAdvanced} style={buttonStyle(theme,'primary')}>Save verification settings</button>
