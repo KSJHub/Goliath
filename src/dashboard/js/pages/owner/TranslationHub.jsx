@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -179,7 +180,7 @@ export default function TranslationHub({ theme }) {
             </p>
           </div>
 
-          <select
+          <ThemedSelect theme={theme}
             value={selectedGuild || ''}
             onChange={(event) => setSelectedGuild(event.target.value)}
             style={{ minWidth: 240, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.36)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 850 }}
@@ -187,7 +188,7 @@ export default function TranslationHub({ theme }) {
             {guilds.map((guild) => (
               <option key={getGuildId(guild)} value={getGuildId(guild)}>{getGuildName(guild)}</option>
             ))}
-          </select>
+          </ThemedSelect>
         </div>
       </section>
 
