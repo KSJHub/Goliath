@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -553,10 +554,10 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <div><h2 style={{ margin: 0 }}>Panel Builder</h2><p style={{ color: theme.mutedText }}>Create a new panel or select an existing panel to edit and redeploy it.</p></div>
         <label style={{ display: 'grid', gap: 8 }}>
           <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>SAVED PANEL</span>
-          <select value={selectedPanelId} onChange={(event) => selectPanel(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
+          <ThemedSelect theme={theme} value={selectedPanelId} onChange={(event) => selectPanel(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
             <option value="">Create new panel</option>
             {panels.map((panel) => <option key={panel.panelId || panel.id} value={panel.panelId || panel.id}>{panel.title || panel.panelId || panel.id}</option>)}
-          </select>
+          </ThemedSelect>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,240px),1fr))', gap: 14 }}>
           <ChannelSelect theme={theme} resources={channels} value={draft.channelId} onChange={(value) => { panelDraftDirty.current = true; setDraft((current) => ({ ...current, channelId: value })); }} label="Deploy Channel" />
@@ -574,9 +575,9 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <Field theme={theme} label="Description" value={draft.description} onChange={(value) => setDraft((current) => ({ ...current, description: value }))} multiline />
         <label style={{ display: 'grid', gap: 8, maxWidth: 320 }}>
           <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>BUTTON STYLE</span>
-          <select value={draft.buttonStyle} onChange={(event) => setDraft((current) => ({ ...current, buttonStyle: event.target.value }))} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
+          <ThemedSelect theme={theme} value={draft.buttonStyle} onChange={(event) => setDraft((current) => ({ ...current, buttonStyle: event.target.value }))} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
             <option value="success">Success</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="danger">Danger</option>
-          </select>
+          </ThemedSelect>
         </label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" disabled={Boolean(busy)} onClick={() => { panelDraftDirty.current = true; setDraft((current) => ({ ...DEFAULT_PANEL_DRAFT, channelId: current.channelId })); setNotice('Default design loaded into the editor. Review it, then redeploy to apply changes in Discord.'); setError(''); }} style={buttonStyle(theme, 'secondary')}>Load Default Design</button>
