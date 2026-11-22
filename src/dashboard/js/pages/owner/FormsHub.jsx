@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React from 'react';
 
 import useOwnerGuilds from '../../hooks/useOwnerGuilds.js';
@@ -452,7 +453,7 @@ export default function FormsHub({ theme }) {
           <div style={{ color: theme.mutedText, marginTop: 4 }}>{selectedGuildName}</div>
         </div>
 
-        <select
+        <ThemedSelect theme={theme}
           value={selectedGuild}
           onChange={(event) => setSelectedGuild(event.target.value)}
           disabled={loading || guilds.length === 0}
@@ -461,7 +462,7 @@ export default function FormsHub({ theme }) {
           {guilds.map((guild) => (
             <option key={getGuildId(guild)} value={getGuildId(guild)}>{getGuildName(guild)}</option>
           ))}
-        </select>
+        </ThemedSelect>
       </section>
 
       <section style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
