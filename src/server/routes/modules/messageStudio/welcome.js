@@ -66,6 +66,31 @@ router.post('/:guildId/custom-message', async (req, res) => {
   } catch (error) { return failure(res, error, 400); }
 });
 
+router.post('/:guildId/normal-presets', async (req,res) => {
+  try {
+    const guildId=getGuildId(req), {scope,action,id,name,content}=req.body||{};
+    if(!['public','dm','scheduled'].includes(scope))throw new Error('Invalid preset workspace.');
+    const limit=scope==='scheduled'?1800:2000;
+    const validate=(value,max,label)=>{if(typeof value!=='string'||!value.trim()||value.length>max)throw new Error('Invalid '+label);return value.trim();};
+    const meta={actorId:getActorId(req),action:'welcome_normal_preset'};
+    welcome.updateWelcomeSection(guildId, section=>{
+      const all={...section.normalPresets?.[scope]}, current=Object.hasOwn(all,id)?all[id]:null;
+      if(!['saveAs','import'].includes(action)&&!current)throw new Error('Preset no longer exists.');
+      const unique=(label,except)=>{if(Object.entries(all).some(([key,v])=>key!==except&&v.name.toLowerCase()===label.toLowerCase()))throw new Error('Preset name already exists.');return label;};
+      let defaults=section.normalDefaults;
+      if(action==='saveAs'||action==='duplicate'){const label=unique(validate(name,80,'preset name'));all[require('node:crypto').randomUUID()]={name:label,content:validate(action==='duplicate'?current.content:content,limit,'message')};}
+      else if(action==='save')all[id]={...current,content:validate(content,limit,'message')};
+      else if(action==='rename')all[id]={...current,name:unique(validate(name,80,'preset name'),id)};
+      else if(action==='delete')delete all[id];
+      else if(action==='default')defaults={...defaults,[scope]:current.content};
+      else if(action==='import'){const data=req.body.data;if(data?.version!==1||data.scope!==scope||!Array.isArray(data.presets)||data.presets.length>100)throw new Error('Invalid preset export.');for(const v of data.presets){const label=unique(validate(v?.name,80,'preset name'));all[require('node:crypto').randomUUID()]={name:label,content:validate(v?.content,limit,'message')};}}
+      else throw new Error('Invalid preset action.');
+      return {...section,normalPresets:{...section.normalPresets,[scope]:all},normalDefaults:defaults};
+    },meta);
+    return success(res,{config:canonicalConfig(guildId)});
+  }catch(error){return failure(res,error,400);}
+});
+
 router.post('/:guildId/repair', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); await welcome.repairConfiguration(guild, { actorId: getActorId(req) }); await scheduledWelcomeHealth.repair(guild, { actorId: getActorId(req) }); return success(res, await buildOverview(req, guildId)); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/preview', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); const member = await getPreviewMember(req, guild); const config = welcome.getWelcomeSection(guildId); const publicPayload = await welcome.buildDiscordPayload(member, 'welcome', config, { suppressPing: true }); const dmPayload = config.dmEnabled ? await welcome.buildDiscordPayload(member, 'dmWelcome', config, { suppressPing: true, includeComponents: false }) : null; return success(res, { preview: { public: serializePreviewPayload(publicPayload), dm: dmPayload ? serializePreviewPayload(dmPayload) : null } }); } catch (error) { return failure(res, error, 400); } });
 // Test-only guard shared by all dashboard sessions in this server process.
