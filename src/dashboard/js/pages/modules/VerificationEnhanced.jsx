@@ -500,6 +500,19 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           <NumberSetting theme={theme} label="Staff approval timeout (minutes)" value={readPath(advanced, 'security.staffApprovalConfig.timeoutMinutes')} min={1} onChange={(v) => setAdvancedPath('security.staffApprovalConfig.timeoutMinutes', v)} />
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          {[
+            ['CAPTCHA difficulty','security.captchaConfig.difficulty'],
+            ['Mini-game difficulty','security.minigameConfig.difficulty']
+          ].map(([label,key]) => <label key={key}>{label}<select value={readPath(advanced,key)||'normal'} onChange={(e)=>setAdvancedPath(key,e.target.value)}>{['easy','normal','hard'].map(v=><option key={v} value={v}>{v}</option>)}</select></label>)}
+          <Toggle theme={theme} label="Regenerate CAPTCHA on failure" checked={readPath(advanced,'security.captchaConfig.regenerateOnFailure')} onChange={(v)=>setAdvancedPath('security.captchaConfig.regenerateOnFailure',v)} />
+          <NumberSetting theme={theme} label="One-time challenge attempts" value={readPath(advanced,'security.oneTimeChallengeConfig.maxChallengeAttempts')} min={1} max={20} onChange={(v)=>setAdvancedPath('security.oneTimeChallengeConfig.maxChallengeAttempts',v)} />
+          <NumberSetting theme={theme} label="Rejoin history lookback (days)" value={readPath(advanced,'security.rejoinConfig.lookbackDays')} min={1} max={3650} onChange={(v)=>setAdvancedPath('security.rejoinConfig.lookbackDays',v)} />
+          <NumberSetting theme={theme} label="Rejoin failures before escalation" value={readPath(advanced,'security.rejoinConfig.elevateAfterFailures')} min={1} max={1000} onChange={(v)=>setAdvancedPath('security.rejoinConfig.elevateAfterFailures',v)} />
+          {[
+            ['Enabled mini-games','security.minigameConfig.enabledGames',['target_match','memory_match','sequence','pattern_match','reaction','odd_one_out','order']],
+            ['Medium risk extra checks','security.riskConfig.mediumExtraSecurity',['simple','captcha','minigame','account_age','discord_screening','bot_protection','staff_approval','one_time_challenge','rejoin_history']],
+            ['High risk extra checks','security.riskConfig.highExtraSecurity',['simple','captcha','minigame','account_age','discord_screening','bot_protection','staff_approval','one_time_challenge','rejoin_history']]
+          ].map(([label,key,options])=><fieldset key={key}><legend>{label}</legend>{options.map(v=><Toggle key={v} theme={theme} label={v.replaceAll('_',' ')} checked={(readPath(advanced,key)||[]).includes(v)} onChange={checked=>{const current=readPath(advanced,key)||[];const next=checked?[...new Set([...current,v])]:current.filter(x=>x!==v);if(key!=='security.minigameConfig.enabledGames'||next.length)setAdvancedPath(key,next);}} />)}</fieldset>)}
           <Toggle theme={theme} label="Random mini-games" checked={readPath(advanced, 'security.minigameConfig.random')} onChange={(v) => setAdvancedPath('security.minigameConfig.random', v)} />
           <Toggle theme={theme} label="Quarantine after failed attempts" checked={readPath(advanced, 'security.quarantineOnLimit')} onChange={(v) => setAdvancedPath('security.quarantineOnLimit', v)} />
           <Toggle theme={theme} label="Enable verification flow" checked={readPath(advanced, 'flow.enabled')} onChange={(v) => setAdvancedPath('flow.enabled', v)} />
