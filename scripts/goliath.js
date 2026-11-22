@@ -2777,7 +2777,7 @@ function welcomeEmbedDeliveryAudit() {
     const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
     const queueProbe = spawnSync(process.execPath, ['-e', `
       const assert = require('node:assert/strict');
-      const queue = require('./src/modules/messageStudio/welcome/scheduledWelcomeQueue');
+      const queue = require('../src/modules/messageStudio/welcome/scheduledWelcomeQueue');
       const id = '123456789012345678';
       const config = { pendingMembers: { [id]: {} } };
       (async () => {
