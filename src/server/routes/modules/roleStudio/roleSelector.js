@@ -135,10 +135,12 @@ router.post('/:guildId/groups', async (req, res) => {
     const id = guildId(req); const body = req.body || {};
     if (String(body.id || '').toLowerCase() === roleSelector.COLOUR_GROUP_ID || body.type === 'colour') throw new Error('Use the Colours settings endpoint for the built-in Colours selector.');
     const g = await guild(req, id);
+    if (!g) throw new Error('Guild is unavailable for selector validation. Retry when connected.');
     const options = await validateExistingRoles(g, body.options || []);
     const input = { ...body, options, selectionMode: body.selectionMode === 'multiple' ? 'multiple' : 'single', allowRemove: body.allowRemove !== false, builtIn: false, type: 'standard' };
     const meta = { actorId: actorId(req), action: 'role_selector_dashboard_save_group' };
-    const group = g ? await roleSelector.saveGroupSafe(g, input, meta) : roleSelector.saveGroup(id, input, meta);
+    const group = await roleSelector.saveGroupSafe(g, input, meta);
+    await panel.syncDeploymentState(g);
     return success(res, { group, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
 });
@@ -150,6 +152,7 @@ router.delete('/:guildId/groups/:groupId', async (req, res) => {
     const result = await roleSelector.deleteManagedGroupRoles(g, req.params.groupId);
     if (result.unresolved) return res.status(409).json({ success: false, error: 'Group was not deleted because one or more Goliath-managed roles could not be removed.', unresolved: result.unresolved, unresolvedRoles: result.unresolvedRoles, deletedRoles: result.deleted });
     roleSelector.removeGroup(id, req.params.groupId, { actorId: actorId(req), action: 'role_selector_dashboard_delete_group' });
+    await panel.syncDeploymentState(g);
     return success(res, { deletion: result, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
 });
@@ -159,7 +162,9 @@ router.put('/:guildId/colours', async (req, res) => {
     const id = guildId(req); const current = roleSelector.getGroup(id, roleSelector.COLOUR_GROUP_ID); const patch = req.body || {}; const g = await guild(req, id);
     const input = { ...current, ...(Array.isArray(patch.palette) ? { palette: patch.palette } : {}), ...(patch.customHexEnabled === undefined ? {} : { customHexEnabled: patch.customHexEnabled === true }), ...(patch.allowRemove === undefined ? {} : { allowRemove: patch.allowRemove !== false }) };
     const meta = { actorId: actorId(req), action: 'role_selector_dashboard_colours' };
-    if (g) await roleSelector.saveGroupSafe(g, input, meta); else roleSelector.saveGroup(id, input, meta);
+    if (!g) throw new Error('Guild is unavailable for Colours validation. Retry when connected.');
+    await roleSelector.saveGroupSafe(g, input, meta);
+    await panel.syncDeploymentState(g);
     return success(res, await overview(req, id));
   } catch (error) { return failure(res, error); }
 });
