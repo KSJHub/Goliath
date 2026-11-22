@@ -226,7 +226,8 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
     if (a.thumbnail) embed.setThumbnail(a.thumbnail);
   }
   if (group.type === 'colour') {
-    const opts = group.palette.filter((x) => x.enabled).sort((a, b) => a.order - b.order).slice(0, 25).map((x) => ({
+    const colourFilter = optionFilterFor(deployment, group.id);
+    const opts = group.palette.filter((x) => x.enabled && (!colourFilter || colourFilter.has(x.id))).sort((a, b) => a.order - b.order).slice(0, 25).map((x) => ({
       label: x.label,
       value: x.hex,
       emoji: x.emoji || undefined,
@@ -550,8 +551,8 @@ async function buildDeploymentsPanel(i, selectedId = null) {
 }
 
 function deploymentGroupFilterMenu(guildId, deployment, selectedGroupId = null) {
-  const included = deployment.groupIds.map((id) => roleSelector.getGroup(guildId, id)).filter((g) => g && g.type !== 'colour' && (g.options || []).some((x) => x.enabled)).slice(0, 25);
-  const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:deploymentContentGroup', deployment.id)).setPlaceholder('Choose a group to limit roles').setMinValues(1).setMaxValues(1);
+  const included = deployment.groupIds.map((id) => roleSelector.getGroup(guildId, id)).filter((g) => g && (g.type === 'colour' ? g.palette : g.options || []).some((x) => x.enabled)).slice(0, 25);
+  const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:deploymentContentGroup', deployment.id)).setPlaceholder('Choose a group to limit options').setMinValues(1).setMaxValues(1);
   if (!included.length) return row(menu.setDisabled(true).addOptions({ label: 'No role groups selected', value: '__none__' }));
   menu.addOptions(included.map((g) => ({
     label: `${g.emoji || EMOJIS.ROLE_TAG} ${g.name}`.slice(0, 100),
@@ -564,10 +565,10 @@ function deploymentGroupFilterMenu(guildId, deployment, selectedGroupId = null) 
 
 function deploymentOptionMenu(guildId, deployment, groupId) {
   const group = roleSelector.getGroup(guildId, groupId);
-  const options = (group?.options || []).filter((x) => x.enabled).slice(0, 25);
+  const options = (group?.type === 'colour' ? group.palette : group?.options || []).filter((x) => x.enabled).slice(0, 25);
   const selected = deployment.optionIdsByGroup?.[groupId];
   const selectedSet = Array.isArray(selected) ? new Set(selected) : new Set(options.map((x) => x.id));
-  const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:deploymentOptions', deployment.id, groupId)).setPlaceholder('Choose roles shown on this panel').setMinValues(0).setMaxValues(Math.max(1, options.length));
+  const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:deploymentOptions', deployment.id, groupId)).setPlaceholder('Choose options shown on this panel').setMinValues(0).setMaxValues(Math.max(1, options.length));
   if (!options.length) return row(menu.setDisabled(true).addOptions({ label: 'No role options available', value: '__none__' }));
   menu.addOptions(options.map((x) => ({
     label: `${x.emoji || '•'} ${x.label}`.slice(0, 100), value: x.id,
@@ -588,7 +589,7 @@ async function buildDeploymentContentPanel(i, deploymentId, groupId = null) {
   return {
     content: null,
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Deployment Content')).setDescription([
-      'Select the groups shown on this panel. For a standard group, you can optionally limit the panel to specific role options.', '',
+      'Select the groups shown on this panel. For any group, you can optionally limit the panel to specific options.', '',
       `**Groups selected:** ${deployment.groupIds.length}`,
       roleLimitText.length ? `**Role filters:**\n${roleLimitText.join('\n')}` : '**Role filters:** All roles from each selected group',
       group ? `\nEditing roles for **${group.name}**.` : '',
@@ -615,7 +616,7 @@ async function deploySelected(i, deploymentId) {
       const group = roleSelector.getGroup(i.guildId, groupId);
       if (!group || !roleSelector.isGroupMemberUsable(group)) throw new Error('Remove unavailable selectors from this deployment before publishing.');
       const filter = optionFilterFor(deployment, groupId);
-      if (group.type !== 'colour' && filter && !group.options.some(o => o.enabled && filter.has(o.id))) throw new Error('Choose at least one enabled option for ' + group.name + '.');
+      if (filter && !(group.type === 'colour' ? group.palette : group.options).some(o => o.enabled && filter.has(o.id))) throw new Error('Choose at least one enabled option for ' + group.name + '.');
     }
     const channel = i.guild.channels.cache.get(deployment.channelId) || await i.guild.channels.fetch(deployment.channelId).catch(() => null);
     if (!channel?.send) throw new Error('Choose a sendable text channel.');
@@ -1196,7 +1197,11 @@ async function handleRoleSelectorInteraction(i) {
       const [deploymentId, groupId] = splitTail(id, 'admin:roleSelector:deploymentOptions');
       const list = deploymentList(roleSelector.getSection(i.guildId)); const index = list.findIndex((d) => d.id === deploymentId);
       if (index < 0 || !groupId) throw new Error('Choose a deployment group first.');
-      list[index] = { ...list[index], optionIdsByGroup: { ...list[index].optionIdsByGroup, [groupId]: [...new Set((i.values || []).filter((x) => x !== '__none__'))] } };
+      const group = roleSelector.getGroup(i.guildId,groupId);
+      const selected = [...new Set(i.values || [])];
+      const options = group?.type === 'colour' ? group.palette : group?.options || [];
+      if (!list[index].groupIds.includes(groupId) || !selected.length || selected.some(id=>!options.some(o=>o.enabled && o.id===id))) throw new Error('Choose at least one valid enabled option for this deployment.');
+      list[index] = { ...list[index], optionIdsByGroup: { ...list[index].optionIdsByGroup, [groupId]: selected } };
       saveDeployments(i.guildId, list, { ...actor, action: 'role_selector_deployment_options' });
       await syncOneDeployment(i.guild, list[index]).catch(() => null);
       return respond(i, await buildDeploymentContentPanel(i, deploymentId, groupId));
@@ -1295,6 +1300,9 @@ async function handleRoleSelectorInteraction(i) {
       const deployment = deploymentId !== 'global' ? deploymentById(i.guildId, deploymentId) : null;
       const allowed = deploymentAllowedGroups(i.guildId, deploymentId);
       if (allowed && !allowed.includes(roleSelector.COLOUR_GROUP_ID)) throw new Error('Colours are not available on this panel.');
+      const colourFilter = optionFilterFor(deployment, roleSelector.COLOUR_GROUP_ID);
+      const colourGroup = roleSelector.getGroup(i.guildId,roleSelector.COLOUR_GROUP_ID);
+      if (!colourGroup?.palette.some(o=>o.enabled && o.hex===i.values[0] && (!colourFilter || colourFilter.has(o.id)))) throw new Error('This colour is not available on this panel.');
       await roleSelector.applyColourSelection(i.guild, i.member, i.values[0]);
       await i.update(await resolvePayload(i.guild, memberGroupPayload(i.guild, await freshMember(i), roleSelector.COLOUR_GROUP_ID, deploymentAllowedGroups(i.guildId, deploymentId), deploymentId, deployment)));
       await syncStatsDeploymentState(i.guild).catch(() => null);
