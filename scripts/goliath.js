@@ -2777,7 +2777,7 @@ function welcomeEmbedDeliveryAudit() {
     const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
     const queueProbe = spawnSync(process.execPath, ['-e', `
       const assert = require('node:assert/strict');
-      const queue = require(${JSON.stringify(absolute('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js'))});
+      const queue = require(process.argv[1]);
       const id = '123456789012345678';
       const config = { pendingMembers: { [id]: {} } };
       (async () => {
@@ -2788,7 +2788,7 @@ function welcomeEmbedDeliveryAudit() {
         guild.members.fetch = async () => ({id,user:{bot:false}});
         assert.equal((await queue.getQueuedMembers(guild, config)).length, 1);
       })().catch(error => { console.error(error); process.exitCode = 1; });
-    `], {cwd: root, encoding: 'utf8', timeout: 15000});
+    `, absolute('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js')], {cwd: root, encoding: 'utf8', timeout: 15000});
     assert.equal(queueProbe.status, 0, queueProbe.stderr || queueProbe.error?.message || 'Scheduled queue lookup audit failed');
 
     const memberEvents = read('src/events/members/memberJoinLeave.js');
