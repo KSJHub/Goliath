@@ -14,7 +14,6 @@ async function refreshMembers(guild) {
 async function getQueuedMembers(guild, config = {}) {
   const roleId = cleanId(config.queueRoleId);
   if (!guild) return [];
-  await refreshMembers(guild);
   if (!roleId) {
     const entries = config.pendingMembers && typeof config.pendingMembers === 'object' ? config.pendingMembers : {};
     const members = [];
@@ -31,15 +30,22 @@ async function getQueuedMembers(guild, config = {}) {
     return members.sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
   }
   const role = guild.roles?.cache?.get(roleId) || await guild.roles?.fetch?.(roleId).catch(() => null);
-  if (!role) return [];
+  if (!role) throw new Error('Selected Scheduled Welcome queue role no longer exists.');
+  // Use the REST member list rather than relying on a gateway chunk or role cache.
+  // Page through all members; a failed lookup must not masquerade as an empty queue.
   const members = [];
-  for (const cachedMember of role.members.values()) {
-    // Role membership in the cache can be stale after a leave, rejoin or
-    // restart. Confirm both current membership and the role before delivery.
-    const member = await guild.members.fetch({ user: cachedMember.id, force: true }).catch(() => null);
-    if (!member?.roles?.cache?.has(roleId)) continue;
-    if (config.ignoreBots !== false && member.user?.bot) continue;
-    members.push(member);
+  let after;
+  for (;;) {
+    const page = await guild.members.list({ limit: 1000, ...(after ? { after } : {}) });
+    for (const member of page.values()) {
+      if (!member.roles?.cache?.has(roleId)) continue;
+      if (config.ignoreBots !== false && member.user?.bot) continue;
+      members.push(member);
+    }
+    if (page.size < 1000) break;
+    const next = page.reduce((max, member) => BigInt(member.id) > BigInt(max) ? member.id : max, '0');
+    if (next === after) throw new Error('Scheduled Welcome member pagination did not advance.');
+    after = next;
   }
   return members.sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
 }
