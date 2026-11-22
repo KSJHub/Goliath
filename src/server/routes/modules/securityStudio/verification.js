@@ -176,7 +176,7 @@ function saveConfig(guildId, input = {}, meta = {}) {
   // Merge nested configuration groups so partial dashboard updates cannot
   // silently reset unrelated security, flow, raid or logging settings.
   const merged = { ...current.settings, ...settingsInput, roles };
-  for (const key of ['security', 'flow', 'intelligence', 'logs', 'raid', 'quarantine', 'botPolicy', 'health']) {
+  for (const key of ['security', 'flow', 'intelligence', 'logs', 'threadLogging', 'raid', 'quarantine', 'botPolicy', 'health']) {
     if (settingsInput[key] && typeof settingsInput[key] === 'object' && !Array.isArray(settingsInput[key])) {
       merged[key] = { ...(current.settings[key] || {}), ...settingsInput[key] };
     }
@@ -265,9 +265,11 @@ router.get('/:guildId/export', (req, res) => {
   }
 });
 
-router.post('/:guildId/config', (req, res) => {
+router.post('/:guildId/config', async (req, res) => {
   try {
     const guildId = getGuildId(req);
+    const threadInput=(req.body?.settings || req.body)?.threadLogging;
+    if(threadInput?.channelId){const guild=await requireGuild(req,guildId);const channel=await guild.channels.fetch(cleanDiscordId(threadInput.channelId));if(!channel||channel.type!==0||channel.permissionsFor(guild.roles.everyone)?.has('ViewChannel')!==false)throw new Error('Select a staff-only text channel for verification threads.');}
     const config = saveConfig(
       guildId,
       req.body || {},
