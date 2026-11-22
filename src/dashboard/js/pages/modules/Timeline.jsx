@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { goDashboard } from '../../services/dashboardPath.js';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -103,8 +104,8 @@ export default function Timeline({ theme, selectedGuild, selectedGuildData }) {
 
       <section style={{ ...card(x), display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <select value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} style={field(x)}><option value="">All modules</option>{modules.map((module) => <option key={module} value={module}>{iconFor(module)} {label(module)}</option>)}</select>
-          <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} style={field(x)}><option value="">All severities</option>{SEVERITIES.map((severity) => <option key={severity} value={severity}>{label(severity)}</option>)}</select>
+          <ThemedSelect theme={x} value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} style={field(x)}><option value="">All modules</option>{modules.map((module) => <option key={module} value={module}>{iconFor(module)} {label(module)}</option>)}</ThemedSelect>
+          <ThemedSelect theme={x} value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} style={field(x)}><option value="">All severities</option>{SEVERITIES.map((severity) => <option key={severity} value={severity}>{label(severity)}</option>)}</ThemedSelect>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search timeline" style={{ ...field(x), minWidth: 220 }} />
           <button type="button" onClick={load} disabled={busy} style={button(x, busy)}>Refresh</button>
           <button type="button" onClick={createTest} disabled={busy} style={button(x, busy)}>Create test</button>
