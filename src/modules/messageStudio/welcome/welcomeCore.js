@@ -67,7 +67,7 @@ function getWelcomeTemplates(guildId) { return Object.values(embedTemplateManage
 function getWelcomeBinding(guildId, slot = 'welcome') { return embedTemplateManager.getBinding(guildId, MODULE, slot); }
 function bindWelcomeTemplate(guildId, templateId, slot = 'welcome', meta = {}) { const template = embedTemplateManager.getTemplate(guildId, templateId); if (!template) throw new Error('Template not found in Embed Studio.'); const binding = embedTemplateManager.bindTemplate(guildId, MODULE, slot, templateId); const patch = slot === 'dm_welcome' ? { dmTemplateId: binding.templateId, dmMessageSource: BUILT_IN_PRESET_IDS.has(binding.templateId) ? 'preset' : 'embedStudio' } : { templateId: binding.templateId, messageSource: BUILT_IN_PRESET_IDS.has(binding.templateId) ? 'preset' : 'embedStudio' }; const config = updateConfig(guildId, patch, { action: 'welcome_template_bind', ...meta }); return { binding, config }; }
 function clearDmTemplate(guildId, meta = {}) { embedTemplateManager.unbindTemplate(guildId, MODULE, 'dm_welcome'); return updateConfig(guildId, { dmTemplateId: null, dmMessageSource: 'inherit' }, { action: 'welcome_dm_template_clear', ...meta }); }
-function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId)) { const isDm = type === 'dmWelcome'; if (!isDm) return getWelcomeBinding(guildId, 'welcome') || embedTemplateManager.getTemplate(guildId, config.templateId); return getWelcomeBinding(guildId, 'dm_welcome') || (config.dmTemplateId ? embedTemplateManager.getTemplate(guildId, config.dmTemplateId) : null) || getWelcomeBinding(guildId, 'welcome') || embedTemplateManager.getTemplate(guildId, config.templateId); }
+function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId)) { const isDm = type === 'dmWelcome'; if (!isDm) return getWelcomeBinding(guildId, 'welcome') || embedTemplateManager.getTemplate(guildId, config.templateId); if (config.dmMessageSource === 'inherit') return getAssignedTemplate(guildId, 'welcome', config); return getWelcomeBinding(guildId, 'dm_welcome') || (config.dmTemplateId ? embedTemplateManager.getTemplate(guildId, config.dmTemplateId) : null) || getWelcomeBinding(guildId, 'welcome') || embedTemplateManager.getTemplate(guildId, config.templateId); }
 function templateToPreviewState(template = {}) { return templateToState(template); }
 function replaceTemplateText(text, variables, replacements = {}) { return guildVariables.replaceVariables(String(text || ''), { ...variables, ...replacements }); }
 function displayOnlyMentionState(state, variables) { const cleaned = clone(state); const replacements = { userMention: variables.userNoPing, usermention: variables.userNoPing, user: variables.userDisplay, welcomeRoles: variables.welcomeRolesNoPing, welcomeRoleMentions: variables.welcomeRolesNoPing }; cleaned.panels = cleaned.panels.map((panelData) => ({ ...panelData, title: replaceTemplateText(panelData.title, variables, replacements), description: replaceTemplateText(panelData.description, variables, replacements), authorName: replaceTemplateText(panelData.authorName, variables, replacements), footer: replaceTemplateText(panelData.footer, variables, replacements), fields: (panelData.fields || []).map((field) => ({ ...field, name: replaceTemplateText(field.name, variables, replacements), value: replaceTemplateText(field.value, variables, replacements) })) })); return cleaned; }
@@ -210,6 +210,10 @@ async function sendWelcome(member, options = {}) {
         return sendWelcome(currentMember, options);
       }
       return { publicSent: false, dmSent: false, skipped: true, reason: 'pending_screening', errors: [] };
+    }
+    if (!options.bypassVerificationGate) {
+      const latest = getWelcomeSection(member.guild.id);
+      if (latest.deferredWelcomes[member.id]?.joinedAt === joinedAt) return releaseDeferredWelcome(currentMember);
     }
     member = currentMember;
   }
