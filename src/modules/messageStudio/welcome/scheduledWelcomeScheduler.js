@@ -37,9 +37,10 @@ async function checkGuild(guild, date = new Date()) {
     return await scheduledWelcome.runScheduledWelcome(guild);
   } catch (error) {
     console.error(`[ScheduledWelcome] Run failed for ${guild.id}:`, error?.stack || error?.message || error);
+    const latest = scheduledWelcome.getScheduledConfig(guild.id);
     scheduledWelcome.updateScheduledConfig(guild.id, {
       analytics: {
-        ...config.analytics,
+        ...latest.analytics,
         lastRunAt: new Date().toISOString(),
         lastError: String(error?.message || error).slice(0, 500),
       },
@@ -61,7 +62,7 @@ async function checkAllGuilds(client, date = new Date()) {
 async function monitoredCheckAllGuilds(client, date = new Date()) {
   try {
     const results = await checkAllGuilds(client, date);
-    const failed = results.filter((entry) => entry.result?.failed).length;
+    const failed = results.filter(({ result }) => result?.failed || result?.sendFailed > 0 || result?.roleRemovalFailed > 0 || result?.errors?.length > 0).length;
     if (failed) {
       sentinelScheduler.fail(SCHEDULER_ID, new Error(`${failed} scheduled welcome guild run(s) failed.`), {
         guildsChecked: results.length,
