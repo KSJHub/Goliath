@@ -190,24 +190,50 @@ async function clearCompletedWithoutRole(guild, config) {
   return updateScheduledConfig(guild.id, { completedMemberIds: stillQueued }, { action: 'scheduled_welcome_completed_cleanup' });
 }
 
-async function getWaitingMembers(guild) {
+async function getQueueDiagnostics(guild) {
   const config = getScheduledConfig(guild.id);
-  // A removed queue role does not undo a successful welcome. Keep the
-  // delivery checkpoint even if that role is later added again; a genuinely
-  // new membership is handled by the joinedAt comparison below.
   const completed = new Set(config.completedMemberIds);
   const members = await queue.getQueuedMembers(guild, config);
-  // Scheduled delivery is independent of the queue mechanism, but members
-  // must complete Verification before being announced as joined.
   const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
   const verificationStore = verificationEnabled ? require('../../securityStudio/verification/verificationStore') : null;
-  return members.filter((member) => {
+  const waiting = [], excluded = [];
+  for (const member of members) {
     const joinedAt = member.joinedAt?.toISOString?.() || null;
     const deliveredJoin = config.completedMemberJoins?.[member.id];
-    return (!completed.has(member.id) || (joinedAt && deliveredJoin && deliveredJoin !== joinedAt))
-    && member.pending !== true
-    && (!verificationEnabled || verificationStore.getSession(guild.id, member.id)?.state === 'verified');
-  });
+    const reasons = [];
+    if (member.pending === true) reasons.push('Discord screening pending');
+    if (verificationEnabled && verificationStore.getSession(guild.id, member.id)?.state !== 'verified') reasons.push('Verification session not verified');
+    if (completed.has(member.id) && !(joinedAt && deliveredJoin && deliveredJoin !== joinedAt)) reasons.push('Already welcomed');
+    if (!reasons.length) waiting.push(member);
+    else excluded.push({ id: member.id, username: member.user?.username || member.id, displayName: member.displayName || member.id, reasons, canRequeue: reasons.length === 1 && reasons[0] === 'Already welcomed' });
+  }
+  return { waiting, excluded, candidateCount: members.length };
+}
+
+async function getWaitingMembers(guild) {
+  return (await getQueueDiagnostics(guild)).waiting;
+}
+
+async function requeueMember(guild, memberId, options = {}) {
+  if (!queue.cleanId(memberId)) throw new Error('Invalid member ID.');
+  if (activeRuns.has(guild.id)) throw new Error('Scheduled Welcome is already running.');
+  activeRuns.add(guild.id);
+  try {
+    const report = await getQueueDiagnostics(guild);
+    if (!report.excluded.some(entry => entry.id === memberId && entry.canRequeue)) throw new Error('Only previously welcomed, otherwise eligible members can be requeued.');
+    const member = await guild.members.fetch({ user: memberId, force: true });
+    const config = getScheduledConfig(guild.id);
+    if (config.queueRoleId && !member.roles.cache.has(config.queueRoleId)) throw new Error('Member no longer holds the selected queue role.');
+    const joinedAt = member.joinedAt?.toISOString?.() || null;
+    const completedMemberJoins = { ...config.completedMemberJoins };
+    delete completedMemberJoins[memberId];
+    updateScheduledConfig(guild.id, {
+      completedMemberIds: config.completedMemberIds.filter(id => id !== memberId),
+      completedMemberJoins,
+      pendingMembers: { ...config.pendingMembers, [memberId]: { joinedAt, queuedAt: now() } },
+    }, { actorId: options.actorId, action: 'scheduled_welcome_manual_requeue' });
+    return { requeued: true, memberId };
+  } finally { activeRuns.delete(guild.id); }
 }
 
 async function executeScheduledWelcome(guild, options = {}) {
@@ -387,5 +413,7 @@ module.exports = {
   zonedDateKey,
   resolveChannel,
   getWaitingMembers,
+  getQueueDiagnostics,
+  requeueMember,
   runScheduledWelcome,
 };
