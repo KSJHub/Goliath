@@ -22,6 +22,8 @@ function defaultAnalytics() {
     roleRemovalFailed: 0,
     lastRunAt: null,
     lastRunDate: null,
+    lastScheduledRunDate: null,
+    lastScheduledRunAt: null,
     lastError: null,
   };
 }
@@ -280,6 +282,7 @@ async function executeScheduledWelcome(guild, options = {}) {
       emptyRuns: Number(config.analytics.emptyRuns || 0) + 1,
       lastRunAt: now(),
       lastRunDate: runDate,
+      ...(!options.force ? { lastScheduledRunDate: runDate, lastScheduledRunAt: now() } : {}),
       roleRemovalFailed: Number(config.analytics.roleRemovalFailed || 0) + retryRoleRemovalFailed,
       lastError: retryErrors[0]?.slice(0, 500) || null,
     };
@@ -378,6 +381,7 @@ async function executeScheduledWelcome(guild, options = {}) {
     roleRemovalFailed: Number(config.analytics.roleRemovalFailed || 0) + roleRemovalFailed,
     lastRunAt: now(),
     lastRunDate: sendFailed > 0 || checkpointFailed > 0 ? config.analytics.lastRunDate : runDate,
+    ...(!options.force && !sendFailed && !checkpointFailed ? { lastScheduledRunDate: runDate, lastScheduledRunAt: now() } : {}),
     lastError: errors.length ? errors[0].slice(0, 500) : null,
   };
   updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_run' });

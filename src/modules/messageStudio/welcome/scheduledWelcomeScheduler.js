@@ -22,7 +22,7 @@ function zonedClock(timezone, date = new Date()) {
 function isDue(config, date = new Date()) {
   if (!config?.enabled) return false;
   const today = scheduledWelcome.zonedDateKey(config.timezone, date);
-  if (config.analytics?.lastRunDate === today) return false;
+  if (config.analytics?.lastScheduledRunDate === today) return false;
   return zonedClock(config.timezone, date) >= config.time;
 }
 
