@@ -228,6 +228,13 @@ async function deliverWelcome(member, options = {}) {
     if (!options.bypassVerificationGate) {
       const latest = getWelcomeSection(member.guild.id);
       if (latest.completedInstantJoins?.[member.id] === joinedAt) return { publicSent: false, dmSent: false, skipped: true, reason: 'already_welcomed', errors: [] };
+      // Persist ordinary joins before delivery and reuse the deferred checkpoint engine.
+      updateWelcomeSection(member.guild.id, section => {
+        const existing = section.deferredWelcomes[member.id];
+        if (existing?.joinedAt && existing.joinedAt >= joinedAt) return section;
+        return { ...section, deferredWelcomes: { ...section.deferredWelcomes, [member.id]: { joinedAt, queuedAt: now() } } };
+      }, { action: 'welcome_instant_delivery_queue' });
+      return releaseDeferredWelcome(member);
     }
   }
   await refreshMemberCache(member.guild); let publicSent = false; let dmSent = false; let publicFailed = false; let dmFailed = false; const errors = [];
