@@ -123,6 +123,8 @@ async function trackLatestWelcomeMessage(member, welcomeManager, sentAfter = Dat
   if (!channel?.messages?.fetch) return null;
 
   const records = getRecords(welcomeManager, member.guild.id);
+  const exact = records.find(record => record.userId === member.user.id && Date.parse(record.createdAt) >= sentAfter - 5000);
+  if (exact) return exact.messageId;
   const claimedIds = new Set(records.map((record) => record.messageId));
   const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
   if (!messages?.size) return null;
@@ -186,13 +188,13 @@ async function syncTrackedWelcomeForGuild(guild, userId, nextAvatarUrl, welcomeM
   const channel = guild.channels.cache.get(record.channelId)
     || await guild.channels.fetch(record.channelId).catch(error => { if (Number(error?.code) === 10003) return null; throw error; });
   if (!channel?.messages?.fetch) {
-    saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
+    welcomeManager.updateWelcomeSection(guild.id, section => ({ ...section, avatarSyncMessages: cleanRecords(section.avatarSyncMessages).filter(item => item.messageId !== record.messageId) }), { action: 'welcome_avatar_sync_cleanup' });
     return { updated: 0, removed: 1 };
   }
 
   const message = await channel.messages.fetch(record.messageId).catch(error => { if (Number(error?.code) === 10008) return null; throw error; });
   if (!message) {
-    saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
+    welcomeManager.updateWelcomeSection(guild.id, section => ({ ...section, avatarSyncMessages: cleanRecords(section.avatarSyncMessages).filter(item => item.messageId !== record.messageId) }), { action: 'welcome_avatar_sync_cleanup' });
     return { updated: 0, removed: 1 };
   }
 
@@ -212,10 +214,7 @@ async function syncTrackedWelcomeForGuild(guild, userId, nextAvatarUrl, welcomeM
 
   if (!edited) return { updated: 0, removed: 0 };
 
-  const nextRecords = records.map((item) => item === record
-    ? { ...item, avatarUrl: nextAvatarUrl, updatedAt: new Date().toISOString() }
-    : item);
-  saveRecords(welcomeManager, guild.id, nextRecords, 'welcome_avatar_sync_update');
+  welcomeManager.updateWelcomeSection(guild.id, section => ({ ...section, avatarSyncMessages: cleanRecords(section.avatarSyncMessages).map(item => item.messageId === record.messageId ? { ...item, avatarUrl: nextAvatarUrl, updatedAt: new Date().toISOString() } : item) }), { action: 'welcome_avatar_sync_update' });
 
   return { updated: 1, removed: 0 };
 }
@@ -235,12 +234,12 @@ async function recoverUntrackedWelcomeForGuild(member, previousAvatarUrl, nextAv
   if (!messages?.size) return { updated: 0, removed: 0 };
 
   const botId = member.client?.user?.id;
-  const username = String(member.user.username || '').toLowerCase();
+
   const candidates = [...messages.values()]
     .filter((message) => message.author?.id === botId)
     .filter((message) => {
       const haystack = `${message.content || ''} ${JSON.stringify(message.embeds?.map((embed) => embed.toJSON?.() || embed) || [])}`.toLowerCase();
-      return haystack.includes(userId) || (username && haystack.includes(`@${username}`));
+      return haystack.includes(userId);
     })
     .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
 
@@ -288,7 +287,7 @@ async function handleUserAvatarUpdate(oldUser, newUser, welcomeManager) {
     if (!member) continue;
 
     const nextAvatarUrl = member.displayAvatarURL({ extension: 'png', size: 256 });
-    const result = await syncTrackedWelcomeForGuild(guild, newUser.id, nextAvatarUrl, welcomeManager);
+    const result = await syncTrackedWelcomeForGuild(guild, newUser.id, nextAvatarUrl, welcomeManager).catch(error => { console.warn('[Welcome] Guild avatar sync failed:', guild.id, error.message || error); return { updated: 0, removed: 0 }; });
     updated += result.updated;
     removed += result.removed;
   }
@@ -313,7 +312,7 @@ async function handleGuildMemberAvatarUpdate(oldMember, newMember, welcomeManage
     nextAvatarUrl,
     welcomeManager
   );
-  if (direct.updated || direct.removed) return direct;
+  if (direct.updated || direct.removed || getRecords(welcomeManager, newMember.guild.id).some(record => record.userId === newMember.user.id)) return direct;
 
   return recoverUntrackedWelcomeForGuild(newMember, oldAvatarUrl, nextAvatarUrl, welcomeManager);
 }
