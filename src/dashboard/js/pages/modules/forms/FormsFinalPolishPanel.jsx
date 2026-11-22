@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 import React, { useMemo, useState } from 'react';
 
@@ -206,14 +207,14 @@ export default function FormsFinalPolishPanel({ theme, forms = [], submissions =
         <div style={card(theme)}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <strong>Needs Attention</strong>
-            <select value={filter} onChange={(event) => setFilter(event.target.value)} style={{ border: `1px solid ${theme?.cardBorder || 'rgba(148,163,184,0.22)'}`, background: 'rgba(15,23,42,0.55)', color: theme?.cardText || '#e5e7eb', borderRadius: 10, padding: '7px 9px', fontWeight: 850 }}>
+            <ThemedSelect theme={theme} value={filter} onChange={(event) => setFilter(event.target.value)} style={{ border: `1px solid ${theme?.cardBorder || 'rgba(148,163,184,0.22)'}`, background: 'rgba(15,23,42,0.55)', color: theme?.cardText || '#e5e7eb', borderRadius: 10, padding: '7px 9px', fontWeight: 850 }}>
               <option value="active">Active</option>
               <option value="missing">Missing channel</option>
               <option value="request_info">Request info</option>
               <option value="approved">Approved</option>
               <option value="denied">Denied</option>
               <option value="all">All</option>
-            </select>
+            </ThemedSelect>
           </div>
           {data.filtered.length ? data.filtered.map((submission) => (
             <div key={submission.submissionId || `${formIdOf(submission)}-${submission.createdAt}`} style={{ borderBottom: `1px solid ${theme?.cardBorder || 'rgba(148,163,184,0.22)'}`, padding: '8px 0', display: 'grid', gap: 4 }}>
