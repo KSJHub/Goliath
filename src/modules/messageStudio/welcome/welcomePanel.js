@@ -110,7 +110,7 @@ function normalPresetPanel(guild,userId,scope){
     row(menu),
     row(button(prefix+'saveAs:'+scope,'Save As',ButtonStyle.Success),button(prefix+'save:'+scope,'Save',ButtonStyle.Primary,!has),button(prefix+'load:'+scope,'Load',ButtonStyle.Primary,!has)),
     row(button(prefix+'rename:'+scope,'Rename',ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,'Duplicate',ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,'Delete',ButtonStyle.Danger,!has)),
-    row(button(prefix+'default:'+scope,'Set as Default',ButtonStyle.Primary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary)),
+    row(button(prefix+'default:'+scope,'Set as Default',ButtonStyle.Primary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,'Variables',ButtonStyle.Secondary)),
     row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='dm'?'dm':'instant'),'Back'))
   ]};
 }
@@ -350,6 +350,12 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
     return interaction.reply({...panel(),ephemeral:true});
   }
   if(action==='open')return updatePanel(interaction,panel());
+  if(action==='variables'){
+    const variables=require('../../../core/guild/guildVariables').variablesForModule('welcome');
+    const list=Array.isArray(variables)?variables.map(v=>typeof v==='string'?v:v?.key).filter(Boolean):Object.keys(variables||{});
+    const description=list.map(v=>'• `'+(v.startsWith('{')?v:'{'+v+'}')+'`').join('\n').slice(0,3500);
+    return interaction.reply({embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle('Welcome · Message Variables').setDescription('Use these placeholders in normal messages. They are resolved when the message is sent.\n\n'+(description||'No variables available.'))],ephemeral:true});
+  }
   if(action==='prev'||action==='next'){setSelection(guildId,userId,scope,{presetPage:Math.max(0,(state.presetPage||0)+(action==='next'?1:-1))});return updatePanel(interaction,panel());}
   if(action==='saveAs')return interaction.showModal(normalPresetNameModal(scope,action));
   if(action==='import'){
