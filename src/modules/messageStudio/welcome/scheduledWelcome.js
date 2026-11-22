@@ -291,7 +291,14 @@ async function executeScheduledWelcome(guild, options = {}) {
     return { skipped: false, empty: true, welcomed: 0, messagesSent: 0, roleRemovalFailed: retryRoleRemovalFailed, errors: retryErrors };
   }
 
-  const batches = messages.splitIntoBatches(waiting, config, guild);
+  const hasPanel = member => {
+    const entry = config.pendingMembers[member.id];
+    return Boolean(entry?.panelSentAt && entry.joinedAt === (member.joinedAt?.toISOString?.() || null));
+  };
+  const batches = [
+    ...messages.splitIntoBatches(waiting.filter(member => !hasPanel(member)), config, guild),
+    ...messages.splitIntoBatches(waiting.filter(hasPanel), config, guild),
+  ];
   let welcomed = 0;
   let messagesSent = 0;
   let sendFailed = 0;
@@ -320,8 +327,8 @@ async function executeScheduledWelcome(guild, options = {}) {
         for (const member of batch) {
           const entry = pendingMembers[member.id];
           const joinedAt = member.joinedAt?.toISOString?.() || null;
-          if (entry && entry.joinedAt === joinedAt) {
-            pendingMembers[member.id] = { ...entry, panelSentAt: now(), panelMessageId: queue.cleanId(panelMessage?.id) };
+          if (!entry || entry.joinedAt === joinedAt) {
+            pendingMembers[member.id] = { ...entry, joinedAt, queuedAt: entry?.queuedAt || now(), panelSentAt: now(), panelMessageId: queue.cleanId(panelMessage?.id) };
           }
         }
         updateScheduledConfig(guild.id, { pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_panel_checkpoint' });
