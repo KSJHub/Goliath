@@ -27,6 +27,35 @@ function CustomEditor({ theme, value, onChange, onSave, busy, dm = false }) {
   </div>;
 }
 
+function PresetLibrary({theme,config,scheduled,busy,onAction,onLoad,onRestore}) {
+  const [scope,setScope]=useState('public'),[id,setId]=useState(''),[name,setName]=useState(''),[content,setContent]=useState(''),[json,setJson]=useState('');
+  const all=config?.normalPresets?.[scope]||{}, selected=all[id], limit=scope==='scheduled'?1800:2000;
+  const active=scope==='scheduled'?scheduled?.message:config?.normalMessages?.[scope];
+  const run=action=>onAction({scope,action,id,name,content});
+  const btn=(label,fn,disabled=false,tone='default')=><button type="button" style={buttonStyle(theme,tone)} disabled={!!busy||disabled} onClick={fn}>{label}</button>;
+  return <div style={{display:'grid',gap:12}}>
+    <strong>Message Preset Library</strong>
+    <select aria-label="Workspace" style={fieldStyle(theme)} value={scope} onChange={e=>{setScope(e.target.value);setId('');setName('');setContent('');setJson('');}}><option value="public">Instant Public</option><option value="dm">Instant DM</option><option value="scheduled">Scheduled Welcome</option></select>
+    <select aria-label="Saved preset" style={fieldStyle(theme)} value={selected?id:''} onChange={e=>{const key=e.target.value;setId(key);setName(all[key]?.name||'');setContent(all[key]?.content||'');}}><option value="">Select a preset</option>{Object.entries(all).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([key,v])=><option key={key} value={key}>{v.content===config?.normalDefaults?.[scope]?'⭐ ':''}{v.name}</option>)}</select>
+    <input aria-label="Preset name" placeholder="Preset name" maxLength={80} value={name} onChange={e=>setName(e.target.value)} style={fieldStyle(theme)}/>
+    <textarea aria-label="Preset message" rows={5} maxLength={limit} value={content} onChange={e=>setContent(e.target.value)} style={fieldStyle(theme)}/>
+    <div style={{whiteSpace:'pre-wrap'}}>{renderWelcomePreview(content)}</div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      {btn('Copy active message',()=>setContent(active||''))}
+      {btn('Load Message',()=>onLoad(scope,selected.content),!selected,'primary')}
+      {btn('Save',()=>run('save'),!selected||!content.trim(),'success')}
+      {btn('Save As',()=>run('saveAs'),!name.trim()||!content.trim(),'success')}
+      {btn('Rename',()=>run('rename'),!selected||!name.trim())}
+      {btn('Duplicate',()=>run('duplicate'),!selected||!name.trim())}
+      {btn('Delete',()=>{if(window.confirm('Delete this saved preset? Active messages will not change.'))run('delete');},!selected,'danger')}
+      {btn('Set Default',()=>run('default'),!selected)}
+      {btn('Load Default',()=>onRestore(scope,config.normalDefaults[scope]),!config?.normalDefaults?.[scope])}
+    </div>
+    <textarea aria-label="Preset JSON" placeholder="Paste preset JSON to import, or export here" rows={4} value={json} onChange={e=>setJson(e.target.value)} style={fieldStyle(theme)}/>
+    <div style={{display:'flex',gap:8}}>{btn('Export JSON',()=>setJson(JSON.stringify({version:1,scope,presets:Object.values(all),defaultMessage:config?.normalDefaults?.[scope]},null,2)))}{btn('Import JSON',()=>{try{onAction({scope,action:'import',data:JSON.parse(json)});}catch{window.alert('Invalid JSON');}},!json.trim())}</div>
+  </div>;
+}
+
 export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
   const [config, setConfig] = useState(null); const [scheduled, setScheduled] = useState(null); const [overview, setOverview] = useState({}); const [templates, setTemplates] = useState([]); const [binding, setBinding] = useState(null); const [channels, setChannels] = useState([]); const [roles, setRoles] = useState([]); const [queue, setQueue] = useState([]); const [preview, setPreview] = useState(null); const [busy, setBusy] = useState(''); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
@@ -128,6 +157,7 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><button type="button" disabled={busy} onClick={previewQueue} style={buttonStyle(theme)}>{busy === 'queue' ? 'Loading queue…' : 'Preview Queue'}</button><button type="button" disabled={busy || !scheduled?.channelId} onClick={runScheduledNow} style={buttonStyle(theme, 'success')}>{busy === 'run' ? 'Sending batch…' : 'Run Now'}</button><button type="button" disabled={busy} onClick={() => act('scheduledRepair', () => api.request(`/api/welcome/${guildId}/scheduled/repair`, { method: 'POST' }), 'Scheduled Welcome repaired.')} style={buttonStyle(theme, 'primary')}>{busy === 'scheduledRepair' ? 'Repairing…' : 'Repair Scheduled'}</button></div>
       {queueLoaded ? <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 14 }}><strong>Waiting members ({queue.length})</strong><div style={{ marginTop: 8, color: theme.mutedText }}>{queue.length ? queue.slice(0, 50).map((m) => m.displayName || m.username || m.id).join(', ') : 'Queue is empty.'}</div><div style={{ marginTop: 12 }}>Eligible role or queue candidates: {queueDiagnostics.candidateCount}</div>{queueDiagnostics.excluded.map(member => <div key={member.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '8px 0' }}><strong>{member.displayName}</strong><span style={{ color: theme.mutedText }}>{member.reasons.join(' · ')}</span>{member.canRequeue ? <button type="button" disabled={!!busy} style={buttonStyle(theme)} onClick={() => requeueMember(member)}>Requeue Member</button> : null}</div>)}</div> : null}<div style={{ display: 'grid', gap: 6, color: theme.mutedText }}><strong>Delivery diagnostics</strong>{scheduledHealth?.queueInspectionHealthy === false ? <div style={{ color: '#fbbf24' }}>Queue inspection unavailable. Member counts cannot be confirmed; refresh after resolving the reported error.</div> : null}<div>Already welcomed: {scheduledHealth?.alreadyWelcomedMembers ?? 'Unavailable'}</div><div>Role cleanup pending: {scheduledHealth?.stuckMemberIds?.length ?? 'Unavailable'}{scheduled?.removeQueueRole === false ? ' (automatic removal disabled)' : ''}</div><div>Failed member deliveries: {scheduled?.analytics?.sendFailed || 0} · Role cleanup failures: {scheduled?.analytics?.roleRemovalFailed || 0}</div>{scheduled?.analytics?.lastError ? <div style={{ color: '#fca5a5' }}>Last error: {scheduled.analytics.lastError}</div> : null}{scheduledHealth?.warnings?.length ? <div style={{ color: '#fbbf24' }}>{scheduledHealth.warnings.join(' · ')}</div> : null}</div><div style={{ color: scheduledHealth?.healthy ? '#86efac' : '#fbbf24', fontWeight: 850 }}>{!scheduledHealth ? 'Health information unavailable.' : scheduledHealth.healthy ? `${E.SUCCESS} Scheduled Welcome is healthy.` : `${E.WARNING} ${scheduledHealth.issues?.join(' · ') || 'Scheduled Welcome needs attention.'}`}</div>
     </section>
+    <section style={card}><PresetLibrary key={guildId} theme={theme} config={config} scheduled={scheduled} busy={busy} onAction={patch=>act('preset',()=>api.request(`/api/welcome/${guildId}/normal-presets`,{method:'POST',body:JSON.stringify(patch)}),'Preset library updated.')} onLoad={(scope,content)=>scope==='scheduled'?saveScheduled({message:content,templateId:null}):saveCustom(scope==='dm'?'dm_welcome':'welcome',{content})} onRestore={(scope,content)=>scope==='scheduled'?saveScheduled({message:content,templateId:null}):saveCustom(scope==='dm'?'dm_welcome':'welcome',{content})}/></section>
     <section style={{ ...card, display: 'flex', gap: 10, flexWrap: 'wrap' }}><a href={`/api/welcome/${guildId}/export`} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export Welcome JSON</a><button type="button" disabled={busy} onClick={resetModule} style={buttonStyle(theme, 'danger')}>{busy === 'reset' ? 'Resetting…' : 'Reset All Welcome'}</button><button type="button" disabled={!!busy} onClick={() => load()} style={buttonStyle(theme)}>{busy === 'load' ? 'Refreshing...' : 'Refresh'}</button></section>
   </div>;
 }
