@@ -97,6 +97,27 @@ function saveCustomWelcome(interaction,scope){
   clearSelection(guildId,interaction.user.id,scope);
 }
 
+function normalPresetPanel(guild,userId,scope){
+  const config=welcome.getWelcomeSection(guild.id), presets=config.normalPresets?.[scope]||{};
+  const entries=Object.entries(presets).sort(([a],[b])=>a.localeCompare(b));
+  const state=getSelection(guild.id,userId,scope),page=Math.min(Math.max(0,Math.ceil(entries.length/25)-1),Math.max(0,state.presetPage||0));
+  const selected=state.presetId;
+  const menu=new StringSelectMenuBuilder().setCustomId('admin:welcome:normalSelect:'+scope).setPlaceholder('Choose saved message preset').setDisabled(!entries.length).addOptions(entries.length?entries.slice(page*25,page*25+25).map(([id,v])=>({label:String(v.name).slice(0,100),value:id,default:id===selected})):[{label:'No saved presets',value:'none'}]);
+  const has=Boolean(presets[selected]);
+  const prefix='admin:welcome:normal:';
+  return {embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle('Welcome · Message Presets').setDescription(['Save and load normal messages independently of Embed Studio.', '', '**Workspace**　'+scope, '**Saved presets**　'+entries.length, '**Selected**　'+(has?presets[selected].name:'None'), '', '**Active normal message**', (config.normalMessages?.[scope]||'No normal message saved.').slice(0,1800)].join('\n'))],components:[
+    row(menu),
+    row(button(prefix+'saveAs:'+scope,'Save As',ButtonStyle.Success),button(prefix+'save:'+scope,'Save',ButtonStyle.Primary,!has),button(prefix+'load:'+scope,'Load',ButtonStyle.Primary,!has)),
+    row(button(prefix+'rename:'+scope,'Rename',ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,'Duplicate',ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,'Delete',ButtonStyle.Danger,!has)),
+    row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='dm'?'dm':'instant'),'Back'))
+  ]};
+}
+function normalPresetNameModal(scope,action,name=''){
+  const field=new TextInputBuilder().setCustomId('name').setLabel('Preset name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80);
+  if(name)field.setValue(name);
+  return new ModalBuilder().setCustomId('admin:welcome:normalName:'+action+':'+scope).setTitle('Welcome · '+action).addComponents(row(field));
+}
+
 async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
   const enabled=guildManager.isModuleEnabled(guild.id,'welcome');
   const instant=welcome.getWelcomeSection(guild.id);
@@ -200,7 +221,7 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
   ];
   if(source==='embedStudio')components.push(row(templateMenu(guild,template?.templateId||config.templateId,userId,'public')));
   components.push(row(button('admin:welcome:applySource',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId))),button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,(source==='custom'&&hasUnsavedSelection)||(source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId)))),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
-  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings')),...(source==='embedStudio'?templatePageButtons(guild,userId,'public',template?.templateId||config.templateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardPublic','Discard Selection',ButtonStyle.Secondary)]:[])));
+  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings')),...(source!=='embedStudio'?[button('admin:welcome:normal:open:public','Presets',ButtonStyle.Primary)]:[]),...(source==='embedStudio'?templatePageButtons(guild,userId,'public',template?.templateId||config.templateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardPublic','Discard Selection',ButtonStyle.Secondary)]:[])));
   const issues=health.warnings||[];
   const next=hasUnsavedSelection&&source==='custom'?emojiLabel('PRESETS','Choose Save Message to edit and save your custom Welcome before previewing.'):hasUnsavedSelection?emojiLabel('WELCOME_PREVIEW','Preview your selection, then Save Message to make it live.'):!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
@@ -224,7 +245,7 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const components=[row(sourceMenu(config,userId,guild.id,'dm'))];
   if(source==='embedStudio')components.push(row(templateMenu(guild,dmTemplate?.templateId||config.dmTemplateId,userId,'dm')));
   components.push(row(button('admin:welcome:dmApply',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId))),button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,(source==='custom'&&hasUnsavedSelection)||(source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId)))),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
-  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings')),...(source==='embedStudio'?templatePageButtons(guild,userId,'dm',dmTemplate?.templateId||config.dmTemplateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardDm','Discard Selection',ButtonStyle.Secondary)]:[])));
+  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings')),...(source!=='embedStudio'?[button('admin:welcome:normal:open:dm','Presets',ButtonStyle.Primary)]:[]),...(source==='embedStudio'?templatePageButtons(guild,userId,'dm',dmTemplate?.templateId||config.dmTemplateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardDm','Discard Selection',ButtonStyle.Secondary)]:[])));
   const message=config.dmMessageSource==='inherit'?publicTemplate?.name||'Same as Public':dmTemplate?.name||'Not selected';
   return {embeds:[new EmbedBuilder().setColor(config.dmEnabled?0x57f287:0x747f8d)
     .setTitle(emojiLabel('WELCOME_DM','Welcome · Direct Message'))
@@ -308,6 +329,37 @@ function getPreviewTemplate(guildId,userId,scope){
 async function updatePanel(interaction,payload=null){const next=payload||await buildWelcomePanel(interaction.guild,displayName(interaction));if(interaction.deferred||interaction.replied)return interaction.editReply(next);return interaction.update(next);}
 
 async function handleWelcomeInteraction(interaction){const customId=String(interaction.customId||'');if(!customId.startsWith('admin:welcome'))return false;try{
+if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
+  const parts=customId.split(':'),scope=parts.at(-1),action=parts[3],guildId=interaction.guild.id,userId=interaction.user.id;
+  if(!['public','dm'].includes(scope))throw new Error('Invalid message workspace.');
+  const config=welcome.getWelcomeSection(guildId),presets=config.normalPresets?.[scope]||{},state=getSelection(guildId,userId,scope),selected=state.presetId,current=presets[selected];
+  const panel=()=>normalPresetPanel(interaction.guild,userId,scope);
+  const mutate=fn=>welcome.updateWelcomeSection(guildId,s=>({...s,normalPresets:{...s.normalPresets,[scope]:fn({...s.normalPresets?.[scope]})}}),{actorId:userId,action:'welcome_normal_preset'});
+  if(parts[2]==='normalSelect'&&interaction.isStringSelectMenu?.()){const id=interaction.values?.[0];if(!presets[id])throw new Error('Preset unavailable.');setSelection(guildId,userId,scope,{presetId:id});return updatePanel(interaction,panel());}
+  if(parts[2]==='normalName'&&interaction.isModalSubmit?.()){
+    const name=interaction.fields.getTextInputValue('name').trim();
+    if(!name||name.length>80)throw new Error('Enter a valid preset name.');
+    if(!['saveAs','rename','duplicate'].includes(action))throw new Error('Invalid preset action.');
+    const content=action==='saveAs'?config.normalMessages?.[scope]:current?.content;
+    if(!content)throw new Error('Save a normal message or select a preset first.');
+    const id=action==='rename'?selected:require('node:crypto').randomUUID();
+    mutate(all=>{if(Object.entries(all).some(([key,v])=>key!==id&&v.name.toLowerCase()===name.toLowerCase()))throw new Error('That preset name already exists.');if(action==='rename'&&!all[id])throw new Error('Preset no longer exists.');all[id]={name,content};return all;});
+    setSelection(guildId,userId,scope,{presetId:id});
+    return interaction.reply({...panel(),ephemeral:true});
+  }
+  if(action==='open')return updatePanel(interaction,panel());
+  if(action==='prev'||action==='next'){setSelection(guildId,userId,scope,{presetPage:Math.max(0,(state.presetPage||0)+(action==='next'?1:-1))});return updatePanel(interaction,panel());}
+  if(action==='saveAs')return interaction.showModal(normalPresetNameModal(scope,action));
+  if(!current)throw new Error('Choose a saved preset first.');
+  if(action==='rename'||action==='duplicate')return interaction.showModal(normalPresetNameModal(scope,action,action==='rename'?current.name:''));
+  if(action==='save'){const content=config.normalMessages?.[scope];if(!content)throw new Error('Save a normal message first.');mutate(all=>{if(!all[selected])throw new Error('Preset unavailable.');all[selected]={...all[selected],content};return all;});}
+  else if(action==='load'){welcome.updateWelcomeSection(guildId,s=>({...s,normalMessages:{...s.normalMessages,[scope]:current.content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:userId,action:'welcome_normal_preset_load'});clearSelection(guildId,userId,scope);return updatePanel(interaction,await (scope==='dm'?buildDmPanel:buildInstantPanel)(interaction.guild,displayName(interaction),userId));}
+  else if(action==='delete')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xed4245).setTitle('Delete selected preset?').setDescription('The active welcome message will not be changed.')],components:[row(button('admin:welcome:normal:confirmDelete:'+scope,'Confirm Delete',ButtonStyle.Danger),button('admin:welcome:normal:open:'+scope,'Cancel'))]});
+  else if(action==='confirmDelete'){mutate(all=>{delete all[selected];return all;});setSelection(guildId,userId,scope,{presetId:null});}
+  else throw new Error('Invalid preset action.');
+  return updatePanel(interaction,panel());
+}
+
 if(/^admin:welcome:templatePage:(public|dm):\d+$/.test(customId)){const [, , ,scope,rawPage]=customId.split(':');setSelection(interaction.guild.id,interaction.user.id,scope,{page:Number(rawPage)});return updatePanel(interaction,await (scope==='dm'?buildDmPanel:buildInstantPanel)(interaction.guild,displayName(interaction),interaction.user.id));}
 if(interaction.isStringSelectMenu?.()&&customId==='admin:welcome:navigate'){const choice=interaction.values?.[0];if(choice==='instant')return updatePanel(interaction,await buildInstantPanel(interaction.guild,displayName(interaction),interaction.user.id));if(choice==='dm')return updatePanel(interaction,await buildDmPanel(interaction.guild,displayName(interaction),interaction.user.id));if(choice==='scheduled')return updatePanel(interaction,await buildScheduledPanel(interaction.guild,displayName(interaction)));if(choice==='mentions')return updatePanel(interaction,buildMentionSettingsPanel(interaction.guild,displayName(interaction)));throw new Error('Choose a valid Welcome workspace.');}
 if(interaction.isChannelSelectMenu?.()&&customId==='admin:welcome:homeChannel'){welcome.updateConfig(interaction.guild.id,{channelId:interaction.values?.[0]||null},{actorId:interaction.user.id});return updatePanel(interaction);}
