@@ -61,6 +61,7 @@ async function overview(req, id) {
     enabled: guildManager.isModuleEnabled(id, roleSelector.MODULE),
     config: roleSelector.getSection(id),
     groups: roleSelector.listGroups(id),
+    deployments: panel.deploymentList(roleSelector.getSection(id)),
     styleSuggestion: g ? roleSelector.suggestRoleStyle(g) : null,
     usage: g ? await roleSelector.getUsage(g) : { groups: [], totalUsing: 0, totalMembers: 0 },
     health: g ? await healthService.buildHealth(g) : null,
@@ -211,6 +212,16 @@ router.post('/:guildId/deploy', async (req, res) => {
     });
     return success(res, { messageId: result.id, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
+});
+
+router.post('/:guildId/deployments', async (req,res) => {
+  try { const id = guildId(req); const g = await guild(req,id); if (!g) throw new Error('Guild is unavailable.'); await panel.configureDeployment(g,actorId(req),req.body); return success(res,await overview(req,id)); } catch(error) { return failure(res,error); }
+});
+router.put('/:guildId/deployments/:deploymentId', async (req,res) => {
+  try { const id = guildId(req); const g = await guild(req,id); if (!g) throw new Error('Guild is unavailable.'); await panel.configureDeployment(g,actorId(req),req.body,req.params.deploymentId); return success(res,await overview(req,id)); } catch(error) { return failure(res,error); }
+});
+router.delete('/:guildId/deployments/:deploymentId', async (req,res) => {
+  try { const id = guildId(req); const g = await guild(req,id); if (!g) throw new Error('Guild is unavailable.'); await panel.deleteSelectedDeployment({guildId:id,guild:g,user:{id:actorId(req)}},req.params.deploymentId); return success(res,await overview(req,id)); } catch(error) { return failure(res,error); }
 });
 
 router.post('/:guildId/deployments/:deploymentId/publish', async (req, res) => {
