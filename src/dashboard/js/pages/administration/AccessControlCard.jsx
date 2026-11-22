@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 function input(theme) {
@@ -87,10 +88,10 @@ export default function AccessControlCard({ access, description, guildRoles = []
     <div style={{ display: 'grid', gap: 10 }}>
       <strong style={{ fontSize: 13 }}>Allowed Roles</strong>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) auto', gap: 10 }}>
-        <select value={roleToAdd} onChange={(event) => setRoleToAdd(event.target.value)} style={input(theme)}>
+        <ThemedSelect theme={theme} value={roleToAdd} onChange={(event) => setRoleToAdd(event.target.value)} style={input(theme)}>
           <option value="">+ Add role...</option>
           {availableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-        </select>
+        </ThemedSelect>
         <button type="button" onClick={addRole} disabled={!roleToAdd} style={actionButton(theme, !roleToAdd)}>Add</button>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
