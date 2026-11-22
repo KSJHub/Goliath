@@ -1,3 +1,5 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
+import { createTheme } from '../../ui/theme.js';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goDashboard } from '../../services/dashboardPath.js';
 import { dashboardPath, localDashboardPath } from '../../services/dashboardPath.js';
@@ -383,12 +385,12 @@ export default function Appeals() {
               <p style={{ ...muted, margin: 0 }}>Only cases connected to this Discord account appear here.</p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <select aria-label="Filter cases" value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} style={{ ...input, width: 'auto', maxWidth: '100%', padding: '10px 12px' }}>
+              <ThemedSelect theme={createTheme(true)} aria-label="Filter cases" value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} style={{ ...input, width: 'auto', maxWidth: '100%', padding: '10px 12px' }}>
                 <option value="all">All Cases</option>
                 <option value="eligible">Eligible for Appeal</option>
                 <option value="pending">Under Review</option>
                 <option value="resolved">Resolved</option>
-              </select>
+              </ThemedSelect>
               <span style={pill}>{appealableCount} available to appeal</span>
               <button style={secondaryButton} onClick={() => load({ preserveSuccess: true })}>Refresh</button>
             </div>
