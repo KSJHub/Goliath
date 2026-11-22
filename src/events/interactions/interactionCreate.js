@@ -201,7 +201,16 @@ async function handleVerificationMemberInteraction(interaction){
     if(result?.challenge&&typeof verificationChallengeInteractions?.memberChallengePayload==='function'){
       const payload=verificationChallengeInteractions.memberChallengePayload(interaction.user.id,result.challenge);
       await interaction.editReply({content:result.message||'Continue Verification.',...payload});
-    }else await interaction.editReply({content:result?.ok?`✅ ${result.message}`:`❌ ${result?.message||'Verification could not continue.'}`});
+    }else {
+      const { EmbedBuilder } = require('discord.js');
+      const complete = result?.ok && result?.complete;
+      const pending = !complete && (result?.ok || result?.pendingSecurity);
+      const embed = new EmbedBuilder().setColor(complete ? 0x57f287 : pending ? 0xfee75c : 0xed4245)
+        .setTitle(complete ? '✅ Verification Complete' : pending ? '🛡️ Verification in Progress' : '❌ Verification Unavailable')
+        .setDescription(String(result?.message || 'Verification could not continue.').slice(0, 4096))
+        .setFooter({ text: 'Goliath Verification' }).setTimestamp();
+      await interaction.editReply({ content: null, embeds: [embed], components: [], allowedMentions: { parse: [] } });
+    }
   }finally{if(verificationLocks.get(lockKey)===operation)verificationLocks.delete(lockKey);}
   return true;
 }
