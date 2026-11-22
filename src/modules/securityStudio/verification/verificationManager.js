@@ -124,9 +124,14 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(!session)return false;
     const parent=g.channels.cache.get(t.channelId)||await g.channels.fetch(t.channelId).catch(()=>null);
     if(!parent?.threads||parent.type!==0||parent.permissionsFor(g.roles.everyone)?.has('ViewChannel')!==false)return false;
+    const subject=await g.members.fetch(userId).catch(()=>null);
+    if(subject&&parent.permissionsFor(subject)?.has('ViewChannel')!==false)return false;
+    const botMember=g.members.me;
+    if(!botMember||!parent.permissionsFor(botMember)?.has(['ViewChannel','SendMessages','CreatePublicThreads','SendMessagesInThreads']))return false;
     let thread=session.logThreadSessionId===session.sessionId&&session.logThreadId?await g.channels.fetch(session.logThreadId).catch(()=>null):null;
     if(thread?.parentId!==parent.id)thread=null;
     let summaryId=thread?session.logSummaryId:null;
+    if(thread&&t.mode==='hybrid'&&!summaryId){const summary=await parent.send(options);summaryId=summary.id;setSession(g.id,userId,{logSummaryId:summaryId});}
     if(!thread){
       const name=('Verification • '+(t.naming==='id'?userId:t.naming==='username'?(username||userId):(username||'Member')+' • '+userId)).slice(0,100);
       if(t.mode==='hybrid'){
@@ -137,13 +142,15 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
       if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
       setSession(g.id,userId,{logThreadId:thread.id,logThreadSessionId:session.sessionId,logSummaryId:summaryId});
     }
-    if(thread.locked)await thread.setLocked(false);
+    // A staff-locked case must not be reopened by automated logging.
+    if(thread.locked)return false;
     if(thread.archived)await thread.setArchived(false);
     await thread.send(options);
     if(t.mode==='hybrid'&&summaryId){
       try{const summary=await parent.messages.fetch(summaryId);await summary.edit(options);}catch(error){console.error('[Verification] Case summary update failed:',error?.message||error);}
     }
-    if(type==='roles'&&session.state==='verified'){
+    if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return true;
+    if(type==='roles'&&verificationStore.getSession(g.id,userId)?.state==='verified'){
       try{if(t.lockOnSuccess)await thread.setLocked(true);if(t.archiveOnSuccess)await thread.setArchived(true);}catch(error){console.error('[Verification] Thread closure failed:',error?.message||error);}
     }
     return true;
