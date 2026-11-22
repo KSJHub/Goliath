@@ -1109,7 +1109,7 @@ async function verificationLifecycleAudit() {
       const thread={id:'thread',parentId:'parent',locked:false,archived:false,send:async()=>{sent++;},setArchived:async value=>{thread.archived=value;archived++;},setLocked:async value=>{thread.locked=value;}};
       const parent={id:'parent',type:0,permissionsFor:member=>({has:()=>member===bot}),threads:{create:async()=>{created++;return thread;}}};
       const guild={id:'guild',roles:{everyone},members:{me:bot,fetch:async()=>subject},channels:{cache:new Map([['parent',parent]]),fetch:async id=>id==='thread'?thread:parent}};
-      const deliver=new Function('verificationStore','setSession',manager.slice(start,end)+'\\nreturn deliverVerificationThread;')({getSession:()=>session},(_g,_u,patch)=>{session={...session,...patch};});
+      const deliver=new Function('verificationStore','setSession',manager.slice(start,end)+'\nreturn deliverVerificationThread;')({getSession:()=>session},(_g,_u,patch)=>{session={...session,...patch};});
       const settings={mode:'threaded',channelId:'parent',archiveMinutes:1440,archiveOnSuccess:true,lockOnSuccess:true,archiveOnFailure:true};
       assert.equal(await deliver(guild,'member','member',settings,'join',null,{},null),true);
       assert.equal(await deliver(guild,'member','member',settings,'failure',null,{},null),true);
