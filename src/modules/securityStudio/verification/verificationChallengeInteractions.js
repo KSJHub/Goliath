@@ -117,20 +117,21 @@ async function handleMemberAction(interaction, parsed) {
 
 async function handleAnswerModal(interaction, parsed, manager) {
   if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge belongs to another member.'), flags: MessageFlags.Ephemeral }); return true; }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
-  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.'), flags: MessageFlags.Ephemeral }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
+  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.editReply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.') }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
     const failure = await recordTerminalFailure(interaction, parsed, result, manager);
     const message = failure?.quarantined ? emojiLabel('BLOCKED', 'Verification failed and your account has been moved to quarantine for staff review.') : result.reason === 'challenge_unavailable' ? emojiLabel('WARNING', 'This challenge could not be checked. Press Verify again for a fresh challenge; this has not counted as a wrong answer.') : result.reason === 'staff_action_in_progress' ? emojiLabel('TIMEOUT', 'Management is processing this Verification session. Please wait.') : ['stale_challenge', 'challenge_closed', 'terminal_session', 'wrong_member'].includes(result.reason) ? emojiLabel('WARNING', 'This challenge is no longer available. Start Verification again or contact management.') : result.reason === 'security_configuration_changed' ? emojiLabel('ERROR', 'Verification settings changed. Start Verification again.') : result.reason === 'expired' ? emojiLabel('AUTOMOD_LIMITS', 'This challenge expired. Start Verification again.') : result.complete ? emojiLabel('ERROR', 'That answer was incorrect and this challenge has ended.') : emojiLabel('ERROR', 'That answer was incorrect. Try again.');
     const challengeUpdate = result.challenge && result.challenge.challengeId === parsed.challengeId
       ? { embeds: [challengeEmbed(result.challenge)], components: result.complete ? [] : memberChallengePayload(parsed.userId, result.challenge).components }
       : {};
-    await interaction.reply({ content: message, ...challengeUpdate, flags: MessageFlags.Ephemeral }); return true;
+    await interaction.editReply({ content: message, ...challengeUpdate }); return true;
   }
   const resumed = await maybeResumeFlow(interaction, result, manager);
-  if (resumed) { await interaction.reply({ ...resumedMemberPayload(parsed.userId, resumed), flags: MessageFlags.Ephemeral }); return true; }
+  if (resumed) { await interaction.editReply({ ...resumedMemberPayload(parsed.userId, resumed) }); return true; }
   const next = runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge;
-  await interaction.reply({ content: result.complete ? emojiLabel('HEALTHY', 'Security check passed.') : emojiLabel('HEALTHY', 'Round passed. Continue with the next round.'), ...(next && !result.complete ? memberChallengePayload(parsed.userId, next) : {}), flags: MessageFlags.Ephemeral });
+  await interaction.editReply({ content: result.complete ? emojiLabel('HEALTHY', 'Security check passed.') : emojiLabel('HEALTHY', 'Round passed. Continue with the next round.'), ...(next && !result.complete ? memberChallengePayload(parsed.userId, next) : {}) });
   return true;
 }
 
