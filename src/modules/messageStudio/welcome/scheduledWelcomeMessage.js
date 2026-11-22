@@ -76,7 +76,7 @@ async function buildTemplateBatchPayload(guild, members, config = {}) {
     };
     panelPayload = await buildTemplateDeliveryPayload({
       template,
-      variables: buildBatchVariables(guild, members, config),
+      variables: { ...buildBatchVariables(guild, members, config), members: members.length === 1 ? 'our newest arrival' : 'our newest arrivals' },
       interaction,
       includeComponents: true,
       allowUserPing: false,
