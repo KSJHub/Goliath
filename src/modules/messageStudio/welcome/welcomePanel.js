@@ -335,6 +335,7 @@ async function handleWelcomeInteraction(interaction){const customId=String(inter
 if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
   const parts=customId.split(':'),scope=parts.at(-1),action=parts[3],guildId=interaction.guild.id,userId=interaction.user.id;
   if(!['public','dm','scheduled'].includes(scope))throw new Error('Invalid message workspace.');
+  const limit=scope==='scheduled'?1800:2000;
   const config=welcome.getWelcomeSection(guildId),presets=config.normalPresets?.[scope]||{},state=getSelection(guildId,userId,scope),selected=state.presetId,current=presets[selected];
   const panel=()=>normalPresetPanel(interaction.guild,userId,scope);
   const mutate=fn=>welcome.updateWelcomeSection(guildId,s=>({...s,normalPresets:{...s.normalPresets,[scope]:fn({...s.normalPresets?.[scope]})}}),{actorId:userId,action:'welcome_normal_preset'});
@@ -344,7 +345,7 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
     if(!name||name.length>80)throw new Error('Enter a valid preset name.');
     if(!['saveAs','rename','duplicate'].includes(action))throw new Error('Invalid preset action.');
     const content=action==='saveAs'?activeNormalMessage(guildId,scope,config):current?.content;
-    if(!content)throw new Error('Save a normal message or select a preset first.');
+    if(!content||content.length>limit)throw new Error('Save a valid normal message or select a preset first.');
     const id=action==='rename'?selected:require('node:crypto').randomUUID();
     mutate(all=>{if(Object.entries(all).some(([key,v])=>key!==id&&v.name.toLowerCase()===name.toLowerCase()))throw new Error('That preset name already exists.');if(action==='rename'&&!all[id])throw new Error('Preset no longer exists.');all[id]={name,content};return all;});
     setSelection(guildId,userId,scope,{presetId:id});
@@ -367,12 +368,12 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
     let data;try{data=JSON.parse(interaction.fields.getTextInputValue('json'));}catch{throw new Error('Invalid JSON. Paste a Welcome preset export.');}
     if(data?.version!==1||data.scope!==scope||!Array.isArray(data.presets)||data.presets.length>100)throw new Error('Expected a version 1 export for this workspace, with at most 100 presets.');
     const imported=data.presets.map(v=>{
-      if(typeof v?.name!=='string'||typeof v?.content!=='string'||!v.name.trim()||v.name.trim().length>80||!v.content.trim()||v.content.length>2000)throw new Error('Every preset must have a name (1–80 characters) and message (1–2000 characters).');
+      if(typeof v?.name!=='string'||typeof v?.content!=='string'||!v.name.trim()||v.name.trim().length>80||!v.content.trim()||v.content.length>limit)throw new Error('Every preset must have a name (1–80 characters) and message within '+limit+' characters.');
       return {name:v.name.trim(),content:v.content.trim()};
     });
     const names=new Set();
     for(const v of imported){const key=v.name.toLowerCase();if(names.has(key))throw new Error('Duplicate names in import.');names.add(key);}
-    if(data.defaultMessage!==undefined&&(typeof data.defaultMessage!=='string'||!data.defaultMessage.trim()||data.defaultMessage.length>2000))throw new Error('Invalid default message.');
+    if(data.defaultMessage!==undefined&&(typeof data.defaultMessage!=='string'||!data.defaultMessage.trim()||data.defaultMessage.length>limit))throw new Error('Invalid default message.');
     mutate(all=>{if(Object.values(all).some(v=>names.has(v.name.toLowerCase())))throw new Error('An imported preset name already exists. Rename it before importing.');for(const v of imported)all[require('node:crypto').randomUUID()]=v;return all;});
     return interaction.reply({...panel(),ephemeral:true});
   }
@@ -382,7 +383,7 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
   if(!current)throw new Error('Choose a saved preset first.');
   if(action==='rename'||action==='duplicate')return interaction.showModal(normalPresetNameModal(scope,action,action==='rename'?current.name:''));
   if(action==='default'){welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:current.content}}),{actorId:userId,action:'welcome_normal_default_save'});return updatePanel(interaction,panel());}
-  if(action==='save'){const content=activeNormalMessage(guildId,scope,config);if(!content)throw new Error('Save a normal message first.');mutate(all=>{if(!all[selected])throw new Error('Preset unavailable.');all[selected]={...all[selected],content};return all;});}
+  if(action==='save'){const content=activeNormalMessage(guildId,scope,config);if(!content||content.length>limit)throw new Error('Save a valid normal message first.');mutate(all=>{if(!all[selected])throw new Error('Preset unavailable.');all[selected]={...all[selected],content};return all;});}
   else if(action==='load'){if(scope==='scheduled'){if(current.content.length>1800)throw new Error('Scheduled messages must not exceed 1800 characters.');scheduledWelcome.updateScheduledConfig(guildId,{message:current.content,templateId:null},{actorId:userId});clearSelection(guildId,userId,scope);return updatePanel(interaction,await buildScheduledPanel(interaction.guild,displayName(interaction)));}welcome.updateWelcomeSection(guildId,s=>({...s,normalMessages:{...s.normalMessages,[scope]:current.content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:userId,action:'welcome_normal_preset_load'});clearSelection(guildId,userId,scope);return updatePanel(interaction,await (scope==='dm'?buildDmPanel:buildInstantPanel)(interaction.guild,displayName(interaction),userId));}
   else if(action==='delete')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xed4245).setTitle('Delete selected preset?').setDescription('The active welcome message will not be changed.')],components:[row(button('admin:welcome:normal:confirmDelete-'+selected+':'+scope,'Confirm Delete',ButtonStyle.Danger),button('admin:welcome:normal:open:'+scope,'Cancel'))]});
   else if(action.startsWith('confirmDelete-')){const confirmed=action.slice('confirmDelete-'.length);if(confirmed!==selected)throw new Error('Selection changed. Confirm deletion again.');mutate(all=>{delete all[confirmed];return all;});setSelection(guildId,userId,scope,{presetId:null});}
