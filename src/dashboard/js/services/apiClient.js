@@ -137,6 +137,7 @@ export const api = {
   setVerificationEnabled: (guildId, enabled) => request(`/api/modules/${guildId}/verification/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
   saveVerificationSettings: (guildId, settings) => request(`/api/modules/${guildId}/verification/settings`, { method: 'PATCH', body: JSON.stringify({ settings }) }),
   saveVerificationConfig: (guildId, payload) => request(`/api/verification/${guildId}/config`, { method: 'POST', body: JSON.stringify(payload) }),
+  saveVerificationMessages: (guildId, payload) => request(`/api/verification/${guildId}/messages`, { method: 'POST', body: JSON.stringify(payload) }),
   saveVerificationTemplate: (guildId, payload) => request(`/api/verification/${guildId}/template`, { method: 'POST', body: JSON.stringify(payload) }),
   deployVerificationPanel: (guildId, payload = {}) => request(`/api/verification/${guildId}/deploy`, {
     method: 'POST',
