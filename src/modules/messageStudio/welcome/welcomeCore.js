@@ -72,7 +72,7 @@ function templateToPreviewState(template = {}) { return templateToState(template
 function replaceTemplateText(text, variables, replacements = {}) { return guildVariables.replaceVariables(String(text || ''), { ...variables, ...replacements }); }
 function displayOnlyMentionState(state, variables) { const cleaned = clone(state); const replacements = { userMention: variables.userNoPing, usermention: variables.userNoPing, user: variables.userDisplay, welcomeRoles: variables.welcomeRolesNoPing, welcomeRoleMentions: variables.welcomeRolesNoPing }; cleaned.panels = cleaned.panels.map((panelData) => ({ ...panelData, title: replaceTemplateText(panelData.title, variables, replacements), description: replaceTemplateText(panelData.description, variables, replacements), authorName: replaceTemplateText(panelData.authorName, variables, replacements), footer: replaceTemplateText(panelData.footer, variables, replacements), fields: (panelData.fields || []).map((field) => ({ ...field, name: replaceTemplateText(field.name, variables, replacements), value: replaceTemplateText(field.value, variables, replacements) })) })); return cleaned; }
 async function buildDiscordPayload(member, type, config = getWelcomeSection(member.guild.id), options = {}) {
-  const isDm = type === 'dmWelcome'; const template = options.templateOverride || getAssignedTemplate(member.guild.id, type, config); if (!template) throw new Error(`No ${isDm ? 'DM welcome' : 'welcome'} template is assigned.`);
+  const isDm = type === 'dmWelcome'; const template = options.templateOverride || getAssignedTemplate(member.guild.id, type, config);
   const variables = buildTemplateVariables(member, config); const joinNumber = Number(variables.memberCount || member.guild.memberCount || 0); const renderInteraction = { guild: renderGuildForNumber(member.guild, joinNumber), guildId: member.guild.id, user: member.user, member, client: member.client };
   const userPingEnabled = !isDm && config.allowUserPing !== false && options.suppressPing !== true; const rolePingEnabled = !isDm && config.allowRolePings === true && options.suppressPing !== true; const welcomeRoles = getWelcomeRoleState(member.guild, config); const roleIds = rolePingEnabled ? welcomeRoles.roleIds : [];
   const deliveryVariables = { ...variables, guild: variables.guildName, username: variables.username, userMention: `<@${member.user.id}>`, usermention: `<@${member.user.id}>`, welcomeRoles: rolePingEnabled ? welcomeRoles.mentions : welcomeRoles.display, welcomeRoleMentions: rolePingEnabled ? welcomeRoles.mentions : welcomeRoles.display };
@@ -80,12 +80,13 @@ async function buildDiscordPayload(member, type, config = getWelcomeSection(memb
   const normalScope = isDm && config.dmMessageSource !== 'inherit' ? 'dm' : 'public';
   const normalSource = normalScope === 'dm' ? config.dmMessageSource : config.messageSource;
   const normalMessage = config.normalMessages?.[normalScope];
-  if (normalSource === 'custom' && typeof normalMessage === 'string' && normalMessage.trim() && (!options.templateOverride || options.templateOverride.templateId === template.templateId)) {
+  if (normalSource === 'custom' && typeof normalMessage === 'string' && normalMessage.trim() && !options.templateOverride) {
     let content = replaceTemplateText(normalMessage, deliveryVariables);
     if (userPingEnabled && !content.includes(`<@${member.user.id}>`) && !content.includes(`<@!${member.user.id}>`)) content = `<@${member.user.id}>\n${content}`;
     if (!content.trim() || content.length > 2000) throw new Error('Rendered welcome message must contain 1–2000 characters.');
     return { content, allowedMentions, ...(options.ephemeral ? { ephemeral: true } : {}) };
   }
+  if (!template) throw new Error(`No ${isDm ? 'DM welcome' : 'welcome'} template is assigned.`);
   const payload = await buildTemplateDeliveryPayload({ template, variables: deliveryVariables, interaction: renderInteraction, includeComponents: !isDm && options.includeComponents !== false, allowUserPing: userPingEnabled, userId: member.user.id, ephemeral: options.ephemeral === true, allowedMentions });
   return { ...payload, allowedMentions };
 }
