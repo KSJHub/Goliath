@@ -265,3 +265,7 @@ npm run doctor
 ```
 
 There is currently no dedicated `audit:welcome` npm script.
+
+## Instant Welcome recovery
+
+Ordinary and verification-deferred joins use persistent per-destination delivery checkpoints. Successful public and DM destinations are skipped on recovery. Completed membership timestamps prevent repeat delivery for the same join. Dashboard and Discord Instant Health show pending and partial delivery counts. Repair reconciles configuration and template bindings; it is not a resend command. Exact public message IDs support avatar synchronisation. A Discord send accepted before a checkpoint is persisted remains an unavoidable uncertainty window.
