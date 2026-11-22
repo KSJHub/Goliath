@@ -1179,43 +1179,17 @@ async function handleRoleSelectorInteraction(i) {
     if (id.startsWith('admin:roleSelector:deploymentContent:')) return respond(i, await buildDeploymentContentPanel(i, tail(id, 'admin:roleSelector:deploymentContent')));
     if (id.startsWith('admin:roleSelector:deploymentGroups:')) {
       const deploymentId = tail(id, 'admin:roleSelector:deploymentGroups');
-      const list = deploymentList(roleSelector.getSection(i.guildId)); const index = list.findIndex((d) => d.id === deploymentId);
-      if (index < 0) throw new Error('Choose a deployment first.');
-      const selected = [...new Set((i.values || []).filter((x) => x !== '__none__'))];
-      const optionIdsByGroup = { ...list[index].optionIdsByGroup };
-      for (const groupId of Object.keys(optionIdsByGroup)) if (!selected.includes(groupId)) delete optionIdsByGroup[groupId];
-      list[index] = { ...list[index], groupIds: selected, optionIdsByGroup };
-      saveDeployments(i.guildId, list, { ...actor, action: 'role_selector_deployment_groups' });
-      await syncOneDeployment(i.guild, list[index]).catch(() => null);
-      return respond(i, await buildDeploymentContentPanel(i, deploymentId));
+      await configureDeployment(i.guild,i.user.id,{groupIds:[...new Set((i.values || []).filter(x=>x!=='__none__'))]},deploymentId);
+      return respond(i, await buildDeploymentContentPanel(i,deploymentId));
     }
     if (id.startsWith('admin:roleSelector:deploymentContentGroup:') && i.values?.[0] !== '__none__') {
-      const deploymentId = tail(id, 'admin:roleSelector:deploymentContentGroup');
-      return respond(i, await buildDeploymentContentPanel(i, deploymentId, i.values[0]));
+      return respond(i, await buildDeploymentContentPanel(i,tail(id,'admin:roleSelector:deploymentContentGroup'),i.values[0]));
     }
-    if (id.startsWith('admin:roleSelector:deploymentOptions:')) {
-      const [deploymentId, groupId] = splitTail(id, 'admin:roleSelector:deploymentOptions');
-      const list = deploymentList(roleSelector.getSection(i.guildId)); const index = list.findIndex((d) => d.id === deploymentId);
-      if (index < 0 || !groupId) throw new Error('Choose a deployment group first.');
-      const group = roleSelector.getGroup(i.guildId,groupId);
-      const selected = [...new Set(i.values || [])];
-      const options = group?.type === 'colour' ? group.palette : group?.options || [];
-      if (!list[index].groupIds.includes(groupId) || !selected.length || selected.some(id=>!options.some(o=>o.enabled && o.id===id))) throw new Error('Choose at least one valid enabled option for this deployment.');
-      list[index] = { ...list[index], optionIdsByGroup: { ...list[index].optionIdsByGroup, [groupId]: selected } };
-      saveDeployments(i.guildId, list, { ...actor, action: 'role_selector_deployment_options' });
-      await syncOneDeployment(i.guild, list[index]).catch(() => null);
-      return respond(i, await buildDeploymentContentPanel(i, deploymentId, groupId));
-    }
-    if (id.startsWith('admin:roleSelector:deploymentOptionsAll:')) {
-      const [deploymentId, groupId] = splitTail(id, 'admin:roleSelector:deploymentOptionsAll');
-      if (!groupId || groupId === 'none') throw new Error('Choose a deployment group first.');
-      const list = deploymentList(roleSelector.getSection(i.guildId)); const index = list.findIndex((d) => d.id === deploymentId);
-      if (index < 0) throw new Error('Choose a deployment first.');
-      const optionIdsByGroup = { ...list[index].optionIdsByGroup }; delete optionIdsByGroup[groupId];
-      list[index] = { ...list[index], optionIdsByGroup };
-      saveDeployments(i.guildId, list, { ...actor, action: 'role_selector_deployment_options_all' });
-      await syncOneDeployment(i.guild, list[index]).catch(() => null);
-      return respond(i, await buildDeploymentContentPanel(i, deploymentId, groupId));
+    if (id.startsWith('admin:roleSelector:deploymentOptions:') || id.startsWith('admin:roleSelector:deploymentOptionsAll:')) {
+      const reset = id.startsWith('admin:roleSelector:deploymentOptionsAll:');
+      const [deploymentId,groupId] = splitTail(id,reset?'admin:roleSelector:deploymentOptionsAll':'admin:roleSelector:deploymentOptions');
+      await configureDeployment(i.guild,i.user.id,{filterEdit:{groupId,ids:reset?null:[...new Set(i.values || [])]}},deploymentId);
+      return respond(i,await buildDeploymentContentPanel(i,deploymentId,groupId));
     }
     if (id.startsWith('admin:roleSelector:deploymentChannel:')) {
       const deploymentId = tail(id, 'admin:roleSelector:deploymentChannel');
@@ -1383,7 +1357,13 @@ async function configureDeployment(guild, actorId, patch = {}, deploymentId = nu
     if (!channel?.send) throw new Error('Choose a sendable channel.');
     const groupIds = patch.groupIds ?? previous.groupIds ?? [];
     if (!Array.isArray(groupIds) || !groupIds.length || groupIds.length > 25 || groupIds.some(id => !roleSelector.getGroup(guild.id,id))) throw new Error('Choose valid selector groups.');
-    const filters = patch.optionIdsByGroup ?? previous.optionIdsByGroup ?? {};
+    let filters = patch.optionIdsByGroup ?? previous.optionIdsByGroup ?? {};
+    if (patch.filterEdit) {
+      const {groupId,ids} = patch.filterEdit;
+      if (!groupIds.includes(groupId)) throw new Error('Choose a deployment group first.');
+      filters = {...filters};
+      if (ids === null) delete filters[groupId]; else filters[groupId] = ids;
+    }
     if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw new Error('Invalid option filters.');
     const optionIdsByGroup = Object.create(null);
     for (const groupId of groupIds) {
@@ -1396,7 +1376,8 @@ async function configureDeployment(guild, actorId, patch = {}, deploymentId = nu
     }
     const next = normalizeDeployment({...previous, channelId, messageId: previous.channelId === channelId ? previous.messageId : null, groupIds, optionIdsByGroup, id: previous.id || 'p' + require('node:crypto').randomBytes(8).toString('hex')});
     if (index >= 0) list[index] = next; else list.push(next);
-    saveDeployments(guild.id,list,{actorId,action:'role_selector_dashboard_configure'});
+    saveDeployments(guild.id,list,{actorId,action:'role_selector_deployment_configure'});
+    if (next.status === 'active') await syncOneDeployment(guild,next);
     return next;
   });
 }
