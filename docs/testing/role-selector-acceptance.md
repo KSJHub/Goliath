@@ -69,7 +69,7 @@ Pass criteria: multiple-choice state mirrors the member's current selection with
 
 ## 5. Existing Discord role option
 
-- [ ] Create or choose an existing Discord role with zero permissions below Goliath.
+- [ ] Create or choose an existing Discord role below Goliath.
 - [ ] Attach it to a selector option as an existing role.
 - [ ] Confirm members can self-assign and remove it.
 - [ ] Delete the selector group.
@@ -77,7 +77,7 @@ Pass criteria: multiple-choice state mirrors the member's current selection with
 
 Negative checks:
 
-- [ ] Attempt to attach a role with Discord permissions and confirm it is rejected.
+- [ ] Attach a manageable external role with Discord permissions and confirm it is accepted; verify its permissions remain unchanged.
 - [ ] Attempt to attach a role at/above Goliath and confirm it is rejected.
 
 Pass criteria: external roles are usable only when safe and are never treated as Goliath-owned deletion targets.
