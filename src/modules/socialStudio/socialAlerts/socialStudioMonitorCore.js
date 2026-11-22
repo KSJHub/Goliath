@@ -238,7 +238,15 @@ async function socialWideMediaPayload(account,event,embed,previousMessage=null) 
     const metadata=await sharp(image).metadata();
     if(metadata.width!==width||metadata.height!==height) throw new Error('TikTok LIVE wide artwork dimensions invalid');
     const filename='goliath-tiktok-live-wide.jpg';
+    // Enforce the canonical LIVE presentation at the final payload boundary.
+    // Never deliver a legacy thumbnail or a portrait URL as the main image.
+    delete embed.data.thumbnail;
     embed.setImage('attachment://'+filename);
+    const required=['TikTok','Started','Language','Viewers','Live For','Status'];
+    const fields=embed.data.fields||[];
+    if(!required.every(name=>fields.some(field=>String(field.name||'').includes(name)))) {
+      throw new Error('TikTok LIVE canonical metadata missing; refusing legacy payload');
+    }
     return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
   }
   const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,retained?.url,retained?.proxyURL,
