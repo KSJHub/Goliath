@@ -213,6 +213,14 @@ router.post('/:guildId/deploy', async (req, res) => {
   } catch (error) { return failure(res, error); }
 });
 
+router.post('/:guildId/deployments/:deploymentId/publish', async (req, res) => {
+  try {
+    const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.');
+    const message = await panel.deploySelected({ guildId: id, guild: g, user: { id: actorId(req) } }, req.params.deploymentId);
+    return success(res, { messageId: message.id, ...(await overview(req, id)) });
+  } catch (error) { return failure(res, error); }
+});
+
 router.post('/:guildId/repair', async (req, res) => {
   try { const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.'); const repair = await healthService.repair(g); await panel.syncDeploymentState(g).catch(() => null); return success(res, { repair, ...(await overview(req, id)) }); } catch (error) { return failure(res, error); }
 });
