@@ -153,6 +153,10 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(type==='roles'&&verificationStore.getSession(g.id,userId)?.state==='verified'){
       try{if(t.lockOnSuccess)await thread.setLocked(true);if(t.archiveOnSuccess)await thread.setArchived(true);}catch(error){console.error('[Verification] Thread closure failed:',error?.message||error);}
     }
+    const state=verificationStore.getSession(g.id,userId)?.state;
+    if((type==='failure'&&['failed','rejected','timed_out'].includes(state)&&t.archiveOnFailure)||(type==='quarantine'&&state==='quarantined'&&t.archiveOnQuarantine)){
+      try{await thread.setArchived(true);}catch(error){console.error('[Verification] Case archive failed:',error?.message||error);}
+    }
     return true;
   });
   verificationThreadQueues.set(key,work);
