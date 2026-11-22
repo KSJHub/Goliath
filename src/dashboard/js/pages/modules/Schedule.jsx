@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -46,7 +47,7 @@ function normalizeList(payload, key) {
   return [];
 }
 function MultiRoleSelect({ theme, label, roles, value, onChange }) {
-  return <label style={{ display: 'grid', gap: 7 }}><span style={{ color: theme.mutedText, fontWeight: 900 }}>{label}</span><select multiple value={value || []} onChange={(e) => onChange([...e.target.selectedOptions].map((option) => option.value))} style={{ ...fieldStyle(theme), minHeight: 120 }}>{roles.map((role) => <option key={role.id} value={role.id}>{role.name || role.label || role.id}</option>)}</select></label>;
+  return <label style={{ display: 'grid', gap: 7 }}><span style={{ color: theme.mutedText, fontWeight: 900 }}>{label}</span><ThemedSelect theme={theme} multiple value={value || []} onChange={(e) => onChange([...e.target.selectedOptions].map((option) => option.value))} style={{ ...fieldStyle(theme), minHeight: 120 }}>{roles.map((role) => <option key={role.id} value={role.id}>{role.name || role.label || role.id}</option>)}</ThemedSelect></label>;
 }
 function TextAreaField({ theme, label, value, onChange, placeholder, rows = 5 }) {
   return <label style={{ display: 'grid', gap: 7 }}><span style={{ color: theme.mutedText, fontWeight: 900 }}>{label}</span><textarea rows={rows} style={fieldStyle(theme)} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></label>;
@@ -204,7 +205,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
 
       {tab === 'repeat' && <>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 }}>
-          <label>Recurrence<select style={fieldStyle(theme)} value={draft.recurrence?.type || 'none'} onChange={(e) => setDraft({ ...draft, recurrence: { ...draft.recurrence, type: e.target.value } })}>{['none','hourly','daily','weekly','monthly','yearly'].map((type) => <option key={type}>{type}</option>)}</select></label>
+          <label>Recurrence<ThemedSelect theme={theme} style={fieldStyle(theme)} value={draft.recurrence?.type || 'none'} onChange={(e) => setDraft({ ...draft, recurrence: { ...draft.recurrence, type: e.target.value } })}>{['none','hourly','daily','weekly','monthly','yearly'].map((type) => <option key={type}>{type}</option>)}</ThemedSelect></label>
           <label>Repeat every<input style={fieldStyle(theme)} type="number" min="1" value={draft.recurrence?.interval || 1} onChange={(e) => setDraft({ ...draft, recurrence: { ...draft.recurrence, interval: Number(e.target.value) } })} /></label>
           <label>Stop after occurrences<input style={fieldStyle(theme)} type="number" min="1" value={draft.recurrence?.count ?? ''} onChange={(e) => setDraft({ ...draft, recurrence: { ...draft.recurrence, count: e.target.value } })} /></label>
           <label>Stop on date<input style={fieldStyle(theme)} type="date" value={draft.recurrence?.until || ''} onChange={(e) => setDraft({ ...draft, recurrence: { ...draft.recurrence, until: e.target.value } })} /></label>
@@ -220,7 +221,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
         <label><input type="checkbox" checked={draft.thread?.enabled === true} onChange={(e) => setDraft({ ...draft, thread: { ...draft.thread, enabled: e.target.checked } })} /> Create an event thread</label>
         <label>Thread title<input style={fieldStyle(theme)} value={draft.thread?.title || '{event}'} onChange={(e) => setDraft({ ...draft, thread: { ...draft.thread, title: e.target.value } })} /></label>
         <label><input type="checkbox" checked={draft.thread?.addAttendeesOnRsvp !== false} onChange={(e) => setDraft({ ...draft, thread: { ...draft.thread, addAttendeesOnRsvp: e.target.checked } })} /> Add attendees to the thread when they RSVP</label>
-        <label>Thread auto-archive<select style={fieldStyle(theme)} value={draft.thread?.autoArchiveDuration || 1440} onChange={(e) => setDraft({ ...draft, thread: { ...draft.thread, autoArchiveDuration: Number(e.target.value) } })}><option value={60}>1 hour</option><option value={1440}>1 day</option><option value={4320}>3 days</option><option value={10080}>7 days</option></select></label>
+        <label>Thread auto-archive<ThemedSelect theme={theme} style={fieldStyle(theme)} value={draft.thread?.autoArchiveDuration || 1440} onChange={(e) => setDraft({ ...draft, thread: { ...draft.thread, autoArchiveDuration: Number(e.target.value) } })}><option value={60}>1 hour</option><option value={1440}>1 day</option><option value={4320}>3 days</option><option value={10080}>7 days</option></ThemedSelect></label>
       </div>}
 
       <div style={{ display: 'flex', gap: 10 }}><button style={buttonStyle(theme, 'success')} disabled={busy || !draft.title || !draft.startAt} onClick={saveEvent}>{busy === 'save' ? 'Saving...' : editingId ? 'Save Changes' : 'Create Event'}</button>{editingId && <button style={buttonStyle(theme)} onClick={() => { setEditingId(''); setDraft({ ...emptyDraft, timezone: settings.defaultTimezone || 'Europe/London' }); }}>Cancel</button>}</div>
