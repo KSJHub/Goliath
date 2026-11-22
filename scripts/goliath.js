@@ -2779,6 +2779,50 @@ function welcomeEmbedDeliveryAudit() {
     const recovery = spawnSync(process.execPath, ['-e', probe], { cwd: root, encoding: 'utf8', timeout: 15000 });
     assert.equal(recovery.status, 0, recovery.stderr || recovery.error?.message || 'Scheduled Welcome recovery failed');
 
+
+    const instantProbe = spawnSync(process.execPath, ['-e', `
+      const assert = require('node:assert/strict');
+      const source = require('node:fs').readFileSync('src/modules/messageStudio/welcome/welcomeCore.js','utf8');
+      (async () => {
+        for (const failedDestination of ['public','dm']) {
+          let state={}, publicCount=0, dmCount=0, fail=true;
+          const id='123456789012345678', channelId='123456789012345679';
+          const template={templateId:'welcome_default'};
+          const guild={id:'123456789012345680',memberCount:1,roles:{cache:new Map()},channels:{fetch:async()=>({id:channelId,isTextBased:()=>true,send:async payload=>{assert.deepEqual(payload.allowedMentions.parse,[]);if(fail&&failedDestination==='public')throw Error('injected public failure');publicCount++;return {id:'123456789012345681'};}})}};
+          const member={id,guild,user:{id,bot:false},joinedAt:new Date('2026-01-01T00:00:00Z'),displayAvatarURL:()=> 'https://example.com/avatar.png',send:async payload=>{assert.deepEqual(payload.allowedMentions.users,[]);assert.deepEqual(payload.allowedMentions.roles,[]);if(fail&&failedDestination==='dm')throw Error('injected DM failure');dmCount++;}};
+          guild.members={cache:new Map([[id,member]]),fetch:async()=>member};
+          const deps={
+            'discord.js':{PermissionFlagsBits:{}},
+            '../../../core/guild/guildManager':{isModuleEnabled:()=>true,setModuleEnabled:()=>{}},
+            '../../../core/guild/guildVariables':{buildVariableMap:()=>({'{memberCount}':'1'})},
+            '../../../core/guild/moduleSectionManager':{getModuleSection:()=>state,updateModuleSection:(_g,_m,fn)=>{state=JSON.parse(JSON.stringify(fn(state)));return state;}},
+            '../embed/embedTemplates':{getBinding:()=>null,getTemplate:()=>template},
+            '../embed/embedTemplateDelivery':{buildTemplateDeliveryPayload:async()=>({allowedMentions:{parse:['everyone']}})}
+          };
+          const load=()=>{const mod={exports:{}};new Function('require','module','exports',source)(key=>{if(!(key in deps))throw Error(key);return deps[key];},mod,mod.exports);return mod.exports;};
+          let instant=load();
+          instant.updateConfig(guild.id,{channelId,dmEnabled:true});
+          await instant.sendWelcome(member);
+          assert.equal(publicCount,failedDestination==='public'?0:1);
+          assert.equal(dmCount,failedDestination==='dm'?0:1);
+          assert.ok(state.deferredWelcomes[id]);
+          fail=false;instant=load();
+          await instant.sendWelcome(member);
+          assert.equal(publicCount,1);assert.equal(dmCount,1);
+          assert.equal(state.deferredWelcomes[id],undefined);
+          assert.equal(state.completedInstantJoins[id],member.joinedAt.toISOString());
+          await instant.sendWelcome(member);
+          assert.equal(publicCount,1);assert.equal(dmCount,1);
+          instant.updateConfig(guild.id,{completedInstantJoins:{},avatarSyncMessages:[]});
+          assert.ok(state.completedInstantJoins[id]);assert.equal(state.avatarSyncMessages[0].messageId,'123456789012345681');
+          member.joinedAt=new Date('2026-01-02T00:00:00Z');
+          await instant.sendWelcome(member);
+          assert.equal(publicCount,2);assert.equal(dmCount,2);
+        }
+      })().catch(error=>{console.error(error);process.exitCode=1;});
+    `], {cwd:root,encoding:'utf8',timeout:15000});
+    assert.equal(instantProbe.status,0,instantProbe.stderr || instantProbe.error?.message || 'Instant Welcome recovery audit failed');
+
     const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
     const route = read('src/server/routes/modules/messageStudio/welcome.js');
     
