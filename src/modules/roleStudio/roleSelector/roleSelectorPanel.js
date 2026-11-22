@@ -756,6 +756,24 @@ function splitTail(id, prefix) {
   return value == null ? [] : value.split(':');
 }
 
+function buildInteractivePreview(i, group) {
+  const preview = state(i).preview;
+  const selected = new Set(preview.selected);
+  const roleIds = new Set(group.options.filter(o => selected.has(o.id) && o.roleId).map(o => o.roleId));
+  const payload = memberGroupPayload(i.guild, { roles: { cache: roleIds } }, group.id);
+  // Replace every member control with an admin-only simulation control.
+  const controls = payload.components.slice(1).map(r => {
+    for (const c of r.components) {
+      const original = c.data.custom_id;
+      if (original.startsWith('roleSelector:pick:')) c.setCustomId('admin:roleSelector:previewPick:' + original.split(':').pop());
+      else if (original.startsWith('roleSelector:choose:')) c.setCustomId('admin:roleSelector:previewChoose');
+      else if (original.startsWith('roleSelector:clear:')) c.setCustomId('admin:roleSelector:previewClear');
+    }
+    return r;
+  });
+  return { content: 'Preview only — no Discord roles will be changed. Selected: ' + selected.size, embeds: payload.embeds, components: [...controls, nav(customId('admin:roleSelector:groupOpen', group.id))] };
+}
+
 async function handleRoleSelectorInteraction(i) {
   const id = String(i.customId || '');
   const actor = { actorId: i.user?.id };
@@ -810,6 +828,24 @@ async function handleRoleSelectorInteraction(i) {
       await roleSelector.saveGroupSafe(i.guild, { ...group, [key]: values }, { ...actor, action: 'role_selector_dependencies' });
       return respond(i, buildGroupsPanel(i.guildId, group.id));
     }
+    if (id === 'admin:roleSelector:previewChoose' || id === 'admin:roleSelector:previewClear' || id.startsWith('admin:roleSelector:previewPick:')) {
+      const preview = state(i).preview;
+      const group = preview && roleSelector.getGroup(i.guildId, preview.groupId);
+      if (!group || group.builtIn) throw new Error('Reopen the selector preview.');
+      const options = group.options.filter(o => o.enabled);
+      let desired = preview.selected;
+      if (id === 'admin:roleSelector:previewClear') desired = [];
+      else if (id === 'admin:roleSelector:previewChoose') desired = [...new Set(i.values || [])];
+      else {
+        const token = id.split(':').pop();
+        const option = options.find(o => optionToken(o.id, group.id, 'global') === token);
+        if (!option) throw new Error('Reopen the selector preview.');
+        desired = group.selectionMode === 'single' ? [option.id] : desired.includes(option.id) ? desired.filter(x => x !== option.id) : [...desired, option.id];
+      }
+      if (desired.some(x => !options.some(o => o.id === x)) || desired.length < (group.minSelections || 0) || desired.length > group.maxSelections) throw new Error('Selection does not meet the configured limits.');
+      preview.selected = desired;
+      return respond(i, buildInteractivePreview(i, group));
+    }
     if (id.startsWith('admin:roleSelector:controlMode:')) {
       const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:controlMode'));
       if (!group || group.builtIn) throw new Error('Select a custom selector first.');
@@ -823,8 +859,8 @@ async function handleRoleSelectorInteraction(i) {
       const group = roleSelector.getGroup(i.guildId, groupId);
       if (!group || group.builtIn) throw new Error('Select a custom selector first.');
       if (action === 'preview') {
-        const payload = memberGroupPayload(i.guild, await freshMember(i), group.id);
-        return respond(i, { embeds: payload.embeds, components: [nav(customId('admin:roleSelector:groupOpen', group.id))] });
+        state(i).preview = { groupId: group.id, selected: [] };
+        return respond(i, buildInteractivePreview(i, group));
       }
       const fields = action === 'design' ? [['title','Title',256],['description','Description',3000],['color','HEX colour',7],['footer','Footer',2048]] : [['image','Banner image URL',2048],['thumbnail','Thumbnail URL',2048]];
       const modal = new ModalBuilder().setCustomId(customId('admin:roleSelector:' + action + 'Submit', group.id)).setTitle(action === 'design' ? 'Selector Appearance' : 'Selector Images');
