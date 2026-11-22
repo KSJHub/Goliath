@@ -90,6 +90,21 @@ async function recoverAccount(client, guild, guildConfig, account) {
   if (state.isLive !== true || !state.lastLiveEvent || !isMissingLivePostError(state.lastDeliveryError)) return null;
   const currentEventId = state.liveEventId || state.lastLiveEvent?.id;
   if (!currentEventId) return null;
+  // TikTok must not reset a tracked broadcast on a stale error or a
+  // temporary Discord outage. Only an explicit Unknown Message permits replacement.
+  if (String(account.platform || '').toLowerCase() === 'tiktok') {
+    const channelId = state.lastLiveMessageChannelId || state.lastAlertChannelId;
+    const messageId = state.lastLiveMessageId || state.lastAlertMessageId;
+    if (!channelId || !messageId) return null;
+    try {
+      const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId);
+      if (!channel?.isTextBased?.()) return null;
+      await channel.messages.fetch({ message: messageId, force: true });
+      return null;
+    } catch (error) {
+      if (Number(error?.code) !== 10008) return null;
+    }
+  }
   const incident = incidentFor(guild, account);
   await sentinel.report(client, { ...incident, severity: 'warning', message: 'The tracked Social Studio LIVE post is missing. Automatic replacement started.', details: { accountId: account.accountId, currentEventId: String(currentEventId), missingMessageId: state.lastLiveMessageId || state.lastAlertMessageId || null, missingChannelId: state.lastLiveMessageChannelId || state.lastAlertChannelId || null, deliveryError: state.lastDeliveryError || null } });
   try {
