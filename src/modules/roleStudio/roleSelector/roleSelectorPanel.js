@@ -410,7 +410,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
       row(button(customId('admin:roleSelector:limits', selected.id), emojiLabel('SETTINGS', 'Selection Limits'), ButtonStyle.Primary), button(customId('admin:roleSelector:deleteGroup', selected.id), emojiLabel('DELETE', 'Delete Selector'), ButtonStyle.Danger), button(customId('admin:roleSelector:dependencies', selected.id), emojiLabel('SETTINGS', 'Role Dependencies')), button(customId('admin:roleSelector:guide', selected.id), emojiLabel('ADD', 'Creation Guide'))),
-      row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview')), button(customId('admin:roleSelector:controlMode', selected.id), selected.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')),
+      row(button(customId('admin:roleSelector:design', selected.id), emojiLabel('EDIT', 'Appearance')), button(customId('admin:roleSelector:media', selected.id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:preview', selected.id), emojiLabel('PREVIEW', 'Preview')), button(customId('admin:roleSelector:controlMode', selected.id), selected.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown'), button(customId('admin:roleSelector:templates', selected.id), emojiLabel('DESIGN', 'Template'))),
       nav('admin:roleSelector:groups'),
     ],
   };
@@ -433,7 +433,7 @@ function buildColourPanel(guildId, group) {
         button('admin:roleSelector:toggleHex', group.customHexEnabled ? emojiLabel('DESIGN', 'Custom HEX: On') : emojiLabel('DESIGN', 'Custom HEX: Off')),
         button('admin:roleSelector:colourClearToggle', group.allowRemove ? emojiLabel('ADMIN_PURGE', 'Allow Clear: Yes') : emojiLabel('ADMIN_PURGE', 'Allow Clear: No')),
       ),
-      row(button(customId('admin:roleSelector:preview', group.id), emojiLabel('PREVIEW', 'Preview'))),
+      row(button(customId('admin:roleSelector:preview', group.id), emojiLabel('PREVIEW', 'Preview')), button(customId('admin:roleSelector:templates', group.id), emojiLabel('DESIGN', 'Template'))),
       nav(),
     ],
   };
@@ -835,6 +835,20 @@ function buildInteractivePreview(i, group) {
   return { content: 'Preview only — no Discord roles will be changed. Selected: ' + selected.size, embeds: payload.embeds, components: [...controls, nav(customId('admin:roleSelector:groupOpen', group.id))] };
 }
 
+function buildSelectorTemplates(guildId, group, page = 0) {
+  const templates = require('../../messageStudio/embed/embedTemplates');
+  const slot = 'member_group_' + group.id;
+  const bound = templates.getBinding(guildId, 'role_selector', slot);
+  const all = Object.values(templates.listTemplates(guildId)).sort((a,b)=>String(a.name || a.templateId).localeCompare(String(b.name || b.templateId)));
+  const last = Math.max(0, Math.ceil(all.length / 25) - 1);
+  page = Math.max(0, Math.min(last, Number(page)||0));
+  const list = all.slice(page*25,page*25+25);
+  const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:templateBind',group.id)).setPlaceholder('Select an individual template').setMinValues(1).setMaxValues(1);
+  if (list.length) menu.addOptions(list.map(t=>({label:String(t.name || t.templateId).slice(0,100),value:t.templateId,default:bound?.templateId===t.templateId})));
+  else menu.addOptions({label:'No templates available',value:'__none__'}).setDisabled(true);
+  return {embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('DESIGN','Selector Template')).setDescription(['**'+group.name+'**','Current: '+(bound ? (bound.name || bound.templateId) : 'Shared template / default'),'Choose a template from Embed Studio or restore the shared appearance.','Page '+(page+1)+' of '+(last+1)].join('\n'))],components:[row(menu),row(button(customId('admin:roleSelector:templatePage',group.id,page-1),'Previous',ButtonStyle.Secondary,page===0),button(customId('admin:roleSelector:templatePage',group.id,page+1),'Next',ButtonStyle.Secondary,page===last),button(customId('admin:roleSelector:templateReset',group.id),'Restore Shared',ButtonStyle.Secondary,!bound)),nav(customId('admin:roleSelector:groupOpen',group.id))]};
+}
+
 async function handleRoleSelectorInteraction(i) {
   const id = String(i.customId || '');
   const actor = { actorId: i.user?.id };
@@ -853,6 +867,18 @@ async function handleRoleSelectorInteraction(i) {
       return respond(i, await buildSettingsPanel(i.guild));
     }
 
+    if (/^admin:roleSelector:(templates|templatePage|templateBind|templateReset):/.test(id)) {
+      const [, , action, groupId, page] = id.split(':');
+      const group = roleSelector.getGroup(i.guildId, groupId);
+      if (!group) throw new Error('Selector not found.');
+      const templates = require('../../messageStudio/embed/embedTemplates');
+      const slot = 'member_group_' + group.id;
+      if (action === 'templateBind') {
+        if (!i.values?.[0] || i.values[0] === '__none__') throw new Error('Choose a template.');
+        templates.bindTemplate(i.guildId,'role_selector',slot,i.values[0]);
+      } else if (action === 'templateReset') templates.unbindTemplate(i.guildId,'role_selector',slot);
+      return respond(i,buildSelectorTemplates(i.guildId,group,page));
+    }
     if (id === 'admin:roleSelector:groups') return respond(i, buildGroupsPanel(i.guildId));
     if (id === 'admin:roleSelector:groupSelect' && i.values?.[0] !== '__none__') return respond(i, buildGroupsPanel(i.guildId, i.values[0]));
     if (id === 'admin:roleSelector:createGroup') { await i.showModal(createGroupModal()); return true; }
