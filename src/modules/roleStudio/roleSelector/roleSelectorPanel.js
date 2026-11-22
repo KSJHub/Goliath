@@ -206,9 +206,9 @@ function memberLauncherPayload(guild, allowedIds = null, deploymentId = null) {
 function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymentId = null, deployment = null, simulation = null) {
   if (!simulation) roleSelector.assertModuleEnabled(guild.id);
   const group = roleSelector.getGroup(guild.id, groupId);
-  if (!group || !roleSelector.isGroupMemberUsable(group) || (Array.isArray(allowedIds) && !allowedIds.includes(group.id))) throw new Error('That selector is unavailable on this panel.');
+  if (!group || (!simulation && !roleSelector.isGroupMemberUsable(group)) || (Array.isArray(allowedIds) && !allowedIds.includes(group.id))) throw new Error('That selector is unavailable on this panel.');
 
-  const components = [memberCategoryMenu(guild, allowedIds, group.id, deploymentId ? customId('roleSelector:switchGroup', deploymentId) : 'roleSelector:switchGroup')];
+  const components = simulation ? [] : [memberCategoryMenu(guild, allowedIds, group.id, deploymentId ? customId('roleSelector:switchGroup', deploymentId) : 'roleSelector:switchGroup')];
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${group.emoji || EMOJIS.ROLE_TAG} ${group.name}`).setDescription([
     group.description || 'Choose your role.',
     group.selectionMode === 'multiple' ? 'Select every option that applies.' : 'Select one option.',
@@ -788,22 +788,27 @@ function splitTail(id, prefix) {
   return value == null ? [] : value.split(':');
 }
 
-function buildCreationGuide(guildId, group) {
+function buildCreationGuide(guildId, group, step = 0) {
   const count = group.options.filter(o => o.enabled).length;
   const id = group.id;
+  const stages = [
+    ['Configuration', group.name + ' · ' + group.selectionMode, [button(customId('admin:roleSelector:groupOpen', id), emojiLabel('EDIT', 'Edit Configuration')), button(customId('admin:roleSelector:limits', id), emojiLabel('SETTINGS', 'Selection Limits'))]],
+    ['Options', count + ' enabled options. Add existing roles or configure options.', [button(customId('admin:roleSelector:addRoles', id), emojiLabel('ADD', 'Add Roles'), ButtonStyle.Primary), button(customId('admin:roleSelector:groupOpen', id), emojiLabel('EDIT', 'Configure Options')), button(customId('admin:roleSelector:dependencies', id), emojiLabel('SETTINGS', 'Role Dependencies'))]],
+    ['Appearance', 'Configure the embed, images and control style.', [button(customId('admin:roleSelector:design', id), emojiLabel('DESIGN', 'Appearance')), button(customId('admin:roleSelector:media', id), emojiLabel('EDIT', 'Images')), button(customId('admin:roleSelector:controlMode', id), group.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')]],
+    ['Preview', 'Test without assigning roles.', [button(customId('admin:roleSelector:preview', id), emojiLabel('PREVIEW', 'Preview'), ButtonStyle.Primary, !count)]],
+    ['Publishing', 'Choose a deployment and its selector groups.', [button('admin:roleSelector:deployment', 'Publishing', ButtonStyle.Success, !count)]],
+  ];
+  step = Math.max(0, Math.min(stages.length - 1, Number(step) || 0));
+  const [name, description, actions] = stages[step];
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ADD', 'Selector Creation Guide')).setDescription([
-      '**1. Configuration** — ' + group.name + ' · ' + group.selectionMode,
-      '**2. Options** — ' + count + ' enabled options. Add existing roles or configure options.',
-      '**3. Appearance** — Configure the embed and control style.',
-      '**4. Preview** — Test without assigning roles.',
-      '**5. Publishing** — Choose a deployment and its selector groups.'
-    ].join('\n\n'))],
+      '**Step ' + (step + 1) + ' of ' + stages.length + ': ' + name + '**',
+      description, '', ...stages.map((stage, index) => (index === step ? '**' + (index + 1) + '. ' + stage[0] + '**' : (index + 1) + '. ' + stage[0]))
+    ].join('\n'))],
     components: [
-      row(button(customId('admin:roleSelector:addRoles', id), emojiLabel('ADD', 'Add Roles'), ButtonStyle.Primary), button(customId('admin:roleSelector:groupOpen', id), emojiLabel('EDIT', 'Configure Options'))),
-      row(button(customId('admin:roleSelector:design', id), emojiLabel('DESIGN', 'Appearance')), button(customId('admin:roleSelector:controlMode', id), group.controlMode === 'buttons' ? 'Mode: Buttons' : 'Mode: Dropdown')),
-      row(button(customId('admin:roleSelector:preview', id), emojiLabel('PREVIEW', 'Preview'), ButtonStyle.Primary, !count), button('admin:roleSelector:deployment', 'Publishing', ButtonStyle.Success, !count)),
-      nav('admin:roleSelector:groups')
+      row(...actions),
+      row(button(customId('admin:roleSelector:guideStep', id, step - 1), 'Previous Step', ButtonStyle.Secondary, step === 0), button(customId('admin:roleSelector:guideStep', id, step + 1), 'Next Step', ButtonStyle.Primary, step === stages.length - 1 || (step === 1 && !count))),
+      nav(customId('admin:roleSelector:groupOpen', id))
     ]
   };
 }
@@ -814,7 +819,7 @@ function buildInteractivePreview(i, group) {
   const roleIds = new Set((group.options || []).filter(o => selected.has(o.id) && o.roleId).map(o => o.roleId));
   const payload = memberGroupPayload(i.guild, { roles: { cache: roleIds } }, group.id, null, null, null, selected);
   // Replace every member control with an admin-only simulation control.
-  const controls = payload.components.slice(1).map(r => {
+  const controls = payload.components.map(r => {
     for (const c of r.components) {
       const original = c.data.custom_id;
       if (original.startsWith('roleSelector:pick:')) c.setCustomId('admin:roleSelector:previewPick:' + original.split(':').pop());
@@ -858,6 +863,12 @@ async function handleRoleSelectorInteraction(i) {
       }, { ...actor, action: 'role_selector_create_group' });
       await syncPanels(i.guild, group.id);
       return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildCreationGuide(i.guildId, group), flags: 64 });
+    }
+    if (id.startsWith('admin:roleSelector:guideStep:')) {
+      const parts = id.split(':');
+      const group = roleSelector.getGroup(i.guildId, parts[3]);
+      if (!group || group.builtIn) throw new Error('Select a custom selector first.');
+      return respond(i, buildCreationGuide(i.guildId, group, Number(parts[4])));
     }
     if (id.startsWith('admin:roleSelector:guide:')) {
       const group = roleSelector.getGroup(i.guildId, tail(id, 'admin:roleSelector:guide'));
