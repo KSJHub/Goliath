@@ -107,7 +107,7 @@ export function EmojiSelect(props) {
 export default DiscordResourceSelect;
 
  // Adapter for existing single-value JSX selects, preserving their change handlers.
-export function ThemedSelect({ theme, children, value, onChange, disabled, 'aria-label': label, style }) {
+export function ThemedSelect({ theme, children, value, onChange, disabled, multiple = false, size, 'aria-label': label, style }) {
   const collect = (nodes, groupName) => React.Children.toArray(nodes).flatMap(node => {
     if (!React.isValidElement(node)) return [];
     if (node.type === React.Fragment) return collect(node.props.children, groupName);
@@ -117,6 +117,12 @@ export function ThemedSelect({ theme, children, value, onChange, disabled, 'aria
     return [{ id: String(node.props.value ?? name), name, disabled: node.props.disabled, groupName, groupId: groupName }];
   });
   const resources = collect(children);
+  if (multiple) {
+    const selected = new Set(Array.from(value || [], String));
+    return <div role="group" aria-label={label || 'Select options'} style={{ border: '1px solid ' + theme.inputBorder, background: theme.inputBg, borderRadius: 12, padding: 8, maxHeight: (size || 6) * 38, overflowY: 'auto', ...style }}>
+      {resources.map(item => <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, color: theme.inputText, background: selected.has(item.id) ? theme.primarySoft : 'transparent', opacity: disabled || item.disabled ? 0.5 : 1 }}><input type="checkbox" checked={selected.has(item.id)} disabled={disabled || item.disabled} onChange={event => { const next = new Set(selected); if (event.target.checked) next.add(item.id); else next.delete(item.id); const selectedOptions = resources.filter(option => next.has(option.id)).map(option => ({ value: option.id })); onChange?.({ target: { selectedOptions, value: selectedOptions[0]?.value || '' } }); }} />{item.name}</label>)}
+    </div>;
+  }
   return <div style={{ flex: style?.flex, width: style?.width, minWidth: style?.minWidth ?? 0 }}>
     <SearchableResourceSelect theme={theme} label={label} resources={resources} value={String(value ?? '')} disabled={disabled} clearable={false}
       onChange={next => onChange?.({ target: { value: next }, currentTarget: { value: next } })} />
