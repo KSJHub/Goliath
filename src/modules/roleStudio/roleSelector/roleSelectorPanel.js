@@ -1255,7 +1255,30 @@ async function handleRoleSelectorInteraction(i) {
   }
 }
 
+async function configureDeployment(guild, actorId, patch = {}, deploymentId = null) {
+  return withDeploymentLock(guild.id, async () => {
+    const list = deploymentList(roleSelector.getSection(guild.id));
+    const index = deploymentId ? list.findIndex(d => d.id === deploymentId) : -1;
+    if (deploymentId && index < 0) throw new Error('Unknown deployment.');
+    const previous = index >= 0 ? list[index] : {};
+    const channelId = cleanId(patch.channelId ?? previous.channelId);
+    if (!channelId) throw new Error('Choose a channel.');
+    if (previous.messageId && previous.channelId !== channelId) throw new Error('Delete or retire the existing panel before changing its channel.');
+    const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel?.send) throw new Error('Choose a sendable channel.');
+    const groupIds = patch.groupIds ?? previous.groupIds ?? [];
+    if (!Array.isArray(groupIds) || !groupIds.length || groupIds.length > 25 || groupIds.some(id => !roleSelector.getGroup(guild.id,id))) throw new Error('Choose valid selector groups.');
+    const next = normalizeDeployment({...previous, channelId, groupIds, optionIdsByGroup: patch.optionIdsByGroup ?? previous.optionIdsByGroup, id: previous.id || 'p' + require('node:crypto').randomBytes(8).toString('hex')});
+    if (index >= 0) list[index] = next; else list.push(next);
+    saveDeployments(guild.id,list,{actorId,action:'role_selector_dashboard_configure'});
+    return next;
+  });
+}
+
 module.exports = {
+  configureDeployment,
+  deploymentList,
+  deleteSelectedDeployment,
   deploySelected,
   buildAdminPanel,
   handleRoleSelectorInteraction,
