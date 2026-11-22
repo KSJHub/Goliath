@@ -1135,6 +1135,18 @@ async function verificationLifecycleAudit() {
       session.state='failed';
       assert.equal(await deliver(guild,'member','member',hybrid,'failure',null,{},null),true);
       assert.equal(thread.archived,true,'Terminal failure must archive when configured');
+      thread.locked=true;
+      session.logSummaryId=null;
+      const before=summaries;
+      assert.equal(await deliver(guild,'member','member',hybrid,'staff',null,{},null),false,'Locked Hybrid case must fall back');
+      assert.equal(summaries,before,'Locked case must not create a summary');
+      thread.locked=false;thread.archived=false;
+      session={sessionId:'three',state:'pending',logThreadId:'thread',logThreadSessionId:'three'};
+      guild.channels.fetch=async id=>{session={sessionId:'four',state:'pending'};return thread;};
+      const beforeSend=sent;
+      assert.equal(await deliver(guild,'member','member',settings,'join',null,{},null),false,'Changed session must reject stale delivery');
+      assert.equal(sent,beforeSend);
+      assert.equal(session.logThreadId,undefined);
       parent.permissionsFor=()=>({has:()=>true});
       assert.equal(await deliver(guild,'member','member',settings,'join',null,{},null),false,'Public destination must be rejected');
     }
