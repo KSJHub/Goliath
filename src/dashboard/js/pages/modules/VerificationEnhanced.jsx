@@ -129,7 +129,7 @@ function writePath(source, path, value) {
 function Toggle({ theme, label, checked, onChange }) {
   return <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.cardText, fontWeight: 750 }}>
     <input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} />
-    {label}
+    <span style={{ flex: 1 }}>{label}</span><span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{checked ? '🟢 Enabled' : '🔴 Disabled'}</span>
   </label>;
 }
 function NumberSetting({ theme, label, value, min = 0, max = 10080, onChange }) {
@@ -431,6 +431,9 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       <section style={{ ...card, background: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.08) 46%, rgba(52,211,153,0.14))' }}>
         <div style={{ color: '#93c5fd', fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Goliath Protection</div>
         <h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px,4vw,42px)' }}>Verification</h1>
+        <nav aria-label="Verification sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
+          {["General & Roles","Thread Settings","Security & Flow","Staff Approval","Protection & Logs","Save Settings","Member Panel","Diagnostics"].map((label,index) => <button type="button" key={label} style={buttonStyle(theme,index===5?'primary':'default')} onClick={() => { const section = document.getElementById('verification-section-'+(index+1)); section?.scrollIntoView({block:'start'}); section?.focus({preventScroll:true}); }}>{index+1} · {label}</button>)}
+        </nav>
         <p style={{ color: theme.mutedText, lineHeight: 1.6 }}>Configure roles, channels, panel design, deployment, repair, exports and module health.</p>
       </section>
 
@@ -446,7 +449,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
 
       <section style={{ ...card, display: 'grid', gap: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div><h2 style={{ margin: 0 }}>1 · ⚙️ General & Roles</h2><p style={{ color: theme.mutedText }}>Configure the verification channel, default log destination and member access roles. These selections save immediately.</p></div>
+          <div><h2 id="verification-section-1" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>1 · ⚙️ General & Roles</h2><p style={{ color: theme.mutedText }}>Configure the verification channel, default log destination and member access roles. These selections save immediately.</p></div>
           <button type="button" disabled={busy} onClick={() => saveConfig({ enabled: !data?.status?.enabled })} style={buttonStyle(theme, 'primary')}>{data?.status?.enabled ? 'Disable' : 'Enable'}</button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,250px),1fr))', gap: 14 }}>
@@ -464,7 +467,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 14 }}>
-        <div><h2 style={{ margin: 0 }}>2 · 🧵 Thread Settings & Case Policies</h2><p style={{ color: theme.mutedText }}>Standard sends individual logs. Threaded groups member events into a case; Hybrid adds a live parent summary. Existing category destinations remain the fallback. Choose a staff-only channel for session threads. Changes in this section require Save Advanced Verification Settings.</p></div>
+        <div><h2 id="verification-section-2" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>2 · 🧵 Thread Settings & Case Policies</h2><p style={{ color: theme.mutedText }}>Standard sends individual logs. Threaded groups member events into a case; Hybrid adds a live parent summary. Existing category destinations remain the fallback. Choose a staff-only channel for session threads. Changes in this section require Save Advanced Verification Settings.</p></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 12 }}>
           {[['mode','Logging mode',[['standard','Standard'],['threaded','Threaded'],['hybrid','Hybrid']]],['archiveMinutes','Auto-hide after inactivity',[[60,'1 hour'],[1440,'24 hours'],[4320,'3 days'],[10080,'7 days']]],['naming','Thread naming',[['both','Username + User ID'],['username','Username'],['id','User ID']]]].map(([key,label,options]) => (
             <label key={key} style={{ display: 'grid', gap: 6 }}>{label}<select disabled={!!busy} value={advanced?.threadLogging?.[key] ?? ({mode:'standard',archiveMinutes:1440,naming:'both'}[key])} onChange={e => setAdvancedPath('threadLogging.'+key,key==='archiveMinutes'?Number(e.target.value):e.target.value)} style={{ padding: 10, borderRadius: 8, background: theme.cardBg || 'transparent', color: theme.text }}>{options.map(([value,name]) => <option key={value} value={value}>{name}</option>)}</select></label>
@@ -480,7 +483,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 18 }}>
-        <div><h2 style={{ margin: 0 }}>3 · 🛡️ Security Methods & Flow</h2>
+        <div><h2 id="verification-section-3" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>3 · 🛡️ Security Methods & Flow</h2>
           <p style={{ color: theme.mutedText }}>Per-server security methods. Staff Approval is optional and can be placed anywhere in the flow.</p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 12 }}>
@@ -536,7 +539,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 16 }}>
-        <h2 style={{ margin: 0 }}>4 · 👮 Staff Approval</h2>
+        <h2 id="verification-section-4" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>4 · 👮 Staff Approval</h2>
         <p style={{ color: theme.mutedText, margin: 0 }}>Optional per server. Choose which staff role can approve members when this method is enabled.</p>
         <Toggle theme={theme} label="Require Staff Approval" checked={readPath(advanced, 'security.staffApproval')} onChange={(v) => toggleSecurity('staffApproval', v)} />
         <RoleSelect theme={theme} resources={usableRoles} value={advanced?.roles?.staff?.[0] || ''} label="Staff approval role"
@@ -549,7 +552,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 16 }}>
-        <h2 style={{ margin: 0 }}>5 · 🔒 Quarantine, Raid Protection & Logs</h2>
+        <h2 id="verification-section-5" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>5 · 🔒 Quarantine, Raid Protection & Logs</h2>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
           {[
             ['quarantine.enabled', 'Enable quarantine'], ['raid.enabled', 'Enable raid protection'],
@@ -572,7 +575,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div><h2 style={{ margin: 0 }}>6 · 💾 Save Advanced Verification Settings</h2>
+        <div><h2 id="verification-section-6" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>6 · 💾 Save Advanced Verification Settings</h2>
           <p style={{ color: theme.mutedText, marginBottom: 0 }}>Changes are saved only for this server. Existing panels and analytics are preserved.</p>
         </div>
         <button type="button" disabled={Boolean(busy) || !advanced} style={buttonStyle(theme, 'success')} onClick={saveAdvanced}>{busy === 'config' ? 'Saving...' : 'Save Advanced Settings'}</button>
@@ -580,7 +583,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 16 }}>
-        <div><h2 style={{ margin: 0 }}>7 · 🎨 Member Panel & Appearance</h2><p style={{ color: theme.mutedText }}>Create a new panel or select an existing panel to edit and redeploy it.</p></div>
+        <div><h2 id="verification-section-7" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>7 · 🎨 Member Panel & Appearance</h2><p style={{ color: theme.mutedText }}>Create a new panel or select an existing panel to edit and redeploy it.</p></div>
         <label style={{ display: 'grid', gap: 8 }}>
           <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>SAVED PANEL</span>
           <ThemedSelect theme={theme} value={selectedPanelId} onChange={(event) => selectPanel(event.target.value)} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
@@ -616,7 +619,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 12 }}>
-        <h2 style={{ margin: 0 }}>8 · 🩺 Health & Diagnostics</h2>
+        <h2 id="verification-section-8" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>8 · 🩺 Health & Diagnostics</h2>
         {health?.warnings?.length
           ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 800 }}>{E.WARNING} {warning}</div>)
           : <div style={{ color: '#86efac', fontWeight: 900 }}>{E.SUCCESS} Verification configuration is healthy.</div>}
