@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 import {
@@ -101,7 +102,7 @@ export default function RoleCreatorFull({ creating = false, onCreate, onSync, th
     </div>
 
     <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 14, display: 'grid', gap: 12, background: 'rgba(15,23,42,0.18)' }}>
-      <Field theme={theme} label="Role Template"><select value={selectedTemplate} onChange={(event) => applyTemplate(event.target.value)} style={input(theme)}>{ROLE_TEMPLATES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></Field>
+      <Field theme={theme} label="Role Template"><ThemedSelect theme={theme} value={selectedTemplate} onChange={(event) => applyTemplate(event.target.value)} style={input(theme)}>{ROLE_TEMPLATES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</ThemedSelect></Field>
       <p style={{ margin: 0, color: theme.mutedText, lineHeight: 1.5 }}>{template.description}</p>
     </div>
 
@@ -110,7 +111,7 @@ export default function RoleCreatorFull({ creating = false, onCreate, onSync, th
 
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1.5fr) minmax(160px,0.8fr) minmax(130px,0.6fr)', gap: 10 }}>
       <Field theme={theme} label="Role Name"><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Goliath Dashboard Access" style={input(theme)} /></Field>
-      <Field theme={theme} label="Colour Preset"><select value={color} onChange={(event) => setColor(event.target.value)} style={input(theme)}>{ROLE_COLORS.map(([hex, label]) => <option key={hex} value={hex}>{label} — {hex}</option>)}</select></Field>
+      <Field theme={theme} label="Colour Preset"><ThemedSelect theme={theme} value={color} onChange={(event) => setColor(event.target.value)} style={input(theme)}>{ROLE_COLORS.map(([hex, label]) => <option key={hex} value={hex}>{label} — {hex}</option>)}</ThemedSelect></Field>
       <Field theme={theme} label="Hex Colour"><input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#3b82f6" style={input(theme)} /></Field>
     </div>
 
