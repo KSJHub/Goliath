@@ -1099,6 +1099,30 @@ async function verificationLifecycleAudit() {
     const challengeRuntime = read('./src/modules/securityStudio/verification/verificationChallengeRuntime.js');
     const challengeInteractions = read('./src/modules/securityStudio/verification/verificationChallengeInteractions.js');
     
+    // Execute the case-thread delivery helper with isolated Discord/store doubles.
+    {
+      const start=manager.indexOf('const verificationThreadQueues=new Map();');
+      const end=manager.indexOf('function setSession(gid,uid,patch)',start);
+      assert(start>=0&&end>start,'Verification thread helper missing');
+      let session={sessionId:'one',state:'pending'},created=0,sent=0,archived=0;
+      const subject={id:'member'},bot={id:'bot'},everyone={id:'everyone'};
+      const thread={id:'thread',parentId:'parent',locked:false,archived:false,send:async()=>{sent++;},setArchived:async value=>{thread.archived=value;archived++;},setLocked:async value=>{thread.locked=value;}};
+      const parent={id:'parent',type:0,permissionsFor:member=>({has:()=>member===bot}),threads:{create:async()=>{created++;return thread;}}};
+      const guild={id:'guild',roles:{everyone},members:{me:bot,fetch:async()=>subject},channels:{cache:new Map([['parent',parent]]),fetch:async id=>id==='thread'?thread:parent}};
+      const deliver=new Function('verificationStore','setSession',manager.slice(start,end)+'\\nreturn deliverVerificationThread;')({getSession:()=>session},(_g,_u,patch)=>{session={...session,...patch};});
+      const settings={mode:'threaded',channelId:'parent',archiveMinutes:1440,archiveOnSuccess:true,lockOnSuccess:true,archiveOnFailure:true};
+      assert.equal(await deliver(guild,'member','member',settings,'join',null,{},null),true);
+      assert.equal(await deliver(guild,'member','member',settings,'failure',null,{},null),true);
+      assert.equal(created,1);assert.equal(sent,2);assert.equal(archived,0,'Retriable failure must not archive');
+      session.state='verified';
+      assert.equal(await deliver(guild,'member','member',settings,'roles',null,{},null),true);
+      assert.equal(thread.locked,true);assert.equal(thread.archived,true);
+      assert.equal(await deliver(guild,'member','member',settings,'staff',null,{},null),false,'Locked case must use fallback');
+      assert.equal(sent,3);
+      parent.permissionsFor=()=>({has:()=>true});
+      assert.equal(await deliver(guild,'member','member',settings,'join',null,{},null),false,'Public destination must be rejected');
+    }
+
     // Exercise the existing Mod Hub Verification review route with real snowflakes.
     // An over-escaped digit regex previously rejected every legitimate case ID.
     {
