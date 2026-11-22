@@ -38,6 +38,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const [editDraft, setEditDraft] = useState(blankGroup());
   const [newDraft, setNewDraft] = useState(blankGroup());
   const [previewChoices, setPreviewChoices] = useState([]);
+  useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -156,7 +157,9 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
           <strong>Interactive preview — no roles assigned</strong>
           <h3>{editDraft.appearance?.title || editDraft.name}</h3>
           <p>{editDraft.appearance?.description || editDraft.description}</p>
-          {parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => {
+          {editDraft.appearance?.thumbnail && /^https?:\/\//i.test(editDraft.appearance.thumbnail) && <img alt="Preview thumbnail" src={editDraft.appearance.thumbnail} style={{width:72,height:72,objectFit:'contain'}} />}
+          {editDraft.appearance?.image && /^https?:\/\//i.test(editDraft.appearance.image) && <img alt="Preview banner" src={editDraft.appearance.image} style={{maxWidth:'100%',maxHeight:240,objectFit:'contain'}} />}
+          {editDraft.controlMode !== 'buttons' ? <ThemedSelect theme={theme} value="" onChange={event => { const key = event.target.value; if (key) setPreviewChoices(old => editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old,key]); }}><option value="">Choose an option</option>{parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => <option key={o.id || String(index)} value={o.id || String(index)}>{previewChoices.includes(o.id || String(index)) ? E.SUCCESS + ' ' : ''}{o.label}</option>)}</ThemedSelect> : parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => {
             const key = o.id || String(index);
             return <button type="button" key={key} style={btn(theme,previewChoices.includes(key) ? 'primary' : 'default')} onClick={() => setPreviewChoices(old => editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old,key])}>{o.emoji} {o.label}</button>;
           })}
