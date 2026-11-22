@@ -241,6 +241,7 @@ router.get('/:guildId/overview', async (req, res) => {
       messages: section.messages,
       defaultMessages: verificationStore.defaultMessages(),
       panelTemplate: section.panelTemplate,
+      defaultPanelTemplate: verificationStore.defaultPanelTemplate(),
       panels: Object.values(section.panels || {}),
       analytics: section.analytics || {},
       health,
