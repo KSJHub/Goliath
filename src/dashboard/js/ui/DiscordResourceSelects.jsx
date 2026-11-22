@@ -46,12 +46,12 @@ function SearchableResourceSelect({ theme, label, value, onChange, resources = [
       event.preventDefault(); if (!choices.length) return; setActive(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length);
     } else if (event.key === 'Enter') { event.preventDefault(); choose(choices[Math.min(active, choices.length - 1)]); }
   }
-  const surface = theme.menuBg || theme.cardBgSolid || theme.cardBg;
+  const surface = theme.menuBg || theme.dropdownBg || theme.cardBgSolid || theme.cardBg;
   return <div ref={root} style={{ position: 'relative', minWidth: 0 }}>
     <span id={id + '-label'} style={{ display: 'block', marginBottom: 8, color: theme.textSoft || theme.cardText, fontSize: 13, fontWeight: 600 }}>{label}</span>
     <button ref={trigger} type="button" disabled={disabled} aria-labelledby={id + '-label ' + id + '-value'} aria-haspopup="listbox" aria-expanded={open} aria-controls={id + '-list'}
       onClick={() => { setOpen(!open); setQuery(''); setActive(Math.max(0, resources.findIndex(item => item.id === value) + (clearable ? 1 : 0))); }}
-      onKeyDown={event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setOpen(true); setActive(Math.max(0, resources.findIndex(item => item.id === value) + 1)); } }}
+      onKeyDown={event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setOpen(true); setActive(Math.max(0, resources.findIndex(item => item.id === value) + (clearable ? 1 : 0))); } }}
       style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', width: '100%', boxSizing: 'border-box', textAlign: 'left', border: '1px solid ' + (open ? theme.primary : theme.inputBorder || theme.cardBorder), background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, borderRadius: 12, padding: '13px 16px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1, font: 'inherit' }}>
       <span id={id + '-value'} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected ? getResourceLabel(selected) : value ? 'Unavailable selection — choose another' : placeholder}{selected?.groupName ? <span style={{ color: theme.mutedText, fontSize: 12 }}> · {selected.groupName}</span> : null}</span>
       <span aria-hidden="true" style={{ color: theme.mutedText }}>{open ? '▴' : '▾'}</span>
@@ -83,26 +83,9 @@ export function DiscordResourceSelect({
   resources = [],
   placeholder = 'Choose an option',
   disabled = false,
-  searchable = false,
   clearable = true,
 }) {
-  if (searchable) return <SearchableResourceSelect {...{ theme, label, value, onChange, resources, placeholder, disabled, clearable }} />;
-  return (
-    <label style={{ display: 'grid', gap: 8 }}>
-      <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
-      <select
-        value={value || ''}
-        onChange={(event) => onChange?.(event.target.value)}
-        disabled={disabled}
-        style={{ width: '100%', border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px', fontWeight: 800 }}
-      >
-        <option value="">{placeholder}</option>
-        {resources.map((item) => (
-          <option key={item.id} value={item.id}>{getResourceLabel(item)}</option>
-        ))}
-      </select>
-    </label>
-  );
+  return <SearchableResourceSelect {...{ theme, label, value, onChange, resources, placeholder, disabled, clearable }} />;
 }
 
 export function ChannelSelect(props) {
