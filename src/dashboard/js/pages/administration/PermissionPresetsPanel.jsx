@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
 export const PERMISSION_PRESETS = [
@@ -103,8 +104,8 @@ export default function PermissionPresetsPanel({ onApply, roles = [], selectedRo
 
   return <div style={{ display: 'grid', gap: 14 }}>
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) minmax(180px,1fr) auto', gap: 10, alignItems: 'end' }}>
-      <label style={{ display: 'grid', gap: 7, color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Role<select value={activeRoleId} onChange={(event) => setRoleId(event.target.value)} style={control(theme)}>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
-      <label style={{ display: 'grid', gap: 7, color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Preset<select value={presetKey} onChange={(event) => setPresetKey(event.target.value)} style={control(theme)}>{PERMISSION_PRESETS.map((preset) => <option key={preset.key} value={preset.key}>{preset.label}</option>)}</select></label>
+      <label style={{ display: 'grid', gap: 7, color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Role<ThemedSelect theme={theme} value={activeRoleId} onChange={(event) => setRoleId(event.target.value)} style={control(theme)}>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</ThemedSelect></label>
+      <label style={{ display: 'grid', gap: 7, color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Preset<ThemedSelect theme={theme} value={presetKey} onChange={(event) => setPresetKey(event.target.value)} style={control(theme)}>{PERMISSION_PRESETS.map((preset) => <option key={preset.key} value={preset.key}>{preset.label}</option>)}</ThemedSelect></label>
       <button type="button" disabled={!activeRoleId || !activePreset} onClick={() => onApply?.(activeRoleId, activePreset)} style={button(theme, !activeRoleId || !activePreset)}>Apply</button>
     </div>
     {activePreset ? <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.18)', borderRadius: 14, padding: 12, display: 'grid', gap: 8 }}>
