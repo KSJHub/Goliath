@@ -1587,7 +1587,7 @@ async function verificationLifecycleAudit() {
     for (const section of ['roles', 'security', 'flow', 'messages', 'logs', 'settings']) {
       contains(panel, `'${section}'`, `admin section ${section}`);
       if (section === 'intelligence') {
-        assert(panel.includes('admin:verification:page:intelligence') || (panel.includes('admin:verification:page:flow') && panel.includes('Flow & Intelligence') && panel.includes('admin:verification:intelligenceSelect') && panel.includes("if(p==='intelligence')return intelligencePage")), 'Verification contract missing: integrated intelligence navigation');
+        assert(panel.includes('admin:verification:page:intelligence') || (panel.includes('admin:verification:page:flow') && panel.includes('Advanced Protection') && panel.includes('admin:verification:intelligenceSelect') && panel.includes("if(p==='intelligence')return intelligencePage")), 'Verification contract missing: integrated intelligence navigation');
       } else {
         contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
       }
@@ -1600,7 +1600,7 @@ async function verificationLifecycleAudit() {
     contains(panel, '.setMaxValues(SECURITY.length)', 'multi-method selection');
     contains(panel, 'for(const [key] of SECURITY)security[key]=selected.includes(key)', 'bulk selection persists every method');
     contains(panel, 'admin:verification:intelligence:', 'integrated intelligence controls');
-    contains(panel, 'Verification · Flow & Intelligence', 'combined workspace');
+    contains(panel, 'Verification · Advanced Protection', 'combined workspace');
     contains(panel, 'admin:verification:intelligenceSelect', 'combined intelligence configuration selector');
     contains(panel, 'admin:verification:flowPolicySelect', 'combined session policy selector');
     contains(panel, "function intelligencePage(g,user){return flowPage(g,user);}", 'legacy intelligence route forwards to combined workspace');
