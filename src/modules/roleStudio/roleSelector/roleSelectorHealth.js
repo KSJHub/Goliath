@@ -174,7 +174,7 @@ async function buildHealth(guild) {
         continue;
       }
       if (!roleSelector.canManageRole(guild, role)) warnings.push(`${group.name}: ${role.name} is above Goliath or otherwise unmanageable.`);
-      if (role.permissions.bitfield !== 0n) warnings.push(`${group.name}: ${role.name} has permissions; selector roles should be cosmetic/self-service roles.`);
+      if ((group.builtIn || group.options?.some(option => option.roleId === roleId && option.managed !== false)) && role.permissions.bitfield !== 0n) warnings.push(`${group.name}: ${role.name} has permissions; selector roles should be cosmetic/self-service roles.`);
     }
   }
 
