@@ -45,7 +45,7 @@ function getTemplateOptions(guildId,scope='public'){
   return relevant.sort((a,b)=>{
     const priority=template=>template.templateType===(scope==='dm'?'dmWelcome':'welcome')?0:template.templateType==='welcome'?1:template.module==='welcome'?2:3;
     return priority(a)-priority(b)||String(a.name||a.templateId).localeCompare(String(b.name||b.templateId));
-  }).slice(0,25).map(template=>({
+  }).map(template=>({
     label:String(template.name||template.templateId).slice(0,100),
     description:`${templateTypeLabel(template)} · ${template.embed?.title||template.panels?.[0]?.title||'Embed Studio message'}`.slice(0,100),
     value:String(template.templateId),
@@ -63,11 +63,21 @@ function sourceMenu(config,userId,guildId,scope='public'){
   return new StringSelectMenuBuilder().setCustomId(isDm?'admin:welcome:dmSource':'admin:welcome:source').setPlaceholder(isDm?'Choose DM message source':'Choose message source').addOptions(options);
 }
 function templateMenu(guild,activeTemplateId,userId,scope='public'){
-  const options=getTemplateOptions(guild.id,scope);const staged=getSelection(guild.id,userId,scope);const selected=staged.templateId||activeTemplateId||null;
-  const menu=new StringSelectMenuBuilder().setCustomId(scope==='dm'?'admin:welcome:dmTemplate':'admin:welcome:template').setPlaceholder(options.length?'Choose an Embed Studio message':'No messages available').setMinValues(1).setMaxValues(1).setDisabled(options.length===0);
+  const all=getTemplateOptions(guild.id,scope);const staged=getSelection(guild.id,userId,scope);const selected=staged.templateId||activeTemplateId||null;
+  const selectedIndex=all.findIndex(option=>option.value===selected);
+  const page=Math.max(0,Math.min(Math.max(0,Math.ceil(all.length/25)-1),staged.page??Math.floor(Math.max(0,selectedIndex)/25)));
+  const options=all.slice(page*25,page*25+25);
+  const menu=new StringSelectMenuBuilder().setCustomId(scope==='dm'?'admin:welcome:dmTemplate':'admin:welcome:template').setPlaceholder(options.length?`Choose an Embed Studio message (${page+1}/${Math.ceil(all.length/25)})`:'No messages available').setMinValues(1).setMaxValues(1).setDisabled(options.length===0);
   if(options.length)menu.addOptions(options.map(option=>({...option,default:option.value===selected})));else menu.addOptions({label:'No messages found',value:'none'});return menu;
 }
 
+
+function templatePageButtons(guild,userId,scope,activeTemplateId){
+  const all=getTemplateOptions(guild.id,scope),state=getSelection(guild.id,userId,scope);
+  const index=all.findIndex(option=>option.value===(state.templateId||activeTemplateId));
+  const max=Math.max(0,Math.ceil(all.length/25)-1),page=Math.max(0,Math.min(max,state.page??Math.floor(Math.max(0,index)/25)));
+  return max? [button(`admin:welcome:templatePage:${scope}:${Math.max(0,page-1)}`,'Previous',ButtonStyle.Secondary,page===0),button(`admin:welcome:templatePage:${scope}:${Math.min(max,page+1)}`,'Next',ButtonStyle.Secondary,page===max)]:[];
+}
 
 function customTemplateId(scope){return scope==='dm'?'welcome_custom_dm':'welcome_custom_public';}
 function customTemplateName(scope){return scope==='dm'?'Custom DM Welcome':'Custom Public Welcome';}
@@ -214,7 +224,7 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
   ];
   if(source==='embedStudio')components.push(row(templateMenu(guild,template?.templateId||config.templateId,userId,'public')));
   components.push(row(button('admin:welcome:applySource',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId))),button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,(source==='custom'&&hasUnsavedSelection)||(source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId)))),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
-  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings')),...(hasUnsavedSelection?[button('admin:welcome:discardPublic','Discard Selection',ButtonStyle.Secondary)]:[])));
+  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings')),...(source==='embedStudio'?templatePageButtons(guild,userId,'public',template?.templateId||config.templateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardPublic','Discard Selection',ButtonStyle.Secondary)]:[])));
   const issues=health.warnings||[];
   const next=hasUnsavedSelection&&source==='custom'?emojiLabel('PRESETS','Choose Save Message to edit and save your custom Welcome before previewing.'):hasUnsavedSelection?emojiLabel('WELCOME_PREVIEW','Preview your selection, then Save Message to make it live.'):!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
@@ -238,7 +248,7 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const components=[row(sourceMenu(config,userId,guild.id,'dm'))];
   if(source==='embedStudio')components.push(row(templateMenu(guild,dmTemplate?.templateId||config.dmTemplateId,userId,'dm')));
   components.push(row(button('admin:welcome:dmApply',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId))),button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,(source==='custom'&&hasUnsavedSelection)||(source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId)))),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
-  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings')),...(hasUnsavedSelection?[button('admin:welcome:discardDm','Discard Selection',ButtonStyle.Secondary)]:[])));
+  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings')),...(source==='embedStudio'?templatePageButtons(guild,userId,'dm',dmTemplate?.templateId||config.dmTemplateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardDm','Discard Selection',ButtonStyle.Secondary)]:[])));
   const message=config.dmMessageSource==='inherit'?publicTemplate?.name||'Same as Public':dmTemplate?.name||'Not selected';
   return {embeds:[new EmbedBuilder().setColor(config.dmEnabled?0x57f287:0x747f8d)
     .setTitle(emojiLabel('WELCOME_DM','Welcome · Direct Message'))
@@ -322,6 +332,7 @@ function getPreviewTemplate(guildId,userId,scope){
 async function updatePanel(interaction,payload=null){const next=payload||await buildWelcomePanel(interaction.guild,displayName(interaction));if(interaction.deferred||interaction.replied)return interaction.editReply(next);return interaction.update(next);}
 
 async function handleWelcomeInteraction(interaction){const customId=String(interaction.customId||'');if(!customId.startsWith('admin:welcome'))return false;try{
+if(/^admin:welcome:templatePage:(public|dm):\d+$/.test(customId)){const [, , ,scope,rawPage]=customId.split(':');setSelection(interaction.guild.id,interaction.user.id,scope,{page:Number(rawPage)});return updatePanel(interaction,await (scope==='dm'?buildDmPanel:buildInstantPanel)(interaction.guild,displayName(interaction),interaction.user.id));}
 if(interaction.isStringSelectMenu?.()&&customId==='admin:welcome:navigate'){const choice=interaction.values?.[0];if(choice==='instant')return updatePanel(interaction,await buildInstantPanel(interaction.guild,displayName(interaction),interaction.user.id));if(choice==='dm')return updatePanel(interaction,await buildDmPanel(interaction.guild,displayName(interaction),interaction.user.id));if(choice==='scheduled')return updatePanel(interaction,await buildScheduledPanel(interaction.guild,displayName(interaction)));if(choice==='mentions')return updatePanel(interaction,buildMentionSettingsPanel(interaction.guild,displayName(interaction)));throw new Error('Choose a valid Welcome workspace.');}
 if(interaction.isChannelSelectMenu?.()&&customId==='admin:welcome:homeChannel'){welcome.updateConfig(interaction.guild.id,{channelId:interaction.values?.[0]||null},{actorId:interaction.user.id});return updatePanel(interaction);}
 if(['admin:welcome:instantSettings','admin:welcome:dmSettings','admin:welcome:scheduledSettings'].includes(customId)){const scope=customId==='admin:welcome:instantSettings'?'instant':customId==='admin:welcome:dmSettings'?'dm':'scheduled';return updatePanel(interaction,await buildWelcomeDeliverySettingsPanel(interaction.guild,scope,displayName(interaction)));}
