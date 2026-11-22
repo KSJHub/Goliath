@@ -249,9 +249,9 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Unit<ThemedSelect theme={theme} value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} style={fieldStyle(theme)}>{['minutes', 'hours', 'days', 'weeks', 'months', 'years'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</ThemedSelect></label>
         </div>
         <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Cleanup roles (optional)
-          <select multiple size={Math.min(6, Math.max(3, cleanupRoles.length))} value={draft.removeRoleIds} onChange={(event) => setDraft((current) => ({ ...current, removeRoleIds: Array.from(event.target.selectedOptions, (option) => option.value) }))} style={fieldStyle(theme)}>
+          <ThemedSelect theme={theme} multiple size={Math.min(6, Math.max(3, cleanupRoles.length))} value={draft.removeRoleIds} onChange={(event) => setDraft((current) => ({ ...current, removeRoleIds: Array.from(event.target.selectedOptions, (option) => option.value) }))} style={fieldStyle(theme)}>
             {cleanupRoles.map((role) => <option key={role.id} value={role.id}>{role.name || role.id}</option>)}
-          </select>
+          </ThemedSelect>
           <span style={{ fontSize: 12, fontWeight: 700 }}>Hold Ctrl/Cmd to select multiple roles. The award role cannot remove itself.</span>
         </label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
