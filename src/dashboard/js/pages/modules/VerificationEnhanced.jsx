@@ -164,6 +164,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const [messageKey, setMessageKey] = useState('start');
   const [messageDraft, setMessageDraft] = useState(null);
   const advancedDirty = useRef(false);
+  const advancedRevision = useRef(null);
   const loadedGuild = useRef('');
   const panelDraftDirty = useRef(false);
   const explicitNewPanel = useRef(false);
@@ -220,6 +221,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       setData(adapted);
       if (loadedGuild.current !== guildId || !advancedDirty.current) {
         setAdvanced(config);
+        advancedRevision.current = overview.configRevision;
         advancedDirty.current = false;
         loadedGuild.current = guildId;
       }
@@ -270,6 +272,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         const current = currentPanels.find(panel => String(panel.panelId || panel.id) === String(selectedPanelId)) || null;
         setData(adapted);
         setAdvanced(config);
+        advancedRevision.current = overview.configRevision;
         if (selectedPanelId && !current) setSelectedPanelId('');
         setDraft(panelDraft(current, adapted.moduleConfig, adapted.adminConfig));
       } catch {
@@ -305,11 +308,13 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function saveConfig(patch) {
+    if (advancedDirty.current) { setError('Save or discard advanced settings before changing immediate settings.'); return; }
     await act('config', () => api.saveVerificationConfig(guildId, { ...patch, expectedConfigRevision: data?.configRevision }), 'Verification configuration saved.');
   }
 
   function setAdvancedPath(path, value) {
     setError('');
+    if (!advancedDirty.current) advancedRevision.current = data?.configRevision;
     advancedDirty.current = true;
     setAdvanced((current) => writePath(current || settings, path, value));
   }
@@ -343,7 +348,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     const { enabled: _enabled, ...settingsPayload } = normalized;
     setBusy('config');
     try {
-      await api.saveVerificationConfig(guildId, { settings: settingsPayload, expectedConfigRevision: data?.configRevision });
+      await api.saveVerificationConfig(guildId, { settings: settingsPayload, expectedConfigRevision: advancedRevision.current });
       // Only clear the dirty flag after the API confirms persistence.
       // Refresh once, rather than calling act() and loading twice.
       advancedDirty.current = false;
@@ -380,6 +385,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function deploy() {
+    if (advancedDirty.current) { setError('Save or discard advanced settings before deploying a panel.'); return; }
     if (!draft.channelId) {
       setError('Choose a verification channel first.');
       return;
@@ -396,6 +402,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function removePanel() {
+    if (advancedDirty.current) { setError('Save or discard advanced settings before removing a panel.'); return; }
     if (!selectedPanelId) return;
     if (!await goliathDialog.confirm('Delete this verification panel message and its saved record?', { title: 'Delete Verification Panel?', danger: true, confirmLabel: 'Delete Panel' })) return;
     setBusy('delete');
@@ -414,6 +421,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function resetModule() {
+    if (advancedDirty.current) { setError('Save or discard advanced settings before resetting the module.'); return; }
     if (!await goliathDialog.confirm('Reset all Verification settings, analytics and panel records?', { title: 'Reset Verification?', danger: true, confirmLabel: 'Reset Verification' })) return;
     await act('reset', () => api.resetVerification(guildId, data?.configRevision), 'Verification reset to defaults.');
     setSelectedPanelId('');
@@ -485,6 +493,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         </div>
         <div style={{ color: theme.mutedText }}>Example: Verification • {advanced?.threadLogging?.naming === 'id' ? '123456789012345678' : advanced?.threadLogging?.naming === 'username' ? 'member' : 'member • 123456789012345678'}<br/>Screening Complete → Pending → Security Checks → Success → Roles Confirmed.<br/>Successful cases can be archived or locked; terminal failures and quarantine have separate archive controls. Retrying a challenge is not a terminal failure. Archived threads are not deleted. Failed and quarantined cases remain accessible in thread history.</div>
         <button type="button" disabled={!!busy} onClick={saveAdvanced} style={buttonStyle(theme,'primary')}>Save verification settings</button>
+        <button type="button" disabled={!!busy || !advancedDirty.current} style={buttonStyle(theme)} onClick={async()=>{if(await goliathDialog.confirm('Discard unsaved advanced settings and reload the current configuration?',{title:'Discard Changes',danger:true})){advancedDirty.current=false;await load();}}}>Discard Unsaved Changes</button>
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 18 }}>
