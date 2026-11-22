@@ -43,6 +43,10 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode]);
   const [panelDraft, setPanelDraft] = useState({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});
   useEffect(() => { setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}}); }, [guildId]);
+  const [templatePayload, setTemplatePayload] = useState({});
+  const [templateChoice, setTemplateChoice] = useState('');
+  useEffect(() => { setTemplateChoice(''); setTemplatePayload({}); if (!guildId) return; let active=true; api.getEmbedTemplates(guildId).then(value=>{if(active)setTemplatePayload(value || {});}).catch(()=>{}); return ()=>{active=false;}; }, [guildId]);
+  useEffect(()=>setTemplateChoice(''),[selectedGroupId]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -171,6 +175,16 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
     <section style={{ ...card, display: 'grid', gap: 12 }}>
       <div><h2 style={{ margin: 0 }}>Selector Groups</h2><div style={{ color: theme.mutedText }}>Single-choice and multi-choice groups are isolated from each other.</div></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{groups.map((group) => <button key={group.id} onClick={() => chooseGroup(group)} style={btn(theme, group.id === selectedGroupId ? 'primary' : 'default')}>{group.emoji || E.ROLE_TAG} {group.name}</button>)}</div>
+      {selectedGroup && <div style={{display:'grid',gap:8}}>
+        <strong>Individual Embed Studio template</strong>
+        <div>Current binding: {templatePayload.bindings?.role_selector?.['member_group_'+selectedGroup.id] || 'Shared template / default'}</div>
+        <ThemedSelect theme={theme} value={templateChoice} onChange={e=>setTemplateChoice(e.target.value)}><option value="">Choose existing template</option>{Object.values(templatePayload.templates || {}).filter(t=>t?.templateId).map(t=><option key={t.templateId} value={t.templateId}>{t.name || t.templateId}</option>)}</ThemedSelect>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button disabled={busy || !templateChoice} style={btn(theme,'primary')} onClick={()=>run(async()=>{await api.bindEmbedTemplate(guildId,'role_selector','member_group_'+selectedGroup.id,templateChoice);setTemplatePayload(await api.getEmbedTemplates(guildId));return null;},'Individual selector template bound.')}>Bind template</button>
+          <button disabled={busy} style={btn(theme)} onClick={async()=>{if(await goliathDialog.confirm('Restore the shared selector template?',{title:'Remove individual template binding'}))await run(async()=>{await api.unbindEmbedTemplate(guildId,'role_selector','member_group_'+selectedGroup.id);setTemplatePayload(await api.getEmbedTemplates(guildId));return null;},'Individual binding removed.');}}>Restore shared template</button>
+          <button disabled={busy} style={btn(theme)} onClick={()=>run(async()=>{setTemplatePayload(await api.getEmbedTemplates(guildId));return null;},'Templates refreshed.')}>Refresh templates</button>
+        </div>
+      </div>}
       {selectedGroup?.id === 'colours' ? <div style={{ display: 'grid', gap: 10 }}>
         <strong>{E.COLOURS} Built-in Colours</strong>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={colours?.customHexEnabled !== false} onChange={(event) => run(() => api.request(`${baseApi(guildId)}/colours`, { method: 'PUT', body: JSON.stringify({ customHexEnabled: event.target.checked }) }), 'Colour settings saved.')} /> Allow custom HEX</label>
@@ -196,8 +210,6 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | description | optional existing role ID. Existing roles may have permissions, but must be manageable by Goliath.</div>
         <label>Minimum selections <Input theme={theme} type="number" min={0} max={editDraft.selectionMode==='single'?1:25} value={editDraft.minSelections || 0} onChange={e=>setEditDraft({...editDraft,minSelections:Number(e.target.value)})}/></label>
         <label>Maximum selections <Input theme={theme} type="number" min={1} max={editDraft.selectionMode==='single'?1:25} value={editDraft.selectionMode==='single'?1:editDraft.maxSelections || 25} onChange={e=>setEditDraft({...editDraft,maxSelections:Number(e.target.value)})}/></label>
-        <button disabled={busy} style={btn(theme)} onClick={async()=>{const templateId=await goliathDialog.prompt('Enter an existing Embed Studio template ID, or leave empty to cancel.',{title:'Bind individual selector template'});if(templateId?.trim()) await run(async()=>{await api.bindEmbedTemplate(guildId,'role_selector','member_group_'+selectedGroup.id,templateId.trim());return null;},'Individual selector template bound.');}}>Bind Embed Studio template</button>
-        <button disabled={busy} style={btn(theme)} onClick={async()=>{if(await goliathDialog.confirm('Restore the shared selector template?',{title:'Remove individual template binding'})) await run(async()=>{await api.unbindEmbedTemplate(guildId,'role_selector','member_group_'+selectedGroup.id);return null;},'Individual template binding removed.');}}>Restore shared template</button>
         <label>Control style <ThemedSelect theme={theme} value={editDraft.controlMode || 'dropdown'} onChange={event => setEditDraft({...editDraft, controlMode: event.target.value})}><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></ThemedSelect></label>
         {['title','description','color','footer','image','thumbnail'].map(key => <label key={key}>Embed {key}<Input theme={theme} value={editDraft.appearance?.[key] || ''} onChange={event => setEditDraft({...editDraft, appearance: {...editDraft.appearance, [key]: event.target.value}})} /></label>)}
         <div style={{...card, borderLeft: '4px solid ' + (/^#[0-9a-f]{6}$/i.test(editDraft.appearance?.color || '') ? editDraft.appearance.color : '#5865F2')}}>
