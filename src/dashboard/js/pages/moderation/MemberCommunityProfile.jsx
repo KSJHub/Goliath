@@ -1,3 +1,5 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
+import { createTheme } from '../../ui/theme.js';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/apiClient';
@@ -48,7 +50,7 @@ export default function MemberCommunityProfile() {
     <section style={card}>
       <h3 style={{margin:'0 0 8px'}}>{E.COMMUNITIES} Your communities</h3>
       <p style={{color:'#a7b4c8',lineHeight:1.5}}>Choose a community to see your details and preferences.</p>
-      {loading ? <p>Loading communities…</p> : communities.length ? <label>Community <select style={{...field,marginLeft:10}} value={guildId} onChange={e => setGuildId(e.target.value)}>{communities.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label> : <p>No shared communities found.</p>}
+      {loading ? <p>Loading communities…</p> : communities.length ? <label>Community <ThemedSelect theme={createTheme(true)} style={{...field,marginLeft:10}} value={guildId} onChange={e => setGuildId(e.target.value)}>{communities.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</ThemedSelect></label> : <p>No shared communities found.</p>}
     </section>
     {message ? <div role="status" style={{...card,color:'#bfdbfe'}}>{message}</div> : null}
     {profile ? <>
