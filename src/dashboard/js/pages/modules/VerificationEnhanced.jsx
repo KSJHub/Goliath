@@ -463,6 +463,20 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         </div>
       </section>
 
+      <section style={{ ...card, display: 'grid', gap: 14 }}>
+        <div><h2 style={{ margin: 0 }}>Verification Logs & Threads</h2><p style={{ color: theme.mutedText }}>Standard sends individual logs. Threaded groups member events into a case; Hybrid adds a live parent summary. Existing category destinations remain the fallback.</p></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 12 }}>
+          {[['mode','Logging mode',[['standard','Standard'],['threaded','Threaded'],['hybrid','Hybrid']]],['archiveMinutes','Auto-hide after inactivity',[[60,'1 hour'],[1440,'24 hours'],[4320,'3 days'],[10080,'7 days']]],['naming','Thread naming',[['both','Username + User ID'],['username','Username'],['id','User ID']]]].map(([key,label,options]) => (
+            <label key={key} style={{ display: 'grid', gap: 6 }}>{label}<select disabled={!!busy} value={advanced?.threadLogging?.[key] ?? ({mode:'standard',archiveMinutes:1440,naming:'both'}[key])} onChange={e => setAdvancedPath('threadLogging.'+key,key==='archiveMinutes'?Number(e.target.value):e.target.value)} style={{ padding: 10, borderRadius: 8, background: theme.cardBg || 'transparent', color: theme.text }}>{options.map(([value,name]) => <option key={value} value={value}>{name}</option>)}</select></label>
+          ))}
+          <ChannelSelect theme={theme} resources={channels} value={advanced?.threadLogging?.channelId || ''} onChange={value => setAdvancedPath('threadLogging.channelId',value || null)} label="Staff-only thread channel" />
+          <Toggle theme={theme} label="Archive on success" checked={advanced?.threadLogging?.archiveOnSuccess !== false} onChange={value => setAdvancedPath('threadLogging.archiveOnSuccess',value)} />
+          <Toggle theme={theme} label="Lock on success" checked={advanced?.threadLogging?.lockOnSuccess === true} onChange={value => setAdvancedPath('threadLogging.lockOnSuccess',value)} />
+        </div>
+        <div style={{ color: theme.mutedText }}>Example: Verification • {advanced?.threadLogging?.naming === 'id' ? '123456789012345678' : advanced?.threadLogging?.naming === 'username' ? 'member' : 'member • 123456789012345678'}<br/>Screening Complete → Pending → Security Checks → Success → Roles Confirmed.<br/>Archived threads are not deleted. Failed and quarantined cases remain accessible in thread history.</div>
+        <button type="button" disabled={!!busy} onClick={saveAdvanced} style={buttonStyle(theme,'primary')}>Save verification settings</button>
+      </section>
+
       <section style={{ ...card, display: 'grid', gap: 18 }}>
         <div><h2 style={{ margin: 0 }}>Security Methods & Verification Flow</h2>
           <p style={{ color: theme.mutedText }}>Per-server security methods. Staff Approval is optional and can be placed anywhere in the flow.</p>
