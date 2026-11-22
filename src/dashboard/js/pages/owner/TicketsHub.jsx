@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React from 'react';
 
 import useOwnerGuilds from '../../hooks/useOwnerGuilds.js';
@@ -400,9 +401,9 @@ export default function TicketsHub({ theme }) {
           <strong>Selected Guild</strong>
           <div style={{ color: theme.mutedText, marginTop: 4 }}>{selectedGuildName}</div>
         </div>
-        <select value={selectedGuild} onChange={(event) => setSelectedGuild(event.target.value)} disabled={loading || guilds.length === 0} style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', minWidth: 260, fontWeight: 800 }}>
+        <ThemedSelect theme={theme} value={selectedGuild} onChange={(event) => setSelectedGuild(event.target.value)} disabled={loading || guilds.length === 0} style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', minWidth: 260, fontWeight: 800 }}>
           {guilds.map((guild) => <option key={getGuildId(guild)} value={getGuildId(guild)}>{getGuildName(guild)}</option>)}
-        </select>
+        </ThemedSelect>
       </section>
 
       <section style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -441,15 +442,15 @@ export default function TicketsHub({ theme }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px,1fr) auto auto', gap: 10, marginBottom: 14 }}>
           <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search ID, title, user, type, channel..." style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 800, minWidth: 0 }} />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 800 }}>
+          <ThemedSelect theme={theme} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 800 }}>
             {STATUS_FILTERS.map((status) => <option key={status} value={status}>{status}</option>)}
-          </select>
-          <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 800 }}>
+          </ThemedSelect>
+          <ThemedSelect theme={theme} value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} style={{ border: '1px solid ' + theme.cardBorder, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 800 }}>
             <option value="all">all sources</option>
             <option value="form">form tickets</option>
             <option value="missing">missing channels</option>
             <option value="transcripts">with transcripts</option>
-          </select>
+          </ThemedSelect>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(min(100%,360px),0.9fr) minmax(0,1.1fr)', gap: 14, alignItems: 'start' }}>
