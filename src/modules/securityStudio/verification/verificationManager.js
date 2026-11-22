@@ -49,9 +49,7 @@ function isBypass(m,s){return hasAnyRole(m,roleIds(s,'bypass'))||(s.allowStaffBy
 async function logEvent(g,section,type,content){
   if(!content)return false;
   const configured=section.settings?.logs?.[`${type}ChannelId`]||section.settings?.logChannelId;
-  if(!configured)return false;
-  const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
-  if(!c?.send)return false;
+  const c=configured?(g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null)):null;
   const raw=String(content).trim();
   const styles={
     join:{emoji:'⏳',title:'Verification Pending',color:0xfefefe,status:'Unverified',access:'Restricted'},
@@ -101,13 +99,57 @@ async function logEvent(g,section,type,content){
     )
     .setFooter({text:'Goliath Verification'})
     .setTimestamp();
+  const options={embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}};
+  const t=section.settings?.threadLogging;
+  if(t?.mode!=='standard'&&t?.channelId&&userId&&!['raid','bot'].includes(type)){
+    try{
+      if(await deliverVerificationThread(g,userId,username,t,type,embed,options,style))return true;
+    }catch(error){console.error('[Verification] Thread delivery fallback:',error?.message||error);}
+  }
   try{
-    await c.send({embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}});
+    if(!c?.send)return false;
+    await c.send(options);
     return true;
   }catch(error){
     console.error('[Verification] Log embed delivery failed:',error?.message||error);
     return false;
   }
+}
+const verificationThreadQueues=new Map();
+async function deliverVerificationThread(g,userId,username,t,type,embed,options,style){
+  const key=g.id+':'+userId;
+  const previous=verificationThreadQueues.get(key)||Promise.resolve();
+  const work=previous.catch(()=>{}).then(async()=>{
+    const session=verificationStore.getSession(g.id,userId);
+    if(!session)return false;
+    const parent=g.channels.cache.get(t.channelId)||await g.channels.fetch(t.channelId).catch(()=>null);
+    if(!parent?.threads||parent.type!==0||parent.permissionsFor(g.roles.everyone)?.has('ViewChannel')!==false)return false;
+    let thread=session.logThreadSessionId===session.sessionId&&session.logThreadId?await g.channels.fetch(session.logThreadId).catch(()=>null):null;
+    if(thread?.parentId!==parent.id)thread=null;
+    let summaryId=thread?session.logSummaryId:null;
+    if(!thread){
+      const name=('Verification • '+(t.naming==='id'?userId:t.naming==='username'?(username||userId):(username||'Member')+' • '+userId)).slice(0,100);
+      if(t.mode==='hybrid'){
+        const summary=await parent.send(options);
+        summaryId=summary.id;
+        thread=await summary.startThread({name,autoArchiveDuration:t.archiveMinutes});
+      }else thread=await parent.threads.create({name,autoArchiveDuration:t.archiveMinutes,type:11});
+      if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
+      setSession(g.id,userId,{logThreadId:thread.id,logThreadSessionId:session.sessionId,logSummaryId:summaryId});
+    }
+    if(thread.locked)await thread.setLocked(false);
+    if(thread.archived)await thread.setArchived(false);
+    await thread.send(options);
+    if(t.mode==='hybrid'&&summaryId){
+      try{const summary=await parent.messages.fetch(summaryId);await summary.edit(options);}catch(error){console.error('[Verification] Case summary update failed:',error?.message||error);}
+    }
+    if(type==='roles'&&session.state==='verified'){
+      try{if(t.lockOnSuccess)await thread.setLocked(true);if(t.archiveOnSuccess)await thread.setArchived(true);}catch(error){console.error('[Verification] Thread closure failed:',error?.message||error);}
+    }
+    return true;
+  });
+  verificationThreadQueues.set(key,work);
+  try{return await work;}finally{if(verificationThreadQueues.get(key)===work)verificationThreadQueues.delete(key);}
 }
 function setSession(gid,uid,patch){return verificationStore.upsertSession(gid,uid,patch);}
 function history(gid,uid,type,data={}){verificationStore.addSecurityHistory(gid,uid,{type,...data});}
