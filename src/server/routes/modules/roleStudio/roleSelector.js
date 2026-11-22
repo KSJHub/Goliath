@@ -73,18 +73,17 @@ async function validateExistingRoles(g, options = []) {
     if (!option?.roleId) { output.push(option); continue; }
     const role = g.roles.cache.get(String(option.roleId)) || await g.roles.fetch(String(option.roleId)).catch(() => null);
     roleSelector.assertSafeSelectorRole(g, role);
-    output.push({ ...option, roleId: role.id, managed: false });
+    output.push({ ...option, roleId: role.id, managed: option.managed === true });
   }
   return output;
 }
-function ownedByGoliath(g, message) { return Boolean(message && (!g.client?.user?.id || message.author?.id === g.client.user.id)); }
+function ownedByGoliath(g, message) { return Boolean(message && g.client?.user?.id && message.author?.id === g.client.user.id); }
 async function retireDeploymentUnlocked(g, deployment) {
   if (!deployment?.channelId || !deployment?.messageId) return false;
   const channel = g.channels.cache.get(deployment.channelId) || await g.channels.fetch(deployment.channelId).catch(() => null);
   const message = channel?.messages?.fetch ? await channel.messages.fetch(deployment.messageId).catch(() => null) : null;
   if (!ownedByGoliath(g, message)) return false;
-  await message.edit(panel.memberDisabledPayload()).catch(() => null);
-  return true;
+  try { await message.edit(panel.memberDisabledPayload()); return true; } catch { return false; }
 }
 
 router.get('/:guildId/overview', async (req, res) => {
@@ -198,6 +197,8 @@ router.post('/:guildId/deploy', async (req, res) => {
     const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.');
     const result = await withDeploymentLock(id, async () => {
       const section = roleSelector.getSection(id);
+      roleSelector.assertModuleEnabled(id);
+      if (Array.isArray(section.deployments) && section.deployments.length) throw new Error('Manage existing multi-panel deployments in Discord Role Selector Studio. Legacy publishing cannot replace them.');
       const channelId = cleanDiscordId(req.body?.channelId || section.deployment?.channelId); if (!channelId) throw new Error('Select a deployment channel.');
       const channel = g.channels.cache.get(channelId) || await g.channels.fetch(channelId).catch(() => null); if (!channel?.send) throw new Error('Selected channel is unavailable.');
       let message = section.deployment?.messageId && section.deployment?.channelId === channel.id ? await channel.messages.fetch(section.deployment.messageId).catch(() => null) : null;
