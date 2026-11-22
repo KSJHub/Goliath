@@ -2775,6 +2775,22 @@ function welcomeEmbedDeliveryAudit() {
     const verificationContinuation = read('src/modules/securityStudio/verification/verificationFlowContinuation.js');
     const verificationManager = read('src/modules/securityStudio/verification/verificationManager.js');
     const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
+    const queueProbe = spawnSync(process.execPath, ['-e', `
+      const assert = require('node:assert/strict');
+      const queue = require('./src/modules/messageStudio/welcome/scheduledWelcomeQueue');
+      const id = '123456789012345678';
+      const config = { pendingMembers: { [id]: {} } };
+      (async () => {
+        const guild = { members: { fetch: async () => { throw Object.assign(new Error('Unknown Member'), {code:10007}); } } };
+        assert.deepEqual(await queue.getQueuedMembers(guild, config), []);
+        guild.members.fetch = async () => { throw new Error('injected network failure'); };
+        await assert.rejects(queue.getQueuedMembers(guild, config), /member lookup failed/);
+        guild.members.fetch = async () => ({id,user:{bot:false}});
+        assert.equal((await queue.getQueuedMembers(guild, config)).length, 1);
+      })().catch(error => { console.error(error); process.exitCode = 1; });
+    `], {cwd: root, encoding: 'utf8', timeout: 15000});
+    assert.equal(queueProbe.status, 0, queueProbe.stderr || queueProbe.error?.message || 'Scheduled queue lookup audit failed');
+
     const memberEvents = read('src/events/members/memberJoinLeave.js');
     const autoRoles = read('src/modules/roleStudio/autoRoles/autoRoles.js');
     const inviteStudio = read('src/modules/communityStudio/invites/invites.js');
