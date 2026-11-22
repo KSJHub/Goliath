@@ -101,18 +101,18 @@ function saveCustomWelcome(interaction,scope){
 function activeNormalMessage(guildId,scope,config){return scope==='scheduled'?scheduledWelcome.getScheduledConfig(guildId).message:config.normalMessages?.[scope];}
 function normalPresetPanel(guild,userId,scope){
   const config=welcome.getWelcomeSection(guild.id), presets=config.normalPresets?.[scope]||{};
-  const entries=Object.entries(presets).sort(([a],[b])=>a.localeCompare(b));
+  const entries=Object.entries(presets).sort(([,a],[,b])=>String(a.name).localeCompare(String(b.name),undefined,{sensitivity:'base'}));
   const state=getSelection(guild.id,userId,scope),page=Math.min(Math.max(0,Math.ceil(entries.length/25)-1),Math.max(0,state.presetPage||0));
-  const selected=state.presetId;
-  const menu=new StringSelectMenuBuilder().setCustomId('admin:welcome:normalSelect:'+scope).setPlaceholder('Choose saved message preset').setDisabled(!entries.length).addOptions(entries.length?entries.slice(page*25,page*25+25).map(([id,v])=>({label:String(v.name).slice(0,100),value:id,default:id===selected})):[{label:'No saved presets',value:'none'}]);
+  const selected=presets[state.presetId]?state.presetId:null;
+  const menu=new StringSelectMenuBuilder().setCustomId('admin:welcome:normalSelect:'+scope).setPlaceholder('Choose saved message preset').setDisabled(!entries.length).addOptions(entries.length?entries.slice(page*25,page*25+25).map(([id,v])=>({label:((v.content===config.normalDefaults?.[scope]?'⭐ ':'')+String(v.name)).slice(0,100),description:v.content===config.normalDefaults?.[scope]?'Default message':'Saved preset',value:id,default:id===selected})):[{label:'No saved presets',value:'none'}]);
   const has=Boolean(presets[selected]);
   const prefix='admin:welcome:normal:';
-  return {embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle('Welcome · Message Presets').setDescription(['Save and load normal messages independently of Embed Studio.', '', '**Workspace**　'+scope, '**Saved presets**　'+entries.length, '**Selected**　'+(has?presets[selected].name:'None'), '', '**Active normal message**', (activeNormalMessage(guild.id,scope,config)||'No normal message saved.').slice(0,1800)].join('\n'))],components:[
+  return {embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle('Welcome · Message Presets').setDescription(['### '+emojiLabel('PRESETS','Preset Library'),'**Workspace:** '+({public:'Instant Public',dm:'Instant DM',scheduled:'Scheduled Welcome'}[scope]),'**Saved presets:** '+entries.length,'**Page:** '+(page+1)+' / '+Math.max(1,Math.ceil(entries.length/25)),'**Selected:** '+(has?presets[selected].name:'None'),has?'**Status:** '+(presets[selected].content===config.normalDefaults?.[scope]?'Default message':'Saved preset'):'Select a preset to inspect it. Selecting does not overwrite your active message.','',has?'**Selected message**':'**Active normal message**',(has?presets[selected].content:activeNormalMessage(guild.id,scope,config)||'No normal message saved.').slice(0,1800)].join('\n'))],components:[
     row(menu),
-    row(button(prefix+'saveAs:'+scope,'Save As',ButtonStyle.Success),button(prefix+'save:'+scope,'Save',ButtonStyle.Primary,!has),button(prefix+'load:'+scope,'Load',ButtonStyle.Primary,!has)),
-    row(button(prefix+'rename:'+scope,'Rename',ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,'Duplicate',ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,'Delete',ButtonStyle.Danger,!has)),
-    row(button(prefix+'default:'+scope,'Set as Default',ButtonStyle.Primary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,'Variables',ButtonStyle.Secondary)),
-    row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='scheduled'?'scheduled':scope==='dm'?'dm':'instant'),'Back'))
+    row(button(prefix+'load:'+scope,emojiLabel('MOD_CASE_OPEN','Load Message'),ButtonStyle.Primary,!has),button(prefix+'save:'+scope,emojiLabel('PRESETS','Update / Save'),ButtonStyle.Success,!has),button(prefix+'saveAs:'+scope,emojiLabel('ADD','Save As'),ButtonStyle.Success)),
+    row(button(prefix+'rename:'+scope,emojiLabel('EDIT','Rename'),ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,emojiLabel('DOCUMENT','Duplicate'),ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,emojiLabel('DELETE','Delete'),ButtonStyle.Danger,!has)),
+    row(button(prefix+'default:'+scope,emojiLabel('USER_STARBOARD','Set Default'),ButtonStyle.Secondary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,'Variables',ButtonStyle.Secondary)),
+    row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='scheduled'?'scheduled':scope==='dm'?'dm':'instant'),emojiLabel('BACK','Back')))
   ]};
 }
 function normalPresetNameModal(scope,action,name=''){
