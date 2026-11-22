@@ -69,7 +69,41 @@ router.post('/:guildId/custom-message', async (req, res) => {
 
 router.post('/:guildId/repair', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); await welcome.repairConfiguration(guild, { actorId: getActorId(req) }); await scheduledWelcomeHealth.repair(guild, { actorId: getActorId(req) }); return success(res, await buildOverview(req, guildId)); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/preview', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); const member = await getPreviewMember(req, guild); const config = welcome.getWelcomeSection(guildId); const publicPayload = await welcome.buildDiscordPayload(member, 'welcome', config, { suppressPing: true }); const dmPayload = config.dmEnabled ? await welcome.buildDiscordPayload(member, 'dmWelcome', config, { suppressPing: true, includeComponents: false }) : null; return success(res, { preview: { public: serializePreviewPayload(publicPayload), dm: dmPayload ? serializePreviewPayload(dmPayload) : null } }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/test', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); const member = await getPreviewMember(req, guild); const config = welcome.getWelcomeSection(guildId); if (!config.channelId && !config.dmEnabled) throw new Error('Select a welcome channel or enable welcome DMs before sending a test.'); const result = await welcome.sendWelcome(member, { silent: false, force: true, previewOnly: true }); return success(res, { result, ...(await buildOverview(req, guildId)) }); } catch (error) { return failure(res, error, 400); } });
+// Test-only guard shared by all dashboard sessions in this server process.
+const welcomeTestGuards = new Map();
+const WELCOME_TEST_COOLDOWN_MS = 10000;
+router.post('/:guildId/test', async (req, res) => {
+  let guildId;
+  let guard;
+  try {
+    guildId = getGuildId(req);
+    const now = Date.now();
+    const previous = welcomeTestGuards.get(guildId);
+    if (previous && (previous.running || previous.until > now)) {
+      const retryAfter = previous.running ? 10 : Math.max(1, Math.ceil((previous.until - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(429).json({ success: false, error: 'A Welcome test is already running or cooling down. No additional channel message or DM was sent. Please wait before trying again.' });
+    }
+    guard = { running: true, until: 0 };
+    welcomeTestGuards.set(guildId, guard);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    const member = await getPreviewMember(req, guild);
+    const config = welcome.getWelcomeSection(guildId);
+    if (!config.channelId && !config.dmEnabled) throw new Error('Select a welcome channel or enable welcome DMs before sending a test.');
+    const result = await welcome.sendWelcome(member, { silent: false, force: true, previewOnly: true });
+    return success(res, { result });
+  } catch (error) {
+    return failure(res, error, 400);
+  } finally {
+    if (guard) {
+      guard.running = false;
+      guard.until = Date.now() + WELCOME_TEST_COOLDOWN_MS;
+      const timer = setTimeout(() => { if (welcomeTestGuards.get(guildId) === guard) welcomeTestGuards.delete(guildId); }, WELCOME_TEST_COOLDOWN_MS);
+      timer.unref?.();
+    }
+  }
+});
 router.get('/:guildId/scheduled', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); const scheduled = scheduledWelcome.getScheduledConfig(guildId); const health = guild ? await scheduledWelcomeHealth.buildHealth(guild) : null; return success(res, { scheduled, health }); } catch (error) { return failure(res, error, 400); } });
 router.put('/:guildId/scheduled', async (req, res) => { try { const guildId = getGuildId(req); const scheduled = scheduledWelcome.updateScheduledConfig(guildId, req.body || {}, { actorId: getActorId(req) }); const guild = await getGuild(req, guildId); const health = guild ? await scheduledWelcomeHealth.buildHealth(guild) : null; return success(res, { scheduled, health }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/scheduled/queue', async (req, res) => { try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); const members = await scheduledWelcome.getWaitingMembers(guild); return success(res, { count: members.length, members: members.map((member) => ({ id: member.id, username: member.user?.username || member.id, displayName: member.displayName || member.user?.username || member.id })) }); } catch (error) { return failure(res, error, 400); } });
