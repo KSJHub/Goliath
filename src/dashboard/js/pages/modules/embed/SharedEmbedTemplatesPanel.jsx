@@ -56,7 +56,8 @@ export default function SharedEmbedTemplatesPanel({ theme, payload = {}, busy = 
   const templates = useMemo(() => Object.values(safeObject(payload.templates)).filter(Boolean).sort((a, b) => String(a.name).localeCompare(String(b.name))), [payload]);
   const moduleGroups = useMemo(() => {
     const supplied = safeArray(payload.bindingRegistry).filter((group) => group?.key && safeArray(group?.slots).length);
-    return supplied.length ? supplied : FALLBACK_TEMPLATE_GROUPS;
+    const groups = supplied.length ? supplied : FALLBACK_TEMPLATE_GROUPS;
+    return groups.some(group => group.key === 'role_selector') ? groups : [...groups, {key:'role_selector',label:'Role Selector Studio',description:'Member selector appearance; role controls remain owned by Role Selector Studio.',slots:['member_launcher','member_group']}];
   }, [payload.bindingRegistry]);
   const bindings = safeObject(payload.bindings); const variables = safeObject(payload.variables); const summary = safeObject(payload.summary);
   const firstGroup = moduleGroups[0] || FALLBACK_TEMPLATE_GROUPS[0];
