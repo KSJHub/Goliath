@@ -1135,27 +1135,11 @@ async function verificationLifecycleAudit() {
     contains(dashboard, 'panelDraftDirty.current', 'preserve unsaved dashboard panel drafts');
     contains(dashboard, 'window.setInterval', 'refresh dashboard configuration periodically');
 
-    // Guard advanced editor parity and exercise real security normalization.
-    {
-      const editorSource = panel.match(/^const METHOD_EDITORS=.*;$/m)?.[0];
-      assert(editorSource, 'Advanced method editor schema must exist');
-      const editors = new Function(editorSource + '\nreturn METHOD_EDITORS;')();
-      const defaultsSource = store.match(/^function defaultSettings\(\).*$/m)?.[0];
-      assert(defaultsSource, 'Verification defaults must exist');
-      const defaults = new Function(defaultsSource + '\nreturn defaultSettings();')();
-      for (const [method, [section, fields]] of Object.entries(editors)) {
-        assert(fields.length >= 1 && fields.length <= 5, 'Discord modal field limit: '+method);
-        const values = section ? defaults.security[section] : defaults.security;
-        for (const [key,label,min,max,def,kind] of fields) {
-          assert(Object.prototype.hasOwnProperty.call(values,key), 'Unknown security setting: '+key);
-          assert(label.length <= 45, 'Discord modal label limit: '+key);
-          assert.deepEqual(def,values[key], 'Editor default drift: '+key);
-          if (!kind) assert(def >= min && def <= max);
-          if(section==='staffApprovalConfig' && key.startsWith('allow')) { contains(dashboard, "'"+key+"'", 'Dashboard staff permission parity: '+key); } else contains(dashboard, 'security.'+(section ? section+'.' : '')+key, 'Dashboard editor parity: '+key);
-        }
-      }
-      contains(panel, 'Configuration changed. Reopen the editor.', 'Reject stale method edits');
-    }
+    // Bulk selection replaces individual Discord method editors.
+    contains(panel, 'admin:verification:securityBulk', 'Bulk method selection');
+    contains(panel, 'admin:verification:securityEnableAll', 'Enable all methods');
+    contains(panel, 'admin:verification:securityDisableConfirm', 'Confirm disabling all methods');
+    assert(!panel.includes('Open individual method settings'), 'Removed individual method picker must not return');
 
     // Exercise the actual active-panel gate with relocated message IDs.
     {
