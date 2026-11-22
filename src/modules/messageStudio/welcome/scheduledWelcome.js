@@ -34,7 +34,7 @@ function defaultScheduledConfig() {
     channelId: null,
     time: '19:00',
     timezone: 'Europe/London',
-    message: '**👋 Welcome to our newest members!**\n\nLet\'s give a warm welcome to:\n\n{members}\n\nWe\'re delighted to have you here. Make yourself at home and enjoy the community! 🎉',
+    message: "**👋 Welcome to our newest members!**\n\nLet's give a warm welcome to our newest arrivals.\n\nWe're delighted to have you here. Make yourself at home and enjoy the community! 🎉",
     templateId: null,
     pingMembers: true,
     removeQueueRole: true,

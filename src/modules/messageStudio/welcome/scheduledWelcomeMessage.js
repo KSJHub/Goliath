@@ -30,7 +30,7 @@ function renderMessage(template, guild, members, config = {}) {
   // Member mentions are deliberately excluded from the panel. They are sent
   // in a separate follow-up message so Discord can notify each member.
   values.members = count === 1 ? 'our newest arrival' : 'our newest arrivals';
-  let output = String(template || '👋 Welcome to our newest members!\\n\\nLet’s give a warm welcome to our newest arrivals.\\n\\nWe’re delighted to have you here. Make yourself at home and enjoy the community! 🎉');
+  let output = String(template || "**👋 Welcome to our newest members!**\n\nLet's give a warm welcome to our newest arrivals.\n\nWe're delighted to have you here. Make yourself at home and enjoy the community! 🎉");
   output = replaceVariables(output, values, { guild, guildId: guild?.id, user: members[0]?.user || null, member: members[0] || null }, false);
   return output.trim();
 }
