@@ -141,7 +141,7 @@ async function trackLatestWelcomeMessage(member, welcomeManager, sentAfter = Dat
     })
     .sort((a, b) => b.score - a.score || b.message.createdTimestamp - a.message.createdTimestamp);
 
-  const selected = candidates[0]?.message;
+  const selected = candidates.find(candidate => candidate.score === 2)?.message;
   if (!selected) return null;
 
   let embedChanged = false;
@@ -184,13 +184,13 @@ async function syncTrackedWelcomeForGuild(guild, userId, nextAvatarUrl, welcomeM
   }
 
   const channel = guild.channels.cache.get(record.channelId)
-    || await guild.channels.fetch(record.channelId).catch(() => null);
+    || await guild.channels.fetch(record.channelId).catch(error => { if (Number(error?.code) === 10003) return null; throw error; });
   if (!channel?.messages?.fetch) {
     saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
     return { updated: 0, removed: 1 };
   }
 
-  const message = await channel.messages.fetch(record.messageId).catch(() => null);
+  const message = await channel.messages.fetch(record.messageId).catch(error => { if (Number(error?.code) === 10008) return null; throw error; });
   if (!message) {
     saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
     return { updated: 0, removed: 1 };
