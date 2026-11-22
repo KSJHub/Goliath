@@ -70,7 +70,7 @@ async function logEvent(g,section,type,content){
   const method=raw.match(/(?:started |incorrect )(captcha|minigame|one time challenge|one_time_challenge|staff approval|staff_approval)/i)?.[1];
   const methodLabel=method?({'captcha':'CAPTCHA','minigame':'Mini-game','one time challenge':'One-time Challenge','staff approval':'Staff Approval'}[method.toLowerCase().replace(/_/g,' ')]||'Security Check'):null;
   if(type==='attempt'&&methodLabel)style={...style,title:methodLabel+' Started'};
-  if(type==='attempt'&&raw.includes('completed Discord Membership Screening'))style={...style,title:'Membership Screening Complete'};
+  if(type==='attempt'&&raw.includes('completed Discord Membership Screening'))style={...style,title:'Membership Screening Complete',status:'Screening passed',emoji:'✅'};
   if(type==='failure'&&raw.includes('Challenge remains active.'))style={...style,title:'Incorrect '+(methodLabel||'Security')+' Answer',status:'Retry available'};
   const mention=raw.match(/<@!?(\d{15,25})>/);
   const userId=mention?.[1]||null;
@@ -83,7 +83,7 @@ async function logEvent(g,section,type,content){
   const joinedAt=member?.joinedTimestamp||null;
   const joinedSeconds=Number.isFinite(joinedAt)&&joinedAt>0?Math.floor(joinedAt/1000):null;
   // A visible, identical section divider establishes a shared natural embed width.
-  const sectionRule='━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+  const sectionRule='━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
   const embed=new EmbedBuilder()
     .setColor(style.color)
     .setAuthor({name:`${g.name||'Server'} • Security`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
