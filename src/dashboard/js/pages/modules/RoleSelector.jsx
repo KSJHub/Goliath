@@ -25,7 +25,7 @@ function parseOptions(text, existing = []) {
   });
 }
 function groupDraft(group) {
-  return { name: group?.name || '', emoji: group?.emoji || E.ROLE_TAG, description: group?.description || '', selectionMode: group?.selectionMode || 'single', allowRemove: group?.allowRemove !== false, controlMode: group?.controlMode || 'dropdown', appearance: { ...(group?.appearance || {}) }, optionsText: (group?.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n') };
+  return { name: group?.name || '', emoji: group?.emoji || E.ROLE_TAG, description: group?.description || '', selectionMode: group?.selectionMode || 'single', allowRemove: group?.allowRemove !== false, controlMode: group?.controlMode || 'dropdown', minSelections: group?.minSelections || 0, maxSelections: group?.maxSelections || (group?.selectionMode === 'multiple' ? 25 : 1), appearance: { ...(group?.appearance || {}) }, optionsText: (group?.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n') };
 }
 
 export default function RoleSelector({ theme, selectedGuild, selectedGuildData }) {
@@ -98,7 +98,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   function chooseGroup(group) { if (!group) return; setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); setPreviewChoices([]); }
   async function saveSelectedGroup() {
     if (!selectedGroup || selectedGroup.id === 'colours') return;
-    const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...selectedGroup, ...editDraft, options: parseOptions(editDraft.optionsText, selectedGroup.options) }) }), 'Selector group saved.');
+    const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...selectedGroup, ...editDraft, maxSelections: editDraft.selectionMode === 'single' ? 1 : editDraft.maxSelections, options: parseOptions(editDraft.optionsText, selectedGroup.options) }) }), 'Selector group saved.');
     const saved = result?.groups?.find((group) => group.id === selectedGroup.id) || result?.group;
     if (saved) chooseGroup(saved);
   }
@@ -166,6 +166,17 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <strong>{E.COLOURS} Built-in Colours</strong>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={colours?.customHexEnabled !== false} onChange={(event) => run(() => api.request(`${baseApi(guildId)}/colours`, { method: 'PUT', body: JSON.stringify({ customHexEnabled: event.target.checked }) }), 'Colour settings saved.')} /> Allow custom HEX</label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8 }}>{(colours?.palette || []).map((item) => <label key={item.id} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 12, padding: 9 }}><input type="checkbox" checked={item.enabled !== false} onChange={(event) => run(() => api.request(`${baseApi(guildId)}/colours`, { method: 'PUT', body: JSON.stringify({ palette: colours.palette.map((entry) => entry.id === item.id ? { ...entry, enabled: event.target.checked } : entry) }) }), 'Palette saved.')} /> {item.emoji} <strong>{item.label}</strong><div style={{ color: theme.mutedText, fontSize: 12 }}>{item.hex}</div></label>)}</div>
+        <div style={card}>
+          <strong>Interactive colour preview — no roles assigned</strong>
+          <ThemedSelect theme={theme} value={previewChoices[0] || ''} onChange={e=>setPreviewChoices(e.target.value ? [e.target.value] : [])}>
+            <option value="">Choose a colour</option>
+            {(colours?.palette || []).filter(o=>o.enabled!==false).map(o=><option key={o.id} value={o.hex}>{o.label} — {o.hex}</option>)}
+            {previewChoices[0] && !(colours?.palette || []).some(o=>o.hex===previewChoices[0]) && <option value={previewChoices[0]}>{previewChoices[0]}</option>}
+          </ThemedSelect>
+          {colours?.customHexEnabled !== false && <label>Custom colour <input type="color" value={/^#[0-9a-f]{6}$/i.test(previewChoices[0] || '') ? previewChoices[0] : '#5865F2'} onChange={e=>setPreviewChoices([e.target.value.toUpperCase()])}/></label>}
+          {previewChoices[0] && <p style={{color:previewChoices[0]}}>Selected colour: {previewChoices[0]}</p>}
+          {colours?.allowRemove !== false && <button style={btn(theme)} onClick={()=>setPreviewChoices([])}>Clear selection</button>}
+        </div>
       </div> : selectedGroup ? <div style={{ display: 'grid', gap: 9 }}>
         <Input theme={theme} value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} placeholder="Group name" />
         <Input theme={theme} value={editDraft.emoji} onChange={(event) => setEditDraft({ ...editDraft, emoji: event.target.value })} placeholder="Emoji" />
@@ -174,6 +185,8 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={editDraft.allowRemove} onChange={(event) => setEditDraft({ ...editDraft, allowRemove: event.target.checked })} /> Members can clear this category</label>
         <textarea value={editDraft.optionsText} onChange={(event) => setEditDraft({ ...editDraft, optionsText: event.target.value })} rows={7} placeholder={`${E.GAMEPAD} | Xbox | Xbox players |\n${E.JOYSTICK} | PlayStation | PlayStation players |\n${E.COMPUTER} | PC | PC players | 123456789012345678`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }} />
         <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | description | optional existing role ID. Existing roles may have permissions, but must be manageable by Goliath.</div>
+        <label>Minimum selections <Input theme={theme} type="number" min={0} max={editDraft.selectionMode==='single'?1:25} value={editDraft.minSelections || 0} onChange={e=>setEditDraft({...editDraft,minSelections:Number(e.target.value)})}/></label>
+        <label>Maximum selections <Input theme={theme} type="number" min={1} max={editDraft.selectionMode==='single'?1:25} value={editDraft.selectionMode==='single'?1:editDraft.maxSelections || 25} onChange={e=>setEditDraft({...editDraft,maxSelections:Number(e.target.value)})}/></label>
         <label>Control style <ThemedSelect theme={theme} value={editDraft.controlMode || 'dropdown'} onChange={event => setEditDraft({...editDraft, controlMode: event.target.value})}><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></ThemedSelect></label>
         {['title','description','color','footer','image','thumbnail'].map(key => <label key={key}>Embed {key}<Input theme={theme} value={editDraft.appearance?.[key] || ''} onChange={event => setEditDraft({...editDraft, appearance: {...editDraft.appearance, [key]: event.target.value}})} /></label>)}
         <div style={{...card, borderLeft: '4px solid ' + (/^#[0-9a-f]{6}$/i.test(editDraft.appearance?.color || '') ? editDraft.appearance.color : '#5865F2')}}>
