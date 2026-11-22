@@ -37,6 +37,8 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const [selectedGroupId, setSelectedGroupId] = useState('colours');
   const [editDraft, setEditDraft] = useState(blankGroup());
   const [newDraft, setNewDraft] = useState(blankGroup());
+  const [wizardStep, setWizardStep] = useState(0);
+  useEffect(() => { setWizardStep(0); setNewDraft(blankGroup()); }, [guildId]);
   const [previewChoices, setPreviewChoices] = useState([]);
   useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode]);
   const [panelDraft, setPanelDraft] = useState({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});
@@ -103,7 +105,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   async function createGroup() {
     const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...newDraft, options: parseOptions(newDraft.optionsText, []) }) }), 'Custom selector created.');
     const group = result?.group;
-    if (group) { chooseGroup(group); setNewDraft(blankGroup()); }
+    if (group) { chooseGroup(group); setNewDraft(blankGroup()); setWizardStep(0); }
   }
   async function deleteSelectedGroup() {
     if (!selectedGroup || selectedGroup.id === 'colours') return;
@@ -193,12 +195,26 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
 
     <section style={{ ...card, display: 'grid', gap: 9 }}>
       <h2 style={{ margin: 0 }}>{E.ADD} New Custom Group</h2>
-      <Input theme={theme} value={newDraft.name} onChange={(event) => setNewDraft({ ...newDraft, name: event.target.value })} placeholder="Gaming Platform / Region / Interests" />
-      <Input theme={theme} value={newDraft.emoji} onChange={(event) => setNewDraft({ ...newDraft, emoji: event.target.value })} placeholder="Emoji" />
-      <Input theme={theme} value={newDraft.description} onChange={(event) => setNewDraft({ ...newDraft, description: event.target.value })} placeholder="Description" />
-      <ThemedSelect theme={theme} value={newDraft.selectionMode} onChange={(event) => setNewDraft({ ...newDraft, selectionMode: event.target.value })} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></ThemedSelect>
-      <textarea value={newDraft.optionsText} onChange={(event) => setNewDraft({ ...newDraft, optionsText: event.target.value })} rows={5} placeholder={`${E.GAMEPAD} | Xbox | Xbox players |\n${E.JOYSTICK} | PlayStation | PlayStation players |\n${E.COMPUTER} | PC | PC players |`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }} />
-      <button disabled={busy || !newDraft.name.trim()} onClick={createGroup} style={btn(theme, 'primary')}>Create Custom Group</button>
+      <strong>Step {wizardStep + 1} of 4 — {['Configuration','Options','Appearance','Review'][wizardStep]}</strong>
+      {wizardStep === 0 && <>
+        <Input theme={theme} value={newDraft.name} onChange={e=>setNewDraft({...newDraft,name:e.target.value})} placeholder="Selector name" />
+        <Input theme={theme} value={newDraft.emoji} onChange={e=>setNewDraft({...newDraft,emoji:e.target.value})} placeholder="Emoji" />
+        <Input theme={theme} value={newDraft.description} onChange={e=>setNewDraft({...newDraft,description:e.target.value})} placeholder="Description" />
+        <ThemedSelect theme={theme} value={newDraft.selectionMode} onChange={e=>setNewDraft({...newDraft,selectionMode:e.target.value})}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></ThemedSelect>
+      </>}
+      {wizardStep === 1 && <>
+        <textarea value={newDraft.optionsText} onChange={e=>setNewDraft({...newDraft,optionsText:e.target.value})} rows={7} placeholder="emoji | label | description | optional existing role ID" />
+        <label><input type="checkbox" checked={newDraft.allowRemove} onChange={e=>setNewDraft({...newDraft,allowRemove:e.target.checked})}/> Allow clearing selections</label>
+      </>}
+      {wizardStep === 2 && <>
+        <ThemedSelect theme={theme} value={newDraft.controlMode || 'dropdown'} onChange={e=>setNewDraft({...newDraft,controlMode:e.target.value})}><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></ThemedSelect>
+        {['title','description','color','footer','image','thumbnail'].map(key=><label key={key}>Embed {key}<Input theme={theme} value={newDraft.appearance?.[key] || ''} onChange={e=>setNewDraft({...newDraft,appearance:{...newDraft.appearance,[key]:e.target.value}})}/></label>)}
+      </>}
+      {wizardStep === 3 && <div style={card}><h3>{newDraft.appearance?.title || newDraft.name}</h3><p>{newDraft.appearance?.description || newDraft.description}</p>{parseOptions(newDraft.optionsText).map((o,index)=><div key={index}>{o.emoji} {o.label}</div>)}<p>Create this selector, then select it in Panel Publishing to publish it.</p></div>}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button disabled={wizardStep===0 || busy} style={btn(theme)} onClick={()=>setWizardStep(s=>s-1)}>Previous Step</button>
+        {wizardStep < 3 ? <button disabled={busy || !newDraft.name.trim() || (wizardStep===1 && !parseOptions(newDraft.optionsText).length) || (wizardStep===2 && newDraft.controlMode==='buttons' && parseOptions(newDraft.optionsText).length>15)} style={btn(theme,'primary')} onClick={()=>setWizardStep(s=>s+1)}>Next Step</button> : <button disabled={busy || !newDraft.name.trim()} style={btn(theme,'primary')} onClick={createGroup}>Create Selector</button>}
+      </div>
     </section>
 
     <section style={{ ...card, display: 'grid', gap: 10 }}>
