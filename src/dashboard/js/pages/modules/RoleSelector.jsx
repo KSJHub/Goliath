@@ -39,6 +39,8 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const [newDraft, setNewDraft] = useState(blankGroup());
   const [previewChoices, setPreviewChoices] = useState([]);
   useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode]);
+  const [panelDraft, setPanelDraft] = useState({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});
+  useEffect(() => { setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}}); }, [guildId]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -132,8 +134,27 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/scan-style`, { method: 'POST' }), 'Guild style scanned.')} style={btn(theme)}>Scan Guild Style</button>
         {config.style?.detectedFormat ? <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/apply-style`, { method: 'POST' }), 'Suggested style applied.')} style={btn(theme)}>Apply Suggestion</button> : null}
       </div>
-      <ChannelSelect theme={theme} resources={channels} value={config.deployment?.channelId || ''} onChange={(value) => saveConfig({ deployment: { ...config.deployment, channelId: value || null } }, 'Selector channel saved.')} label="Member Selector Channel" />
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button disabled={busy || !config.deployment?.channelId} onClick={() => run(() => api.request(`${baseApi(guildId)}/deploy`, { method: 'POST', body: JSON.stringify({ channelId: config.deployment.channelId }) }), 'Role Selector deployed.')} style={btn(theme, 'primary')}>Deploy / Update Selector</button><button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/repair`, { method: 'POST' }), 'Health repair complete.')} style={btn(theme)}>Health / Repair</button></div>
+      <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/repair`, { method: 'POST' }), 'Health repair complete.')} style={btn(theme)}>Health / Repair</button>
+    </section>
+    <section style={{...card,display:'grid',gap:12}}>
+      <h2>Panel Publishing</h2>
+      {(data.deployments || []).map(d => <div key={d.id} style={{borderBottom:`1px solid ${theme.cardBorder}`,padding:8}}>
+        <strong>{channels.find(c=>String(c.id)===d.channelId)?.name || d.channelId || 'No channel'} · {d.messageId ? d.status : 'Unpublished'}</strong>
+        <p>{d.groupIds.map(id=>groups.find(g=>g.id===id)?.name || id).join(', ')}</p>
+        <button style={btn(theme)} onClick={()=>setPanelDraft({...d,optionIdsByGroup:{...d.optionIdsByGroup}})}>Edit</button>
+        <button disabled={busy} style={btn(theme,'primary')} onClick={()=>run(()=>api.request(`${baseApi(guildId)}/deployments/${encodeURIComponent(d.id)}/publish`,{method:'POST'}),'Panel published.')}>Publish / Update</button>
+        <button disabled={busy} style={btn(theme,'danger')} onClick={async()=>{if(await goliathDialog.confirm('Delete this panel? Existing member roles are retained.',{title:'Delete panel?',danger:true})) {const result=await run(()=>api.request(`${baseApi(guildId)}/deployments/${encodeURIComponent(d.id)}`,{method:'DELETE'}),'Panel deleted.');if(result && panelDraft.id===d.id)setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});}}}>Delete</button>
+      </div>)}
+      <h3>{panelDraft.id ? 'Edit panel' : 'Create panel'}</h3>
+      <ChannelSelect theme={theme} resources={channels} value={panelDraft.channelId || ''} onChange={channelId=>setPanelDraft(old=>({...old,channelId}))} label="Panel channel" />
+      {groups.map(g=><div key={g.id}>
+        <label><input type="checkbox" checked={panelDraft.groupIds.includes(g.id)} onChange={e=>{const checked=e.target.checked;setPanelDraft(old=>({...old,groupIds:checked?[...old.groupIds,g.id]:old.groupIds.filter(id=>id!==g.id)}));}}/> {g.name}</label>
+        {panelDraft.groupIds.includes(g.id) && <div style={{paddingLeft:20}}>
+          <label><input type="checkbox" checked={!Array.isArray(panelDraft.optionIdsByGroup[g.id])} onChange={e=>{const all=e.target.checked;setPanelDraft(old=>{const filters={...old.optionIdsByGroup};if(all)delete filters[g.id];else filters[g.id]=(g.palette || g.options || []).filter(o=>o.enabled!==false).map(o=>o.id);return {...old,optionIdsByGroup:filters};});}}/> All options</label>
+          {Array.isArray(panelDraft.optionIdsByGroup[g.id]) && (g.palette || g.options || []).filter(o=>o.enabled!==false).map(o=><label key={o.id} style={{display:'block'}}><input type="checkbox" checked={panelDraft.optionIdsByGroup[g.id].includes(o.id)} onChange={e=>{const checked=e.target.checked;setPanelDraft(old=>({...old,optionIdsByGroup:{...old.optionIdsByGroup,[g.id]:checked?[...old.optionIdsByGroup[g.id],o.id]:old.optionIdsByGroup[g.id].filter(id=>id!==o.id)}}));}}/> {o.label}</label>)}
+        </div>}
+      </div>)}
+      <div><button disabled={busy || !panelDraft.channelId || !panelDraft.groupIds.length} style={btn(theme,'primary')} onClick={async()=>{const result=await run(()=>api.request(`${baseApi(guildId)}/deployments${panelDraft.id?'/'+encodeURIComponent(panelDraft.id):''}`,{method:panelDraft.id?'PUT':'POST',body:JSON.stringify(panelDraft)}),'Panel configuration saved.');if(result)setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});}}>Save panel</button> <button style={btn(theme)} onClick={()=>setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}})}>New / Reset</button></div>
     </section>
 
     <section style={{ ...card, display: 'grid', gap: 12 }}>
