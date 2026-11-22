@@ -81,11 +81,12 @@ function templatePageButtons(guild,userId,scope,activeTemplateId){
 
 function customTemplateId(scope){return scope==='dm'?'welcome_custom_dm':'welcome_custom_public';}
 function customTemplateName(scope){return scope==='dm'?'Custom DM Welcome':'Custom Public Welcome';}
+function normalDefault(scope){return scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.';}
 function customEditorModal(guildId,scope){
   const config=welcome.getWelcomeSection(guildId);
   const saved=config.normalMessages?.[scope];
   const legacy=embedTemplateManager.getTemplate(guildId,customTemplateId(scope));
-  const initial=saved||legacy?.content|| (scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.');
+  const initial=saved||config.normalDefaults?.[scope]||legacy?.content||normalDefault(scope);
   const field=new TextInputBuilder().setCustomId('content').setLabel('Welcome message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setValue(initial);
   return new ModalBuilder().setCustomId(scope==='dm'?'admin:welcome:customDmSubmit':'admin:welcome:customPublicSubmit').setTitle(scope==='dm'?'Edit DM Message':'Edit Public Message').addComponents(row(field));
 }
@@ -109,6 +110,7 @@ function normalPresetPanel(guild,userId,scope){
     row(menu),
     row(button(prefix+'saveAs:'+scope,'Save As',ButtonStyle.Success),button(prefix+'save:'+scope,'Save',ButtonStyle.Primary,!has),button(prefix+'load:'+scope,'Load',ButtonStyle.Primary,!has)),
     row(button(prefix+'rename:'+scope,'Rename',ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,'Duplicate',ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,'Delete',ButtonStyle.Danger,!has)),
+    row(button(prefix+'default:'+scope,'Set as Default',ButtonStyle.Primary,!has),button(prefix+'restore:'+scope,'Restore Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,'Export',ButtonStyle.Secondary)),
     row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='dm'?'dm':'instant'),'Back'))
   ]};
 }
@@ -350,12 +352,16 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
   if(action==='open')return updatePanel(interaction,panel());
   if(action==='prev'||action==='next'){setSelection(guildId,userId,scope,{presetPage:Math.max(0,(state.presetPage||0)+(action==='next'?1:-1))});return updatePanel(interaction,panel());}
   if(action==='saveAs')return interaction.showModal(normalPresetNameModal(scope,action));
+  if(action==='export'){const attachment=new AttachmentBuilder(Buffer.from(JSON.stringify({version:1,scope,presets:Object.values(presets),defaultMessage:config.normalDefaults?.[scope]||normalDefault(scope)},null,2)),{name:'welcome-'+scope+'-presets.json'});return interaction.reply({files:[attachment],ephemeral:true});}
+  if(action==='restore')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xfaa61a).setTitle('Restore original normal message?').setDescription('This resets the normal-message default and activates it. Saved presets and Embed Studio templates are retained.')],components:[row(button('admin:welcome:normal:confirmRestore:'+scope,'Confirm Restore',ButtonStyle.Danger),button('admin:welcome:normal:open:'+scope,'Cancel'))]});
+  if(action==='confirmRestore'){const content=normalDefault(scope);welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:content},normalMessages:{...s.normalMessages,[scope]:content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:userId,action:'welcome_normal_default_restore'});return updatePanel(interaction,panel());}
   if(!current)throw new Error('Choose a saved preset first.');
   if(action==='rename'||action==='duplicate')return interaction.showModal(normalPresetNameModal(scope,action,action==='rename'?current.name:''));
+  if(action==='default'){welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:current.content}}),{actorId:userId,action:'welcome_normal_default_save'});return updatePanel(interaction,panel());}
   if(action==='save'){const content=config.normalMessages?.[scope];if(!content)throw new Error('Save a normal message first.');mutate(all=>{if(!all[selected])throw new Error('Preset unavailable.');all[selected]={...all[selected],content};return all;});}
   else if(action==='load'){welcome.updateWelcomeSection(guildId,s=>({...s,normalMessages:{...s.normalMessages,[scope]:current.content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:userId,action:'welcome_normal_preset_load'});clearSelection(guildId,userId,scope);return updatePanel(interaction,await (scope==='dm'?buildDmPanel:buildInstantPanel)(interaction.guild,displayName(interaction),userId));}
-  else if(action==='delete')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xed4245).setTitle('Delete selected preset?').setDescription('The active welcome message will not be changed.')],components:[row(button('admin:welcome:normal:confirmDelete:'+scope,'Confirm Delete',ButtonStyle.Danger),button('admin:welcome:normal:open:'+scope,'Cancel'))]});
-  else if(action==='confirmDelete'){mutate(all=>{delete all[selected];return all;});setSelection(guildId,userId,scope,{presetId:null});}
+  else if(action==='delete')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xed4245).setTitle('Delete selected preset?').setDescription('The active welcome message will not be changed.')],components:[row(button('admin:welcome:normal:confirmDelete-'+selected+':'+scope,'Confirm Delete',ButtonStyle.Danger),button('admin:welcome:normal:open:'+scope,'Cancel'))]});
+  else if(action.startsWith('confirmDelete-')){const confirmed=action.slice('confirmDelete-'.length);if(confirmed!==selected)throw new Error('Selection changed. Confirm deletion again.');mutate(all=>{delete all[confirmed];return all;});setSelection(guildId,userId,scope,{presetId:null});}
   else throw new Error('Invalid preset action.');
   return updatePanel(interaction,panel());
 }
