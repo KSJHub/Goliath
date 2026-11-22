@@ -79,12 +79,41 @@ const METHOD_NUMBERS={
  oneTimeChallenge:[['oneTimeChallengeConfig','timeLimitSeconds','Time limit (seconds)',15,1800],['oneTimeChallengeConfig','maxChallengeAttempts','Maximum attempts',1,20]],
  rejoinHistory:[['rejoinConfig','lookbackDays','History window (days)',1,3650],['rejoinConfig','elevateAfterFailures','Escalate after failures',1,1000]]
 };
+const METHOD_GAMES=[['target_match','Target Match'],['memory_match','Memory Match'],['sequence','Sequence'],['pattern_match','Pattern Match'],['reaction','Reaction'],['odd_one_out','Odd One Out'],['order','Order']];
+const METHOD_TOGGLES={
+ captcha:[['security','captchaConfig','regenerateOnFailure','Regenerate on failure']],
+ minigame:[['security','minigameConfig','random','Random game']],
+ discordScreening:[['flow','','discordScreeningGate','Require screening']],
+ botProtection:[['botPolicy','','denySuspicious','Deny suspicious bots'],['botPolicy','','allowConfiguredBots','Allow configured bots']],
+ staffApproval:[['security','staffApprovalConfig','allowApprove','Allow approve'],['security','staffApprovalConfig','allowReject','Allow reject'],['security','staffApprovalConfig','allowQuarantine','Allow quarantine']]
+};
+const methodValue=(c,[section,group,k])=>group?c[section]?.[group]?.[k]:c[section]?.[k];
 function methodSettingsPage(g,user,key){
  const method=SECURITY.find(([k])=>k===key);if(!method)throw new Error('Unknown security method.');
- const s=settings(g.id).security,fields=METHOD_NUMBERS[key]||[];
- const embed=emb('🛡️ Verification · '+method[1],[SECURITY_HELP[key]],user).addFields({name:'1 · Current status',value:s[key]?'🟢 Enabled':'🔴 Disabled'});
+ const c=settings(g.id),s=c.security,fields=METHOD_NUMBERS[key]||[],flags=METHOD_TOGGLES[key]||[],components=[];
+ const embed=emb('🛡️ Verification · '+method[1],[SECURITY_HELP[key]],user).addFields({name:'1 · Current status',value:(s[key]?'🟢 Enabled':'🔴 Disabled')+'\nChange enabled checks using the Security Checks menu.'});
  if(fields.length)embed.addFields({name:'2 · Method limits',value:fields.map(([group,k,label])=>'**'+label+':** '+(group?s[group][k]:s[k])).join('\n')});
- return {embeds:[embed],components:[...(fields.length?[row(button('admin:verification:editMethodLimits:'+key,'⚙️ Edit Limits',ButtonStyle.Primary))]:[]),finalNav('securityMethods')]};
+ if(flags.length)embed.addFields({name:'Options',value:flags.map(f=>(methodValue(c,f)===true?'🟢':'🔴')+' '+f[3]).join('\n')});
+ const controls=[...(fields.length?[button('admin:verification:editMethodLimits:'+key,'⚙️ Edit Limits',ButtonStyle.Primary)]:[]),...flags.map((f,n)=>toggle('admin:verification:methodToggle:'+key+':'+n,f[3],methodValue(c,f)===true))];
+ if(controls.length)components.push(row(...controls));
+ if(['captcha','minigame'].includes(key)){
+ const config=s[key+'Config'];embed.addFields({name:'Difficulty',value:title(config.difficulty||'normal')});
+ components.push(row(new StringSelectMenuBuilder().setCustomId('admin:verification:methodDifficulty:'+key).setPlaceholder('Choose difficulty').addOptions(['easy','normal','hard'].map(v=>({label:title(v),value:v,default:config.difficulty===v})))));
+ }
+ if(key==='minigame'){
+ const config=s.minigameConfig,games=config.enabledGames||[];
+ embed.addFields({name:'Games',value:METHOD_GAMES.filter(([v])=>games.includes(v)).map(([,label])=>label).join(', ')||'No games selected'});
+ components.push(row(new StringSelectMenuBuilder().setCustomId('admin:verification:methodGames').setPlaceholder('Choose available games').setMinValues(1).setMaxValues(METHOD_GAMES.length).addOptions(METHOD_GAMES.map(([value,label])=>({label,value,default:games.includes(value)})))));
+ if(config.random===false)components.push(row(new StringSelectMenuBuilder().setCustomId('admin:verification:methodFixedGame').setPlaceholder('Choose fixed game').addOptions(METHOD_GAMES.filter(([v])=>games.includes(v)).map(([value,label])=>({label,value,default:config.gameType===value})))));
+ }
+ if(key==='riskBased'){
+ for(const [k,label] of [['mediumExtraSecurity','Medium risk'],['highExtraSecurity','High risk']]){
+ const selected=s.riskConfig[k]||[],opts=SECURITY.filter(([v])=>['captcha','minigame','staffApproval','oneTimeChallenge'].includes(v)).map(([v,label])=>({label,value:FLOW_KEYS[v],default:selected.includes(FLOW_KEYS[v])}));
+ embed.addFields({name:label,value:selected.join(', ')||'None'});
+ components.push(row(new StringSelectMenuBuilder().setCustomId('admin:verification:methodRisk:'+k).setPlaceholder(label+' additional checks').setMinValues(0).setMaxValues(opts.length).addOptions(opts)));
+ }
+ }
+ return {embeds:[embed],components:[...components,finalNav('securityMethods')]};
 }
 function methodLimitsModal(guildId,key){
  const fields=METHOD_NUMBERS[key],s=settings(guildId).security;if(!fields?.length)throw new Error('No editable limits for this method.');
@@ -198,6 +227,28 @@ async function handleVerificationAdminInteraction(i){const id=String(i.customId|
  await respond(i,{embeds:[embed],components:[row(button('admin:verification:applyProtectionPreset:'+key,'✅ Apply Preset',ButtonStyle.Success),button('admin:verification:page:security','✖️ Cancel',ButtonStyle.Secondary)),finalNav('security')]});return true;
  }
  if(id.startsWith('admin:verification:applyProtectionPreset:')){const key=id.split(':').at(-1),methods=PROTECTION_PRESETS[key];if(!Array.isArray(methods))throw new Error('Unknown preset.');const c=settings(i.guildId),security={...c.security};for(const [k] of SECURITY)security[k]=methods.includes(k);const monitoring=key!=='basic';save(i.guildId,{security,flow:{...c.flow,orderedSecurity:methods.map(k=>FLOW_KEYS[k]),failClosed:true,resetActiveSessionOnLeave:true,retainSecurityHistory:true},intelligence:{...c.intelligence,enabled:monitoring,initialScan:true,continuousScan:monitoring,logFlags:true,logErrors:true,logSuccessfulScans:false}},i.user.id);await respond(i,securityPage(i.guild,user));return true;}
+ if(id.startsWith('admin:verification:methodToggle:')){
+ const [, , ,key,n]=id.split(':'),f=METHOD_TOGGLES[key]?.[Number(n)];if(!f)throw new Error('Unknown method option.');
+ const [section,group,k]=f,c=settings(i.guildId),next={...c[section]},value=methodValue(c,f)!==true;
+ if(group)next[group]={...next[group],[k]:value};else next[k]=value;
+ if(key==='minigame'&&k==='random'&&!value&&!next[group].enabledGames.includes(next[group].gameType))next[group].gameType=next[group].enabledGames[0];
+ save(i.guildId,{[section]:next},i.user.id);await respond(i,methodSettingsPage(i.guild,user,key));return true;
+ }
+ if(id.startsWith('admin:verification:methodDifficulty:')){
+ const key=id.split(':').pop(),v=i.values?.[0];if(!['captcha','minigame'].includes(key)||!['easy','normal','hard'].includes(v))throw new Error('Unknown difficulty.');
+ const security={...settings(i.guildId).security},group=key+'Config';security[group]={...security[group],difficulty:v};save(i.guildId,{security},i.user.id);await respond(i,methodSettingsPage(i.guild,user,key));return true;
+ }
+ if(id==='admin:verification:methodGames'||id==='admin:verification:methodFixedGame'){
+ const security={...settings(i.guildId).security},config={...security.minigameConfig},values=i.values||[];
+ if(!values.length||values.some(v=>!METHOD_GAMES.some(([k])=>k===v)))throw new Error('Choose a valid game.');
+ if(id.endsWith('methodGames')){config.enabledGames=[...new Set(values)];if(!config.enabledGames.includes(config.gameType))config.gameType=config.enabledGames[0];}
+ else{if(values.length!==1||!config.enabledGames.includes(values[0]))throw new Error('Choose an enabled game.');config.gameType=values[0];}
+ security.minigameConfig=config;save(i.guildId,{security},i.user.id);await respond(i,methodSettingsPage(i.guild,user,'minigame'));return true;
+ }
+ if(id.startsWith('admin:verification:methodRisk:')){
+ const k=id.split(':').pop(),values=i.values||[];if(!['mediumExtraSecurity','highExtraSecurity'].includes(k)||values.some(v=>!['captcha','minigame','staff_approval','one_time_challenge'].includes(v)))throw new Error('Unknown risk option.');
+ const security={...settings(i.guildId).security};security.riskConfig={...security.riskConfig,[k]:[...new Set(values)]};save(i.guildId,{security},i.user.id);await respond(i,methodSettingsPage(i.guild,user,'riskBased'));return true;
+ }
  if(id==='admin:verification:methodSettings'){await respond(i,methodSettingsPage(i.guild,user,i.values?.[0]));return true;}
  if(id.startsWith('admin:verification:editMethodLimits:')){await i.showModal(methodLimitsModal(i.guildId,id.split(':').pop()));return true;}
  if(id.startsWith('admin:verification:saveMethodLimits:')){
