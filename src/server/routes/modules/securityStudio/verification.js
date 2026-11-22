@@ -239,6 +239,7 @@ router.get('/:guildId/overview', async (req, res) => {
       configRevision: section.configRevision,
       activePanelId: section.activePanelId,
       messages: section.messages,
+      defaultMessages: verificationStore.defaultMessages(),
       panelTemplate: section.panelTemplate,
       panels: Object.values(section.panels || {}),
       analytics: section.analytics || {},
@@ -287,7 +288,7 @@ router.post('/:guildId/messages', (req, res) => {
     const guildId = getGuildId(req);
     const messages = verificationManager.updateVerificationMessages(
       guildId,
-      req.body || {},
+      Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => Object.prototype.hasOwnProperty.call(verificationStore.defaultMessages(), key))),
       buildMeta(req, 'verification_api_messages')
     );
 
