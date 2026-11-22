@@ -1,3 +1,5 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
+import { createTheme } from '../../ui/theme.js';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { dashboardPath } from '../../services/dashboardPath.js';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -344,7 +346,7 @@ export default function MediaTools(props) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
               <label>
                 <span style={{ display: 'block', marginBottom: 6, fontWeight: 800 }}>Preset</span>
-                <select
+                <ThemedSelect theme={createTheme(true)}
                   value={options.preset}
                   disabled={locked}
                   onChange={(event) => setOptions((current) => ({ ...current, preset: event.target.value, size: event.target.value === 'roleIcon' ? 64 : 128 }))}
@@ -352,7 +354,7 @@ export default function MediaTools(props) {
                 >
                   <option value="emoji">Discord Emoji</option>
                   <option value="roleIcon">Role Icon</option>
-                </select>
+                </ThemedSelect>
               </label>
               <label>
                 <span style={{ display: 'block', marginBottom: 6, fontWeight: 800 }}>Size</span>
@@ -368,7 +370,7 @@ export default function MediaTools(props) {
               </label>
               <label>
                 <span style={{ display: 'block', marginBottom: 6, fontWeight: 800 }}>Format</span>
-                <select
+                <ThemedSelect theme={createTheme(true)}
                   value={options.format}
                   disabled={locked}
                   onChange={(event) => setOptions((current) => ({ ...current, format: event.target.value }))}
@@ -376,7 +378,7 @@ export default function MediaTools(props) {
                 >
                   <option value="png">PNG</option>
                   <option value="webp">WebP</option>
-                </select>
+                </ThemedSelect>
               </label>
             </div>
           )}
