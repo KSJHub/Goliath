@@ -130,8 +130,10 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(!botMember||!parent.permissionsFor(botMember)?.has(['ViewChannel','SendMessages','CreatePublicThreads','SendMessagesInThreads']))return false;
     let thread=session.logThreadSessionId===session.sessionId&&session.logThreadId?await g.channels.fetch(session.logThreadId).catch(()=>null):null;
     if(thread?.parentId!==parent.id)thread=null;
+    if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
+    if(thread?.locked)return false;
     let summaryId=thread?session.logSummaryId:null;
-    if(thread&&t.mode==='hybrid'&&!summaryId){const summary=await parent.send(options);summaryId=summary.id;setSession(g.id,userId,{logSummaryId:summaryId});}
+    if(thread&&t.mode==='hybrid'&&!summaryId){const summary=await parent.send(options);summaryId=summary.id;if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;setSession(g.id,userId,{logSummaryId:summaryId});}
     if(!thread){
       const name=('Verification • '+(t.naming==='id'?userId:t.naming==='username'?(username||userId):(username||'Member')+' • '+userId)).slice(0,100);
       if(t.mode==='hybrid'){
@@ -145,6 +147,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     // A staff-locked case must not be reopened by automated logging.
     if(thread.locked)return false;
     if(thread.archived)await thread.setArchived(false);
+    if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
     await thread.send(options);
     if(t.mode==='hybrid'&&summaryId){
       try{const summary=await parent.messages.fetch(summaryId);await summary.edit(options);}catch(error){console.error('[Verification] Case summary update failed:',error?.message||error);}
