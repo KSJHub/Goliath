@@ -313,16 +313,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   function toggleSecurity(key, enabled) {
-    setError('');
-    advancedDirty.current = true;
-    setAdvanced((current) => {
-      const next = writePath(current || settings, `security.${key}`, enabled);
-      const method = FLOW_NAMES[key];
-      const ordered = [...(next.flow?.orderedSecurity || ['simple'])];
-      if (enabled && !ordered.includes(method)) ordered.push(method);
-      if (!enabled && ordered.includes(method)) ordered.splice(ordered.indexOf(method), 1);
-      return writePath(next, 'flow.orderedSecurity', ordered);
-    });
+    setAdvancedPath('security.' + key, enabled);
   }
 
   async function saveAdvanced() {
@@ -334,26 +325,15 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     setError('');
     setNotice('');
 
-    // Keep the user's existing step order, append newly enabled methods and
-    // remove disabled or duplicate methods. Legacy defaults may enable checks
-    // without including them in the saved flow.
-    const enabledMethods = SECURITY_OPTIONS
-      .filter(([key]) => advanced.security?.[key] === true)
-      .map(([key]) => FLOW_NAMES[key]);
-    const existingOrder = Array.isArray(advanced.flow?.orderedSecurity)
-      ? advanced.flow.orderedSecurity : [];
-    const order = [
-      ...existingOrder.filter((method, index) =>
-        enabledMethods.includes(method) && existingOrder.indexOf(method) === index),
-      ...enabledMethods.filter((method) => !existingOrder.includes(method)),
-    ];
+    // Availability and required checks are separate, as in the Discord admin panel.
+    const order = [...new Set(advanced.flow?.orderedSecurity || [])];
     const staffRoles = advanced.roles?.staff || [];
     if (advanced.security?.staffApproval && staffRoles.length === 0) {
       setError('Select at least one Staff Approval role before saving.');
       return;
     }
     if (advanced.flow?.enabled && order.length === 0) {
-      setError('Enable at least one security method before saving an active verification flow.');
+      setError('Select at least one required check before saving an active verification flow.');
       return;
     }
 
@@ -492,6 +472,26 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         </div>
         <div style={{ display: 'grid', gap: 8 }}>
           <h3 style={{ margin: 0 }}>🔄 Ordered Verification Steps</h3>
+          <p style={{ color: theme.mutedText }}>Choose required checks separately from available security methods. Enabling a method does not automatically add it to the required flow.</p>
+          {SECURITY_OPTIONS.map(([key,label]) => <Toggle key={key} theme={theme} label={'Require '+label} checked={(advanced?.flow?.orderedSecurity || []).includes(FLOW_NAMES[key])} onChange={checked => {
+            const current = advanced?.flow?.orderedSecurity || [];
+            setAdvancedPath('flow.orderedSecurity',checked ? [...new Set([...current,FLOW_NAMES[key]])] : current.filter(method => method !== FLOW_NAMES[key]));
+          }} />)}
+          <h3 style={{ margin: 0 }}>🔒 Access & monitoring policies</h3>
+          {[
+            ['security.allowReverification','Allow re-verification',true],
+            ['flow.failClosed','Block incomplete verification',true],
+            ['flow.resetActiveSessionOnLeave','Restart unfinished verification on rejoin',true],
+            ['flow.retainSecurityHistory','Retain security history',true],
+            ['intelligence.enabled','Background security monitoring',false],
+            ['intelligence.initialScan','Scan on arrival',false],
+            ['intelligence.continuousScan','Repeat background scans',false],
+            ['intelligence.logSuccessfulScans','Log successful scans',false],
+            ['intelligence.logFlags','Log suspicious findings',true],
+            ['intelligence.logErrors','Log scan errors',true],
+            ['health.testMode','Test mode',false],
+          ].map(([key,label,fallback]) => <Toggle key={key} theme={theme} label={label} checked={readPath(advanced,key) ?? fallback} onChange={value => setAdvancedPath(key,value)} />)}
+
           {(advanced?.flow?.orderedSecurity || []).map((method, index, items) => (
             <div key={method} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ flex: 1 }}>{index + 1}. {SECURITY_OPTIONS.find(([key]) => FLOW_NAMES[key] === method)?.[1] || method}</span>
