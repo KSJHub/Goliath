@@ -255,7 +255,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
       .addOptions(opts)));
     if (group.allowRemove && !group.minSelections) components.push(row(button(customId('roleSelector:clear', group.id, deploymentId || 'global'), emojiLabel('ADMIN_PURGE', 'Clear Selection'))));
   }
-  return { embeds: [embed], components: components.filter((x) => x.components.length) };
+  return { embeds: [applyBoundSelectorTemplate(guild, 'member_group', embed)], components: components.filter((x) => x.components.length) };
 }
 
 async function freshMember(i) { return i.guild.members.fetch(i.user.id).catch(() => i.member); }
