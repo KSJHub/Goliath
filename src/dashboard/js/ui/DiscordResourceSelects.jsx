@@ -108,7 +108,7 @@ export function EmojiSelect(props) {
 export default DiscordResourceSelect;
 
  // Adapter for existing single-value JSX selects, preserving their change handlers.
-export function ThemedSelect({ theme: suppliedTheme, children, value, onChange, disabled, multiple = false, size, 'aria-label': label, style }) {
+export function ThemedSelect({ theme: suppliedTheme, children, value, onChange, disabled, multiple = false, compact = false, maxSelected = Infinity, size, 'aria-label': label, style }) {
   const theme = suppliedTheme || createTheme();
   const collect = (nodes, groupName, groupDisabled = false) => React.Children.toArray(nodes).flatMap(node => {
     if (!React.isValidElement(node)) return [];
@@ -119,6 +119,13 @@ export function ThemedSelect({ theme: suppliedTheme, children, value, onChange, 
     return [{ id: String(node.props.value ?? name), name, disabled: groupDisabled || node.props.disabled, groupName, groupId: groupName }];
   });
   const resources = collect(children);
+  const [expanded, setExpanded] = useState(false);
+  const [filter, setFilter] = useState('');
+  if (multiple && compact) {
+    const selected = new Set(Array.from(value || [], String));
+    const names = resources.filter(item => selected.has(item.id)).map(item => item.name);
+    return <div style={{ position: 'relative', minWidth: 0 }}><button type="button" disabled={disabled} aria-expanded={expanded} aria-label={label || 'Select options'} onClick={() => { setExpanded(!expanded); setFilter(''); }} style={{ width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: 12, border: '1px solid ' + theme.inputBorder, background: theme.inputBg, color: theme.inputText, borderRadius: 12, padding: '13px 16px', font: 'inherit' }}><span>{names.length ? names.join(', ') : 'Choose roles'}</span><span aria-hidden="true">{expanded ? '▴' : '▾'}</span></button>{expanded ? <div onKeyDown={e => { if (e.key === 'Escape') setExpanded(false); }} style={{ marginTop: 6, background: theme.menuBg || theme.dropdownBg || theme.inputBg, border: '1px solid ' + theme.inputBorder, borderRadius: 12, padding: 8 }}><input aria-label="Search options" placeholder="Search roles…" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', background: theme.inputBg, color: theme.inputText, border: '1px solid ' + theme.inputBorder, borderRadius: 8, padding: 10 }} /><div role="group" aria-label={label || 'Select options'} style={{ maxHeight: 240, overflowY: 'auto', scrollbarColor: theme.mutedText + ' transparent' }}>{resources.filter(item => item.name.toLowerCase().includes(filter.toLowerCase())).map(item => <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', color: theme.inputText }}><input type="checkbox" checked={selected.has(item.id)} disabled={disabled || item.disabled || (!selected.has(item.id) && selected.size >= maxSelected)} onChange={e => { const next = new Set(selected); if (e.target.checked) next.add(item.id); else next.delete(item.id); const selectedOptions = Array.from(next, value => ({ value })); onChange?.({ target: { selectedOptions, value: selectedOptions[0]?.value || '' } }); }} />{item.name}</label>)}</div><button type="button" onClick={() => setExpanded(false)} style={{ color: theme.inputText, background: theme.inputBg, border: '1px solid ' + theme.inputBorder, borderRadius: 8, padding: '6px 12px' }}>Done</button></div> : null}</div>;
+  }
   if (multiple) {
     const selected = new Set(Array.from(value || [], String));
     return <div role="group" aria-label={label || 'Select options'} style={{ border: '1px solid ' + theme.inputBorder, background: theme.inputBg, borderRadius: 12, padding: 8, maxHeight: (size || 6) * 38, overflowY: 'auto', ...style }}>
