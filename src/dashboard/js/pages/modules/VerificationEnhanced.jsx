@@ -161,6 +161,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [advanced, setAdvanced] = useState(null);
+  const [messageKey, setMessageKey] = useState('start');
+  const [messageDraft, setMessageDraft] = useState(null);
   const advancedDirty = useRef(false);
   const loadedGuild = useRef('');
   const panelDraftDirty = useRef(false);
@@ -214,7 +216,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         adminConfig: config,
       };
       const guildChanged = loadedGuild.current !== guildId;
-      if (guildChanged) explicitNewPanel.current = false;
+      if (guildChanged) { explicitNewPanel.current = false; setMessageKey('start'); setMessageDraft(null); }
       setData(adapted);
       if (loadedGuild.current !== guildId || !advancedDirty.current) {
         setAdvanced(config);
@@ -356,6 +358,19 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     }
   }
 
+  async function saveMessages(patch) {
+    if (busy || advancedDirty.current || !data?.defaultMessages) return;
+    setBusy('messages');
+    setError('');
+    try {
+      await api.saveVerificationMessages(guildId, {...patch, expectedConfigRevision:data.configRevision});
+      setMessageDraft(null);
+      await load();
+      setNotice('Verification messages saved.');
+    } catch (error) { setError(error.message || 'Message update failed.'); }
+    finally { setBusy(''); }
+  }
+
   function selectPanel(panelId) {
     explicitNewPanel.current = !panelId;
     setSelectedPanelId(panelId);
@@ -412,7 +427,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <div style={{ color: '#93c5fd', fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Goliath Protection</div>
         <h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px,4vw,42px)' }}>Verification</h1>
         <nav aria-label="Verification sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
-          {["General & Roles","Thread Settings","Security & Flow","Staff Approval","Protection & Logs","Save Settings","Member Panel","Diagnostics"].map((label,index) => <button type="button" key={label} style={buttonStyle(theme,index===5?'primary':'default')} onClick={() => { const section = document.getElementById('verification-section-'+(index+1)); section?.scrollIntoView({block:'start'}); section?.focus({preventScroll:true}); }}>{index+1} · {label}</button>)}
+          {["General & Roles","Thread Settings","Security & Flow","Staff Approval","Protection & Logs","Save Settings","Member Panel","Diagnostics","Messages"].map((label,index) => <button type="button" key={label} style={buttonStyle(theme,index===5?'primary':'default')} onClick={() => { const section = document.getElementById('verification-section-'+(index+1)); section?.scrollIntoView({block:'start'}); section?.focus({preventScroll:true}); }}>{index+1} · {label}</button>)}
         </nav>
         <p style={{ color: theme.mutedText, lineHeight: 1.6 }}>Configure roles, channels, panel design, deployment, repair, exports and module health.</p>
       </section>
@@ -627,6 +642,17 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         </div>
       </section>
 
+      <section style={{ ...card, display:'grid', gap:12 }}>
+        <h2 id="verification-section-9" tabIndex={-1} style={{margin:0,scrollMarginTop:96}}>9 · 📝 Message Templates</h2>
+        <p style={{color:theme.mutedText}}>Edit the same templates used by Discord. Save advanced settings before changing messages. Keep template variables intact.</p>
+        <label>Template <select value={messageKey} disabled={!!busy} onChange={e=>{setMessageKey(e.target.value);setMessageDraft(null);}}>{Object.keys(data?.defaultMessages || {}).map(key=><option key={key} value={key}>{key.replace(/([A-Z])/g,' $1')}</option>)}</select></label>
+        <textarea aria-label="Message content" rows={5} maxLength={1500} value={messageDraft ?? data?.messages?.[messageKey] ?? ''} onChange={e=>setMessageDraft(e.target.value)} />
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button type="button" disabled={!!busy || advancedDirty.current || !messageDraft?.trim()} style={buttonStyle(theme,'success')} onClick={()=>saveMessages({[messageKey]:messageDraft})}>Save Message</button>
+          <button type="button" disabled={!!busy || advancedDirty.current || !data?.defaultMessages?.[messageKey]} style={buttonStyle(theme)} onClick={async()=>{if(await goliathDialog.confirm('Restore the selected template to its default?',{title:'Reset Message',danger:true})) await saveMessages({[messageKey]:data.defaultMessages[messageKey]});}}>Reset Selected</button>
+          <button type="button" disabled={!!busy || advancedDirty.current || !data?.defaultMessages} style={buttonStyle(theme,'danger')} onClick={async()=>{if(await goliathDialog.confirm('Restore every verification message template?',{title:'Reset All Messages',danger:true})) await saveMessages(data.defaultMessages);}}>Reset All</button>
+        </div>
+      </section>
       <section style={{ ...card, display: 'grid', gap: 12 }}>
         <h2 id="verification-section-8" tabIndex={-1} style={{ margin: 0, scrollMarginTop: 96 }}>8 · 🩺 Health & Diagnostics</h2>
         {health?.warnings?.length
