@@ -1268,7 +1268,18 @@ async function configureDeployment(guild, actorId, patch = {}, deploymentId = nu
     if (!channel?.send) throw new Error('Choose a sendable channel.');
     const groupIds = patch.groupIds ?? previous.groupIds ?? [];
     if (!Array.isArray(groupIds) || !groupIds.length || groupIds.length > 25 || groupIds.some(id => !roleSelector.getGroup(guild.id,id))) throw new Error('Choose valid selector groups.');
-    const next = normalizeDeployment({...previous, channelId, groupIds, optionIdsByGroup: patch.optionIdsByGroup ?? previous.optionIdsByGroup, id: previous.id || 'p' + require('node:crypto').randomBytes(8).toString('hex')});
+    const filters = patch.optionIdsByGroup ?? previous.optionIdsByGroup ?? {};
+    if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw new Error('Invalid option filters.');
+    const optionIdsByGroup = Object.create(null);
+    for (const groupId of groupIds) {
+      if (!Object.prototype.hasOwnProperty.call(filters,groupId)) continue;
+      const group = roleSelector.getGroup(guild.id,groupId);
+      const available = new Set(((group.type === 'colour' ? group.palette : group.options) || []).filter(o=>o.enabled !== false).map(o=>String(o.id)));
+      const ids = filters[groupId];
+      if (!Array.isArray(ids) || !ids.length || ids.length > 25 || ids.some(id=>!available.has(String(id)))) throw new Error('Choose valid enabled options for '+group.name+'.');
+      optionIdsByGroup[groupId] = [...new Set(ids.map(String))];
+    }
+    const next = normalizeDeployment({...previous, channelId, groupIds, optionIdsByGroup, id: previous.id || 'p' + require('node:crypto').randomBytes(8).toString('hex')});
     if (index >= 0) list[index] = next; else list.push(next);
     saveDeployments(guild.id,list,{actorId,action:'role_selector_dashboard_configure'});
     return next;
