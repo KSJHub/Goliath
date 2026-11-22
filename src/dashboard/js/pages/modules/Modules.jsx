@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -401,10 +402,10 @@ export default function Modules({ theme, selectedGuild, selectedGuildData }) {
       <section style={{ ...cardStyle, padding: 16, display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           <input aria-label="Search modules" placeholder="Search modules..." value={search} onChange={event => setSearch(event.target.value)} style={{ flex: '1 1 220px', minWidth: 0, padding: 12, borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText }} />
-          <select aria-label="Filter by Studio" value={studioFilter} onChange={event => setStudioFilter(event.target.value)} style={{ flex: '1 1 180px', minWidth: 0, padding: 12, borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBgSolid || theme.cardBg, color: theme.cardText }}>
+          <ThemedSelect theme={theme} aria-label="Filter by Studio" value={studioFilter} onChange={event => setStudioFilter(event.target.value)} style={{ flex: '1 1 180px', minWidth: 0, padding: 12, borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBgSolid || theme.cardBg, color: theme.cardText }}>
             <option value="">All Studios</option>
             {MODULE_STUDIOS.map(studio => <option key={studio.name} value={studio.name}>{studio.name}</option>)}
-          </select>
+          </ThemedSelect>
           <button type="button" onClick={() => { setSearch(''); setStudioFilter(''); setCollapsed({}); }} style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, cursor: 'pointer' }}>Reset filters</button>
         </div>
         <div aria-live="polite" style={{ color: theme.mutedText }}>{visibleStudios.reduce((sum, studio) => sum + studio.modules.length, 0)} of {modules.length} modules</div>
