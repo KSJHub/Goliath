@@ -224,6 +224,9 @@ router.delete('/:guildId/deployments/:deploymentId', async (req,res) => {
   try { const id = guildId(req); const g = await guild(req,id); if (!g) throw new Error('Guild is unavailable.'); await panel.deleteSelectedDeployment({guildId:id,guild:g,user:{id:actorId(req)}},req.params.deploymentId); return success(res,await overview(req,id)); } catch(error) { return failure(res,error); }
 });
 
+router.post('/:guildId/deployments/:deploymentId/retire', async (req,res) => {
+  try { const id = guildId(req); const g = await guild(req,id); if (!g) throw new Error('Guild is unavailable.'); await panel.retireSelectedDeployment({guildId:id,guild:g,user:{id:actorId(req)}},req.params.deploymentId); return success(res,await overview(req,id)); } catch(error) { return failure(res,error); }
+});
 router.post('/:guildId/deployments/:deploymentId/publish', async (req, res) => {
   try {
     const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.');
