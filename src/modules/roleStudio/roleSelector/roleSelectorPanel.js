@@ -24,7 +24,7 @@ const healthService = require('./roleSelectorHealth');
 const { withDeploymentLock } = require('./roleSelectorLocks');
 
 const { createHash } = require('node:crypto');
-const optionToken = (id) => createHash('sha256').update(String(id)).digest('hex').slice(0, 20);
+const optionToken = (id, groupId, deploymentId) => createHash('sha256').update(JSON.stringify([id, groupId, deploymentId])).digest('hex').slice(0, 32);
 const sessions = new Map();
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
 const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
@@ -223,7 +223,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
     if (group.controlMode === 'buttons' && opts.length <= 15) {
       for (let offset = 0; offset < opts.length; offset += 5) {
         components.push(row(...opts.slice(offset, offset + 5).map(opt => {
-          const id = customId('roleSelector:pick', group.id, deploymentId || 'global', optionToken(opt.value));
+          const id = customId('roleSelector:pick', optionToken(opt.value, group.id, deploymentId || 'global'));
           const control = new ButtonBuilder().setCustomId(id).setLabel(opt.label.slice(0,80)).setStyle(opt.default ? ButtonStyle.Success : ButtonStyle.Secondary);
           if (opt.emoji) control.setEmoji(opt.emoji);
           return control;
@@ -1130,14 +1130,26 @@ async function handleRoleSelectorInteraction(i) {
     if (id.startsWith('roleSelector:customHex:')) { const deploymentId = tail(id, 'roleSelector:customHex') || 'global'; const allowed = deploymentAllowedGroups(i.guildId, deploymentId); if (allowed && !allowed.includes(roleSelector.COLOUR_GROUP_ID)) throw new Error('Colours are not available on this panel.'); await i.showModal(hexModal(deploymentId)); return true; }
     if (id.startsWith('roleSelector:customHexSubmit:')) { const allowed = deploymentAllowedGroups(i.guildId, tail(id, 'roleSelector:customHexSubmit') || 'global'); if (allowed && !allowed.includes(roleSelector.COLOUR_GROUP_ID)) throw new Error('Colours are not available on this panel.'); await roleSelector.applyColourSelection(i.guild, i.member, i.fields.getTextInputValue('hex'), i.fields.getTextInputValue('label')); await syncStatsDeploymentState(i.guild).catch(() => null); return i.reply({ content: emojiLabel('HEALTHY', 'Your custom colour has been applied.'), flags: 64 }); }
     if (id.startsWith('roleSelector:pick:')) {
-      const [groupId, deploymentId, token] = splitTail(id, 'roleSelector:pick');
+      const [token] = splitTail(id, 'roleSelector:pick');
+      const candidates = [];
+      const deployments = ['global', ...deploymentList(roleSelector.getSection(i.guildId)).filter(d => d.status === 'active').map(d => d.id)];
+      for (const g of groups(i.guildId)) {
+        if (g.controlMode !== 'buttons') continue;
+        for (const d of new Set(deployments)) {
+          for (const o of g.options || []) {
+            if (o.enabled && optionToken(o.id, g.id, d) === token) candidates.push({ groupId: g.id, deploymentId: d });
+          }
+        }
+      }
+      if (candidates.length !== 1) throw new Error('This selector has changed. Reopen it.');
+      const { groupId, deploymentId } = candidates[0];
       const deployment = deploymentId !== 'global' ? deploymentById(i.guildId, deploymentId) : null;
       const allowed = deploymentAllowedGroups(i.guildId, deploymentId);
       const group = roleSelector.getGroup(i.guildId, groupId);
       if (!group || group.controlMode !== 'buttons' || (allowed && !allowed.includes(groupId))) throw new Error('Selector unavailable.');
       const filter = optionFilterFor(deployment, groupId);
       const options = group.options.filter(x => x.enabled && (!filter || filter.has(x.id))).sort((a,b) => a.order-b.order);
-      const matches = options.filter(x => optionToken(x.id) === token);
+      const matches = options.filter(x => optionToken(x.id, groupId, deploymentId) === token);
       const option = matches.length === 1 ? matches[0] : null;
       if (!option || options.length > 15) throw new Error('This selector has changed. Reopen it.');
       const member = await freshMember(i);
