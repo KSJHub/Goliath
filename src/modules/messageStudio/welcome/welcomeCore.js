@@ -225,11 +225,23 @@ async function deliverWelcome(member, options = {}) {
       if (latest.deferredWelcomes[member.id]?.joinedAt === joinedAt) return releaseDeferredWelcome(currentMember);
     }
     member = currentMember;
+    if (!options.bypassVerificationGate) {
+      const latest = getWelcomeSection(member.guild.id);
+      if (latest.completedInstantJoins?.[member.id] === joinedAt) return { publicSent: false, dmSent: false, skipped: true, reason: 'already_welcomed', errors: [] };
+    }
   }
   await refreshMemberCache(member.guild); let publicSent = false; let dmSent = false; let publicFailed = false; let dmFailed = false; const errors = [];
   if (config.channelId && options.skipPublic !== true) { let channel; try { channel = await resolveWelcomeChannel(member.guild, config.channelId); } catch (error) { publicFailed = true; errors.push(`Welcome channel lookup failed: ${error.message || error}`); } if (!channel) { publicFailed = true; if (!errors.length) errors.push('Welcome channel is unavailable.'); } else { try { const payload = await buildDiscordPayload(member, 'welcome', config); await channel.send(payload); publicSent = true; if (options.onDelivery) { try { options.onDelivery('publicSent'); } catch (error) { console.error('[Welcome] Public delivery checkpoint failed:', error); } } } catch (error) { publicFailed = true; errors.push(`Public welcome failed: ${error.message || error}`); if (!options.silent) console.error('[Welcome] Failed to send public welcome:', error); } } }
   if (config.dmEnabled && options.skipDm !== true && !member.user.bot) { try { const payload = await buildDiscordPayload(member, 'dmWelcome', config, { includeComponents: false, suppressPing: true }); await member.send(payload); dmSent = true; if (options.onDelivery) { try { options.onDelivery('dmSent'); } catch (error) { console.error('[Welcome] DM delivery checkpoint failed:', error); } } } catch (error) { dmFailed = true; errors.push(`Welcome DM failed: ${error.message || error}`); if (!options.silent) console.warn('[Welcome] Failed to send welcome DM:', error.message || error); } }
   if (!options.previewOnly) incrementAnalytics(member.guild.id, { publicSent: publicSent ? 1 : 0, publicFailed: publicFailed ? 1 : 0, dmSent: dmSent ? 1 : 0, dmFailed: dmFailed ? 1 : 0, skipped: !publicSent && !dmSent && !publicFailed && !dmFailed ? 1 : 0 });
+  if (!options.force && !options.previewOnly && !publicFailed && !dmFailed && (publicSent || dmSent || options.skipPublic || options.skipDm)) {
+    const joinedAt = member.joinedAt?.toISOString?.();
+    if (joinedAt) updateWelcomeSection(member.guild.id, section => {
+      const completedInstantJoins = { ...section.completedInstantJoins };
+      if (!completedInstantJoins[member.id] || completedInstantJoins[member.id] <= joinedAt) completedInstantJoins[member.id] = joinedAt;
+      return { ...section, completedInstantJoins };
+    }, { action: 'welcome_completed_membership' });
+  }
   return { publicSent, dmSent, publicFailed, dmFailed, skipped: false, errors };
 }
 async function buildHealthReport(guild) {
