@@ -123,6 +123,13 @@ async function handleAnswerModal(interaction, parsed, manager) {
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
   const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.editReply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.') }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
+    if (result.reason === 'incorrect' && !result.complete) {
+      const section = verificationStore.getVerificationSection(interaction.guildId);
+      if (section.settings?.logFailure !== false) {
+        try { await require('./verificationManager').logEvent(interaction.guild, section, 'failure', `<@${parsed.userId}> submitted an incorrect ${result.challenge?.method || 'security'} answer. Challenge remains active.`); }
+        catch (error) { console.error('[Verification] Challenge audit failed:', error); }
+      }
+    }
     const failure = await recordTerminalFailure(interaction, parsed, result, manager);
     const message = failure?.quarantined ? emojiLabel('BLOCKED', 'Verification failed and your account has been moved to quarantine for staff review.') : result.reason === 'challenge_unavailable' ? emojiLabel('WARNING', 'This challenge could not be checked. Press Verify again for a fresh challenge; this has not counted as a wrong answer.') : result.reason === 'staff_action_in_progress' ? emojiLabel('TIMEOUT', 'Management is processing this Verification session. Please wait.') : ['stale_challenge', 'challenge_closed', 'terminal_session', 'wrong_member'].includes(result.reason) ? emojiLabel('WARNING', 'This challenge is no longer available. Start Verification again or contact management.') : result.reason === 'security_configuration_changed' ? emojiLabel('ERROR', 'Verification settings changed. Start Verification again.') : result.reason === 'expired' ? emojiLabel('AUTOMOD_LIMITS', 'This challenge expired. Start Verification again.') : result.complete ? emojiLabel('ERROR', 'That answer was incorrect and this challenge has ended. Wait for any configured retry cooldown, then press Verify to start again.') : emojiLabel('ERROR', 'That answer was incorrect. Try again.');
     const challengeUpdate = result.challenge && result.challenge.challengeId === parsed.challengeId
@@ -193,6 +200,8 @@ async function handleStaffAction(interaction, parsed, manager) {
   }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
+  try { await require('./verificationManager').logEvent(interaction.guild, verificationStore.getVerificationSection(interaction.guildId), 'staff', `<@${parsed.userId}> — staff decision recorded: ${result.action} by <@${interaction.user.id}>.`); }
+  catch (error) { console.error('[Verification] Staff audit failed:', error); }
   let resumed = null;
   if (result.quarantine) {
     if (typeof manager?.quarantineVerificationMember !== 'function') {
