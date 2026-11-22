@@ -582,6 +582,13 @@ async function deploySelected(i, deploymentId) {
     if (index < 0) throw new Error('Choose a deployment first.');
     const deployment = list[index];
     if (!deployment.channelId || !deployment.groupIds.length) throw new Error('Choose a channel and at least one group.');
+    roleSelector.assertModuleEnabled(i.guildId);
+    for (const groupId of deployment.groupIds) {
+      const group = roleSelector.getGroup(i.guildId, groupId);
+      if (!group || !roleSelector.isGroupMemberUsable(group)) throw new Error('Remove unavailable selectors from this deployment before publishing.');
+      const filter = optionFilterFor(deployment, groupId);
+      if (group.type !== 'colour' && filter && !group.options.some(o => o.enabled && filter.has(o.id))) throw new Error('Choose at least one enabled option for ' + group.name + '.');
+    }
     const channel = i.guild.channels.cache.get(deployment.channelId) || await i.guild.channels.fetch(deployment.channelId).catch(() => null);
     if (!channel?.send) throw new Error('Choose a sendable text channel.');
     let message = deployment.messageId ? await channel.messages.fetch(deployment.messageId).catch(() => null) : null;
