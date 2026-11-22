@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -21,7 +22,7 @@ function Toggle({ checked, onChange, disabled }) {
 }
 
 function ChannelSelect({ theme, label, value, onChange, channels, empty = 'Select channel' }) {
-  return <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>{label}<select value={value || ''} onChange={(event) => onChange(event.target.value)} style={fieldStyle(theme)}><option value="">{empty}</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.type === 4 ? E.FOLDER : E.VOICE} {channel.name}</option>)}</select></label>;
+  return <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>{label}<ThemedSelect theme={theme} value={value || ''} onChange={(event) => onChange(event.target.value)} style={fieldStyle(theme)}><option value="">{empty}</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.type === 4 ? E.FOLDER : E.VOICE} {channel.name}</option>)}</ThemedSelect></label>;
 }
 
 function Check({ checked, onChange, label, theme }) {
