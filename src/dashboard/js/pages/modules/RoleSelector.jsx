@@ -21,11 +21,11 @@ function parseOptions(text, existing = []) {
     const label = labelRaw || emoji;
     const previous = byLabel.get(String(label || '').toLowerCase());
     const roleId = /^\d{15,25}$/.test(roleIdRaw || '') ? roleIdRaw : previous?.roleId || null;
-    return { ...(previous || {}), id: previous?.id, emoji, label, description, roleId, managed: roleIdRaw ? false : previous?.managed, enabled: true, order: (index + 1) * 10 };
+    return { ...(previous || {}), id: previous?.id, emoji, label, description, roleId, managed: roleIdRaw ? false : previous?.managed, enabled: previous?.enabled !== false, order: (index + 1) * 10 };
   });
 }
 function groupDraft(group) {
-  return { name: group?.name || '', emoji: group?.emoji || E.ROLE_TAG, description: group?.description || '', selectionMode: group?.selectionMode || 'single', allowRemove: group?.allowRemove !== false, optionsText: (group?.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n') };
+  return { name: group?.name || '', emoji: group?.emoji || E.ROLE_TAG, description: group?.description || '', selectionMode: group?.selectionMode || 'single', allowRemove: group?.allowRemove !== false, controlMode: group?.controlMode || 'dropdown', appearance: { ...(group?.appearance || {}) }, optionsText: (group?.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n') };
 }
 
 export default function RoleSelector({ theme, selectedGuild, selectedGuildData }) {
@@ -37,6 +37,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const [selectedGroupId, setSelectedGroupId] = useState('colours');
   const [editDraft, setEditDraft] = useState(blankGroup());
   const [newDraft, setNewDraft] = useState(blankGroup());
+  const [previewChoices, setPreviewChoices] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -89,7 +90,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const acceptance = health.acceptance || { ready: false, checks: [], failed: [] };
   const selectedUsage = usage.groups?.find((group) => group.groupId === selectedGroupId);
 
-  function chooseGroup(group) { if (!group) return; setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); }
+  function chooseGroup(group) { if (!group) return; setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); setPreviewChoices([]); }
   async function saveSelectedGroup() {
     if (!selectedGroup || selectedGroup.id === 'colours') return;
     const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...selectedGroup, ...editDraft, options: parseOptions(editDraft.optionsText, selectedGroup.options) }) }), 'Selector group saved.');
@@ -148,7 +149,20 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <ThemedSelect theme={theme} value={editDraft.selectionMode} onChange={(event) => setEditDraft({ ...editDraft, selectionMode: event.target.value })} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></ThemedSelect>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={editDraft.allowRemove} onChange={(event) => setEditDraft({ ...editDraft, allowRemove: event.target.checked })} /> Members can clear this category</label>
         <textarea value={editDraft.optionsText} onChange={(event) => setEditDraft({ ...editDraft, optionsText: event.target.value })} rows={7} placeholder={`${E.GAMEPAD} | Xbox | Xbox players |\n${E.JOYSTICK} | PlayStation | PlayStation players |\n${E.COMPUTER} | PC | PC players | 123456789012345678`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }} />
-        <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | description | optional existing role ID. Existing roles must have no permissions and sit below Goliath.</div>
+        <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | description | optional existing role ID. Existing roles may have permissions, but must be manageable by Goliath.</div>
+        <label>Control style <ThemedSelect theme={theme} value={editDraft.controlMode || 'dropdown'} onChange={event => setEditDraft({...editDraft, controlMode: event.target.value})}><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></ThemedSelect></label>
+        {['title','description','color','footer','image','thumbnail'].map(key => <label key={key}>Embed {key}<Input theme={theme} value={editDraft.appearance?.[key] || ''} onChange={event => setEditDraft({...editDraft, appearance: {...editDraft.appearance, [key]: event.target.value}})} /></label>)}
+        <div style={{...card, borderLeft: '4px solid ' + (/^#[0-9a-f]{6}$/i.test(editDraft.appearance?.color || '') ? editDraft.appearance.color : '#5865F2')}}>
+          <strong>Interactive preview — no roles assigned</strong>
+          <h3>{editDraft.appearance?.title || editDraft.name}</h3>
+          <p>{editDraft.appearance?.description || editDraft.description}</p>
+          {parseOptions(editDraft.optionsText, selectedGroup.options).filter(o => o.enabled).map((o,index) => {
+            const key = o.id || String(index);
+            return <button type="button" key={key} style={btn(theme,previewChoices.includes(key) ? 'primary' : 'default')} onClick={() => setPreviewChoices(old => editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old,key])}>{o.emoji} {o.label}</button>;
+          })}
+          {editDraft.allowRemove && <button type="button" style={btn(theme)} onClick={() => setPreviewChoices([])}>Clear selection</button>}
+          <p>{editDraft.appearance?.footer}</p>
+        </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button disabled={busy || !editDraft.name.trim()} onClick={saveSelectedGroup} style={btn(theme, 'primary')}>Save Group</button><button disabled={busy} onClick={deleteSelectedGroup} style={btn(theme, 'danger')}>Delete Group</button></div>
       </div> : null}
     </section>
