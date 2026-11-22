@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import React, { memo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -34,7 +35,7 @@ function OwnerSidebar({
         <strong style={{ color: theme.cardText }}>{botName}</strong>
       </div>
 
-      <select
+      <ThemedSelect theme={theme}
         value={selectedGuild}
         onChange={(event) => setSelectedGuild(event.target.value)}
         style={{
@@ -56,7 +57,7 @@ function OwnerSidebar({
         ) : (
           <option value="">No guilds found</option>
         )}
-      </select>
+      </ThemedSelect>
 
       <div
         style={{
