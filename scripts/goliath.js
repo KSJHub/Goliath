@@ -1119,6 +1119,22 @@ async function verificationLifecycleAudit() {
       assert.equal(thread.locked,true);assert.equal(thread.archived,true);
       assert.equal(await deliver(guild,'member','member',settings,'staff',null,{},null),false,'Locked case must use fallback');
       assert.equal(sent,3);
+      // A new session must get a new case and Hybrid must update its summary.
+      session={sessionId:'two',state:'pending'};
+      thread.locked=false;thread.archived=false;
+      let summaries=0,edits=0;
+      const summary={id:'summary',startThread:async()=>{created++;return thread;},edit:async()=>{edits++;}};
+      parent.send=async()=>{summaries++;return summary;};
+      parent.messages={fetch:async()=>summary};
+      const hybrid={...settings,mode:'hybrid',archiveOnQuarantine:true};
+      assert.equal(await deliver(guild,'member','member',hybrid,'join',null,{},null),true);
+      assert.equal(created,2);assert.equal(summaries,1);assert.equal(session.logThreadSessionId,'two');
+      session.state='quarantined';
+      assert.equal(await deliver(guild,'member','member',hybrid,'quarantine',null,{},null),true);
+      assert.equal(summaries,1);assert.equal(edits,2);assert.equal(thread.archived,true);
+      session.state='failed';
+      assert.equal(await deliver(guild,'member','member',hybrid,'failure',null,{},null),true);
+      assert.equal(thread.archived,true,'Terminal failure must archive when configured');
       parent.permissionsFor=()=>({has:()=>true});
       assert.equal(await deliver(guild,'member','member',settings,'join',null,{},null),false,'Public destination must be rejected');
     }
