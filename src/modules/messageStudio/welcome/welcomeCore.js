@@ -165,7 +165,16 @@ async function releaseDeferredWelcome(member) {
     deferredWelcomeInFlight.delete(key);
   }
 }
+const instantWelcomeInFlight = new Set();
 async function sendWelcome(member, options = {}) {
+  if (options.force || options.previewOnly || options.bypassVerificationGate || options.screeningRecheck || !member?.guild?.id || !member?.id) return deliverWelcome(member, options);
+  const key = `${member.guild.id}:${member.id}:${member.joinedTimestamp || member.joinedAt?.getTime?.() || 0}`;
+  if (instantWelcomeInFlight.has(key)) return { publicSent: false, dmSent: false, skipped: true, reason: 'already_processing', errors: [] };
+  instantWelcomeInFlight.add(key);
+  try { return await deliverWelcome(member, options); }
+  finally { instantWelcomeInFlight.delete(key); }
+}
+async function deliverWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
   const config = getWelcomeSection(member.guild.id); if (!options.force && !guildManager.isModuleEnabled(member.guild.id, MODULE)) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled', errors: [] }; } if (config.ignoreBots && member.user.bot) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot', errors: [] }; }
   if (!options.force && !options.previewOnly && !options.bypassVerificationGate) {
@@ -207,7 +216,7 @@ async function sendWelcome(member, options = {}) {
       if (!options.bypassVerificationGate) {
         // Screening may begin between the event snapshot and the REST lookup.
         // Reuse the normal deferred path so this join is not silently lost.
-        return sendWelcome(currentMember, options);
+        return sendWelcome(currentMember, { ...options, screeningRecheck: true });
       }
       return { publicSent: false, dmSent: false, skipped: true, reason: 'pending_screening', errors: [] };
     }
