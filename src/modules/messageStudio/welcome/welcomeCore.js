@@ -204,6 +204,11 @@ async function sendWelcome(member, options = {}) {
       return { publicSent: false, dmSent: false, skipped: true, reason: 'membership_unconfirmed', errors: [] };
     }
     if (currentMember.pending === true) {
+      if (!options.bypassVerificationGate) {
+        // Screening may begin between the event snapshot and the REST lookup.
+        // Reuse the normal deferred path so this join is not silently lost.
+        return sendWelcome(currentMember, options);
+      }
       return { publicSent: false, dmSent: false, skipped: true, reason: 'pending_screening', errors: [] };
     }
     member = currentMember;
