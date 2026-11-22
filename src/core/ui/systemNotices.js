@@ -74,7 +74,7 @@ function buildVerificationNotice({ guild, member, type, roles = [], reason = nul
   };
   const meta = variants[type] || variants.failed;
   const fields = [];
-  if (roles.length) fields.push({ name: type === 'success' ? `${EMOJIS.SUCCESS} Verified Roles` : `${EMOJIS.SECURITY} Pending Roles`, value: roles.map((r) => r?.id ? `<@&${r.id}>` : clean(r, 100)).join(', ').slice(0, 1024), inline: false });
+  if (roles.length) fields.push({ name: type === 'success' ? `${EMOJIS.SUCCESS} Verified Roles` : `${EMOJIS.SECURITY} Pending Roles`, value: roles.map((r) => { const id = String(r?.id || r || '').replace(/[<@&>]/g, ''); const name = r?.name || guild?.roles?.cache?.get(id)?.name; return name ? clean(name, 100) : /^\d{15,25}$/.test(id) ? `Role ID: ${id}` : clean(r, 100); }).join(', ').slice(0, 1024), inline: false });
   if (values.minimumAccountAgeDays) fields.push({ name: `${EMOJIS.ROLE_CLOCK} Minimum Account Age`, value: `${values.minimumAccountAgeDays} day(s)`, inline: true });
   if (values.minimumMembershipAgeMinutes) fields.push({ name: `${EMOJIS.ROLE_CLOCK} Minimum Membership Age`, value: `${values.minimumMembershipAgeMinutes} minute(s)`, inline: true });
   if (values.cooldownSeconds) fields.push({ name: `${EMOJIS.TIMER} Cooldown Remaining`, value: `${values.cooldownSeconds} second(s)`, inline: true });
