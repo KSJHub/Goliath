@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -114,7 +115,7 @@ export default function Starboard({ theme, selectedGuild, selectedGuildData }) {
         <Card theme={theme}>
           <h2 style={{ margin: '0 0 14px' }}>Settings</h2>
           <div style={{ display: 'grid', gap: 12 }}>
-            <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Starboard Channel<select value={draft.channelId} onChange={(event) => setDraft({ ...draft, channelId: event.target.value })} style={inputStyle(theme)}><option value="">Select channel</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}</select></label>
+            <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Starboard Channel<ThemedSelect theme={theme} value={draft.channelId} onChange={(event) => setDraft({ ...draft, channelId: event.target.value })} style={inputStyle(theme)}><option value="">Select channel</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}</ThemedSelect></label>
             <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Reaction Emoji<input value={draft.emoji} onChange={(event) => setDraft({ ...draft, emoji: event.target.value })} style={inputStyle(theme)} /></label>
             <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Threshold<input type="number" min="1" value={draft.threshold} onChange={(event) => setDraft({ ...draft, threshold: event.target.value })} style={inputStyle(theme)} /></label>
             <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={draft.allowBotMessages} onChange={(event) => setDraft({ ...draft, allowBotMessages: event.target.checked })} /> Allow bot messages</label>
