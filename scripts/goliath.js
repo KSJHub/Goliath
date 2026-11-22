@@ -933,7 +933,10 @@ async function verificationAnswerAudit() {
   const interactions = load('src/modules/securityStudio/verification/verificationChallengeInteractions.js', { '../../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
   await interactions.handleVerificationChallengeInteraction({
     customId: `verify:answer:${user}:${challenge.challengeId}`, guildId: guild, user: { id: user },
-    isModalSubmit: () => true, fields: { getTextInputValue: () => '72' }, reply: async payload => replies.push(payload),
+    isModalSubmit: () => true, fields: { getTextInputValue: () => '72' },
+    deferReply: async function (options) { assert.equal(options.flags, 64); assert(!this.deferred); this.deferred = true; },
+    editReply: async function (payload) { assert.equal(this.deferred, true, 'Answer modal must be acknowledged before responding'); replies.push(payload); },
+    reply: async () => { throw new Error('Answer modal must use deferred response'); },
   }, { recordVerificationFailure: async () => { failureCalls++; } });
   assert.equal(failureCalls, 0);
   assert(replies[0].content.includes('has not counted as a wrong answer'));
