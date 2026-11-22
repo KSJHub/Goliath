@@ -531,7 +531,7 @@ async function buildDeploymentsPanel(i, selectedId = null) {
     content: null,
     embeds: [new EmbedBuilder().setColor(selected.status === 'retired' ? 0x747F8D : 0x5865F2).setTitle(emojiLabel('WELCOME_LOCATION', 'Role Selector · Manage Deployment')).setDescription([
       `**Channel:** ${selected.channelId ? `<#${selected.channelId}>` : '`Not selected`'}`,
-      `**Message:** ${message ? `Deployed ${EMOJIS.SUCCESS}` : selected.status === 'retired' ? `Retired ${EMOJIS.BULK}` : 'Not deployed'}`,
+      `**Message:** ${selected.status === 'retired' ? `Retired ${EMOJIS.BULK}` : message ? `Deployed ${EMOJIS.SUCCESS}` : 'Not deployed'}`,
       `**Groups:** ${names.length ? names.join(' · ') : '`None selected`'}`, '',
       'Choose the destination and open **Groups & Roles** to control exactly what this panel exposes.',
     ].join('\n'))],
@@ -540,10 +540,10 @@ async function buildDeploymentsPanel(i, selectedId = null) {
       row(channelMenu),
       row(
         button(customId('admin:roleSelector:deploymentContent', selected.id), emojiLabel('ROLE_TAG', 'Groups & Roles'), ButtonStyle.Primary),
-        button(customId('admin:roleSelector:deploy', selected.id), message ? emojiLabel('REFRESH', 'Update Panel') : emojiLabel('USER_INVITES', 'Deploy Panel'), ButtonStyle.Success, !selected.channelId || !selected.groupIds.length),
+        button(customId('admin:roleSelector:deploy', selected.id), selected.status === 'retired' ? 'Reactivate Panel' : message ? emojiLabel('REFRESH', 'Update Panel') : emojiLabel('USER_INVITES', 'Deploy Panel'), ButtonStyle.Success, !selected.channelId || !selected.groupIds.length),
         jump ? linkButton(emojiLabel('ROLE_UP_RIGHT', 'Jump to Panel'), jump) : null,
       ),
-      row(button(customId('admin:roleSelector:deploymentDelete', selected.id), emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger)),
+      row(button(customId('admin:roleSelector:deploymentRetire', selected.id), 'Retire Panel', ButtonStyle.Secondary, selected.status === 'retired'), button(customId('admin:roleSelector:deploymentDelete', selected.id), emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger)),
       nav('admin:roleSelector:deployment'),
     ],
   };
@@ -625,6 +625,26 @@ async function deploySelected(i, deploymentId) {
     list[index] = { ...deployment, messageId: message.id, status: 'active' };
     saveDeployments(i.guildId, list, { actorId: i.user.id, action: 'role_selector_deploy' });
     return message;
+  });
+}
+
+async function retireSelectedDeployment(i, deploymentId) {
+  return withDeploymentLock(i.guildId, async () => {
+    const list = deploymentList(roleSelector.getSection(i.guildId));
+    const index = list.findIndex(d=>d.id===deploymentId);
+    if (index<0) throw new Error('Choose a deployment first.');
+    const deployment = list[index];
+    if (deployment.messageId) {
+      const channel = i.guild.channels.cache.get(deployment.channelId) || await i.guild.channels.fetch(deployment.channelId);
+      const message = await channel.messages.fetch(deployment.messageId).catch(error=>{if(Number(error.code)===10008)return null;throw error;});
+      if (message) {
+        if (!owned(i.guild,message)) throw new Error('Goliath will not modify a message it does not own.');
+        await message.edit(memberDisabledPayload());
+      }
+    }
+    list[index] = {...deployment,status:'retired'};
+    saveDeployments(i.guildId,list,{actorId:i.user.id,action:'role_selector_deployment_retire'});
+    return list[index];
   });
 }
 
@@ -1229,6 +1249,11 @@ async function handleRoleSelectorInteraction(i) {
       const deploymentId = tail(id, 'admin:roleSelector:deploy');
       const message = await deploySelected(i, deploymentId); const payload = await buildDeploymentsPanel(i, deploymentId); payload.content = `${EMOJIS.SUCCESS} Role Selector panel deployed in <#${message.channel.id}>.`; return respond(i, payload);
     }
+    if (id.startsWith('admin:roleSelector:deploymentRetire:')) {
+      const deploymentId = tail(id,'admin:roleSelector:deploymentRetire');
+      await retireSelectedDeployment(i,deploymentId);
+      return respond(i,await buildDeploymentsPanel(i,deploymentId));
+    }
     if (id.startsWith('admin:roleSelector:deploymentDelete:')) {
       const deploymentId = tail(id, 'admin:roleSelector:deploymentDelete');
       await deleteSelectedDeployment(i, deploymentId); return respond(i, await buildDeploymentsPanel(i));
@@ -1345,7 +1370,7 @@ async function configureDeployment(guild, actorId, patch = {}, deploymentId = nu
     const previous = index >= 0 ? list[index] : {};
     const channelId = cleanId(patch.channelId ?? previous.channelId);
     if (!channelId) throw new Error('Choose a channel.');
-    if (previous.messageId && previous.channelId !== channelId) throw new Error('Delete or retire the existing panel before changing its channel.');
+    if (previous.messageId && previous.channelId !== channelId && previous.status !== 'retired') throw new Error('Retire the existing panel before changing its channel.');
     const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
     if (!channel?.send) throw new Error('Choose a sendable channel.');
     const groupIds = patch.groupIds ?? previous.groupIds ?? [];
@@ -1361,7 +1386,7 @@ async function configureDeployment(guild, actorId, patch = {}, deploymentId = nu
       if (!Array.isArray(ids) || !ids.length || ids.length > 25 || ids.some(id=>!available.has(String(id)))) throw new Error('Choose valid enabled options for '+group.name+'.');
       optionIdsByGroup[groupId] = [...new Set(ids.map(String))];
     }
-    const next = normalizeDeployment({...previous, channelId, groupIds, optionIdsByGroup, id: previous.id || 'p' + require('node:crypto').randomBytes(8).toString('hex')});
+    const next = normalizeDeployment({...previous, channelId, messageId: previous.channelId === channelId ? previous.messageId : null, groupIds, optionIdsByGroup, id: previous.id || 'p' + require('node:crypto').randomBytes(8).toString('hex')});
     if (index >= 0) list[index] = next; else list.push(next);
     saveDeployments(guild.id,list,{actorId,action:'role_selector_dashboard_configure'});
     return next;
@@ -1370,6 +1395,7 @@ async function configureDeployment(guild, actorId, patch = {}, deploymentId = nu
 
 module.exports = {
   configureDeployment,
+  retireSelectedDeployment,
   deploymentList,
   deleteSelectedDeployment,
   deploySelected,
