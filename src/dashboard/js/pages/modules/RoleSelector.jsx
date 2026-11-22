@@ -1,3 +1,4 @@
+import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -144,7 +145,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <Input theme={theme} value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} placeholder="Group name" />
         <Input theme={theme} value={editDraft.emoji} onChange={(event) => setEditDraft({ ...editDraft, emoji: event.target.value })} placeholder="Emoji" />
         <Input theme={theme} value={editDraft.description} onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })} placeholder="Description" />
-        <select value={editDraft.selectionMode} onChange={(event) => setEditDraft({ ...editDraft, selectionMode: event.target.value })} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></select>
+        <ThemedSelect theme={theme} value={editDraft.selectionMode} onChange={(event) => setEditDraft({ ...editDraft, selectionMode: event.target.value })} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></ThemedSelect>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={editDraft.allowRemove} onChange={(event) => setEditDraft({ ...editDraft, allowRemove: event.target.checked })} /> Members can clear this category</label>
         <textarea value={editDraft.optionsText} onChange={(event) => setEditDraft({ ...editDraft, optionsText: event.target.value })} rows={7} placeholder={`${E.GAMEPAD} | Xbox | Xbox players |\n${E.JOYSTICK} | PlayStation | PlayStation players |\n${E.COMPUTER} | PC | PC players | 123456789012345678`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }} />
         <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | description | optional existing role ID. Existing roles must have no permissions and sit below Goliath.</div>
@@ -157,7 +158,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       <Input theme={theme} value={newDraft.name} onChange={(event) => setNewDraft({ ...newDraft, name: event.target.value })} placeholder="Gaming Platform / Region / Interests" />
       <Input theme={theme} value={newDraft.emoji} onChange={(event) => setNewDraft({ ...newDraft, emoji: event.target.value })} placeholder="Emoji" />
       <Input theme={theme} value={newDraft.description} onChange={(event) => setNewDraft({ ...newDraft, description: event.target.value })} placeholder="Description" />
-      <select value={newDraft.selectionMode} onChange={(event) => setNewDraft({ ...newDraft, selectionMode: event.target.value })} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></select>
+      <ThemedSelect theme={theme} value={newDraft.selectionMode} onChange={(event) => setNewDraft({ ...newDraft, selectionMode: event.target.value })} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }}><option value="single">Single choice</option><option value="multiple">Multiple choices</option></ThemedSelect>
       <textarea value={newDraft.optionsText} onChange={(event) => setNewDraft({ ...newDraft, optionsText: event.target.value })} rows={5} placeholder={`${E.GAMEPAD} | Xbox | Xbox players |\n${E.JOYSTICK} | PlayStation | PlayStation players |\n${E.COMPUTER} | PC | PC players |`} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }} />
       <button disabled={busy || !newDraft.name.trim()} onClick={createGroup} style={btn(theme, 'primary')}>Create Custom Group</button>
     </section>
