@@ -67,7 +67,7 @@ function getWelcomeTemplates(guildId) { return Object.values(embedTemplateManage
 function getWelcomeBinding(guildId, slot = 'welcome') { return embedTemplateManager.getBinding(guildId, MODULE, slot); }
 function bindWelcomeTemplate(guildId, templateId, slot = 'welcome', meta = {}) { const template = embedTemplateManager.getTemplate(guildId, templateId); if (!template) throw new Error('Template not found in Embed Studio.'); if (!['welcome', 'dm_welcome'].includes(slot)) throw new Error('Invalid Instant Welcome template slot.'); const binding = embedTemplateManager.bindTemplate(guildId, MODULE, slot, templateId); const patch = slot === 'dm_welcome' ? { dmTemplateId: binding.templateId, dmMessageSource: BUILT_IN_PRESET_IDS.has(binding.templateId) ? 'preset' : 'embedStudio' } : { templateId: binding.templateId, messageSource: BUILT_IN_PRESET_IDS.has(binding.templateId) ? 'preset' : 'embedStudio' }; const config = updateConfig(guildId, patch, { action: 'welcome_template_bind', ...meta }); return { binding, config }; }
 function clearDmTemplate(guildId, meta = {}) { embedTemplateManager.unbindTemplate(guildId, MODULE, 'dm_welcome'); return updateConfig(guildId, { dmTemplateId: null, dmMessageSource: 'inherit' }, { action: 'welcome_dm_template_clear', ...meta }); }
-function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId)) { const isDm = type === 'dmWelcome'; if (!isDm) return getWelcomeBinding(guildId, 'welcome') || embedTemplateManager.getTemplate(guildId, config.templateId); if (config.dmMessageSource === 'inherit') return getAssignedTemplate(guildId, 'welcome', config); return getWelcomeBinding(guildId, 'dm_welcome') || (config.dmTemplateId ? embedTemplateManager.getTemplate(guildId, config.dmTemplateId) : null) || getWelcomeBinding(guildId, 'welcome') || embedTemplateManager.getTemplate(guildId, config.templateId); }
+function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId)) { const isDm = type === 'dmWelcome'; if (!isDm) { const binding = getWelcomeBinding(guildId, 'welcome'); return (binding && embedTemplateManager.getTemplate(guildId, binding.templateId)) || embedTemplateManager.getTemplate(guildId, config.templateId); } if (config.dmMessageSource === 'inherit') return getAssignedTemplate(guildId, 'welcome', config); const binding = getWelcomeBinding(guildId, 'dm_welcome'); return (binding && embedTemplateManager.getTemplate(guildId, binding.templateId)) || (config.dmTemplateId ? embedTemplateManager.getTemplate(guildId, config.dmTemplateId) : null); }
 function templateToPreviewState(template = {}) { return templateToState(template); }
 function replaceTemplateText(text, variables, replacements = {}) { return guildVariables.replaceVariables(String(text || ''), { ...variables, ...replacements }); }
 function displayOnlyMentionState(state, variables) { const cleaned = clone(state); const replacements = { userMention: variables.userNoPing, usermention: variables.userNoPing, user: variables.userDisplay, welcomeRoles: variables.welcomeRolesNoPing, welcomeRoleMentions: variables.welcomeRolesNoPing }; cleaned.panels = cleaned.panels.map((panelData) => ({ ...panelData, title: replaceTemplateText(panelData.title, variables, replacements), description: replaceTemplateText(panelData.description, variables, replacements), authorName: replaceTemplateText(panelData.authorName, variables, replacements), footer: replaceTemplateText(panelData.footer, variables, replacements), fields: (panelData.fields || []).map((field) => ({ ...field, name: replaceTemplateText(field.name, variables, replacements), value: replaceTemplateText(field.value, variables, replacements) })) })); return cleaned; }
@@ -261,7 +261,8 @@ async function buildHealthReport(guild) {
   if (!guild?.id) throw new Error('Guild is required.');
   const config = getWelcomeSection(guild.id);
   const moduleEnabled = guildManager.isModuleEnabled(guild.id, MODULE);
-  const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId) : null;
+  let channelLookupError = null;
+  const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId).catch(error => { channelLookupError = error; return null; }) : null;
   const botMember = guild.members?.me || guild.members?.cache?.get(guild.client?.user?.id) || null;
   const permissions = channel && botMember ? channel.permissionsFor(botMember) : null;
   const canView = Boolean(permissions?.has(PermissionFlagsBits.ViewChannel));
@@ -295,7 +296,8 @@ async function buildHealthReport(guild) {
   const warnings = [
     !moduleEnabled ? 'Welcome is disabled.' : null,
     moduleEnabled && !config.channelId && !config.dmEnabled ? 'No welcome channel or welcome DM is configured.' : null,
-    config.channelId && !channel ? `Configured welcome channel ${config.channelId} no longer exists or is not text-based.` : null,
+    channelLookupError ? 'Welcome channel lookup temporarily failed; configuration has not been removed.' : null,
+    config.channelId && !channel && !channelLookupError ? `Configured welcome channel ${config.channelId} no longer exists or is not text-based.` : null,
     channel && !canView ? 'Goliath cannot view the welcome channel.' : null,
     channel && !canSend ? 'Goliath cannot send messages in the welcome channel.' : null,
     channel && !canEmbed ? 'Goliath cannot embed links in the welcome channel.' : null,
@@ -318,7 +320,8 @@ async function buildHealthReport(guild) {
   return {
     enabled: moduleEnabled,
     channelId: config.channelId,
-    channelExists: Boolean(channel),
+    channelExists: channelLookupError ? null : Boolean(channel),
+    channelLookupHealthy: !channelLookupError,
     channelName: channel?.name || null,
     dmEnabled: config.dmEnabled === true,
     messageSource: config.messageSource,
@@ -354,6 +357,7 @@ async function repairConfiguration(guild, meta = {}) {
   const publicBoundTemplate = publicBinding ? embedTemplateManager.getTemplate(guild.id, publicBinding.templateId) : null;
   if (publicBinding && !publicBoundTemplate) embedTemplateManager.unbindTemplate(guild.id, MODULE, 'welcome');
   const publicTemplate = publicBoundTemplate || embedTemplateManager.getTemplate(guild.id, config.templateId);
+  if (publicTemplate && !publicBoundTemplate) embedTemplateManager.bindTemplate(guild.id, MODULE, 'welcome', publicTemplate.templateId);
 
   let dmTemplate = null;
   let dmTemplateId = null;
