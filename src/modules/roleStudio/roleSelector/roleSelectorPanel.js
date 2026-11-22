@@ -1256,6 +1256,7 @@ async function handleRoleSelectorInteraction(i) {
 }
 
 module.exports = {
+  deploySelected,
   buildAdminPanel,
   handleRoleSelectorInteraction,
   memberDisabledPayload,
