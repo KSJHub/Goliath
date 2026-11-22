@@ -1512,7 +1512,11 @@ async function verificationLifecycleAudit() {
     // The canonical Verification admin surface must be the rehauled module.
     for (const section of ['roles', 'security', 'flow', 'messages', 'logs', 'settings']) {
       contains(panel, `'${section}'`, `admin section ${section}`);
-      contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
+      if (section === 'intelligence') {
+        assert(panel.includes('admin:verification:page:intelligence') || (panel.includes('admin:verification:page:flow') && panel.includes('Flow & Intelligence') && panel.includes('admin:verification:intelligenceSelect') && panel.includes("if(p==='intelligence')return intelligencePage")), 'Verification contract missing: integrated intelligence navigation');
+      } else {
+        contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
+      }
     }
     assert(panel.includes("emb(emojiLabel('SECURITY', 'Verification')") || panel.includes("emb('🛡️ Verification'"), 'Verification contract missing: Verification home title');
     assert(!panel.includes('Front Door'), 'Legacy Front Door wording must not appear in Verification panel');
