@@ -77,6 +77,15 @@ async function buildDiscordPayload(member, type, config = getWelcomeSection(memb
   const userPingEnabled = !isDm && config.allowUserPing !== false && options.suppressPing !== true; const rolePingEnabled = !isDm && config.allowRolePings === true && options.suppressPing !== true; const welcomeRoles = getWelcomeRoleState(member.guild, config); const roleIds = rolePingEnabled ? welcomeRoles.roleIds : [];
   const deliveryVariables = { ...variables, guild: variables.guildName, username: variables.username, userMention: `<@${member.user.id}>`, usermention: `<@${member.user.id}>`, welcomeRoles: rolePingEnabled ? welcomeRoles.mentions : welcomeRoles.display, welcomeRoleMentions: rolePingEnabled ? welcomeRoles.mentions : welcomeRoles.display };
   const allowedMentions = { parse: [], users: userPingEnabled ? [member.user.id] : [], roles: roleIds, repliedUser: false };
+  const normalScope = isDm && config.dmMessageSource !== 'inherit' ? 'dm' : 'public';
+  const normalSource = normalScope === 'dm' ? config.dmMessageSource : config.messageSource;
+  const normalMessage = config.normalMessages?.[normalScope];
+  if (normalSource === 'custom' && typeof normalMessage === 'string' && normalMessage.trim() && (!options.templateOverride || options.templateOverride.templateId === template.templateId)) {
+    let content = replaceTemplateText(normalMessage, deliveryVariables);
+    if (userPingEnabled && !content.includes(`<@${member.user.id}>`) && !content.includes(`<@!${member.user.id}>`)) content = `<@${member.user.id}>\n${content}`;
+    if (!content.trim() || content.length > 2000) throw new Error('Rendered welcome message must contain 1–2000 characters.');
+    return { content, allowedMentions, ...(options.ephemeral ? { ephemeral: true } : {}) };
+  }
   const payload = await buildTemplateDeliveryPayload({ template, variables: deliveryVariables, interaction: renderInteraction, includeComponents: !isDm && options.includeComponents !== false, allowUserPing: userPingEnabled, userId: member.user.id, ephemeral: options.ephemeral === true, allowedMentions });
   return { ...payload, allowedMentions };
 }
