@@ -169,9 +169,12 @@ function optionFilterFor(deployment, groupId) {
   return Array.isArray(value) ? new Set(value.map(String)) : null;
 }
 
-function applyBoundSelectorTemplate(guild, slot, fallback) {
+function applyBoundSelectorTemplate(guild, slot, fallback, member = null) {
   const templates = require('../../messageStudio/embed/embedTemplates');
-  const template = templates.renderBinding(guild.id, 'role_selector', slot, {});
+  try {
+  const { buildVariableMap } = require('../../../core/guild/guildVariables');
+  const variables = buildVariableMap({guild, member, user:member?.user}, false);
+  const template = templates.renderBinding(guild.id, 'role_selector', slot, variables);
   if (!template) return fallback;
   const source = template.panels?.[0] || template.embed;
   if (!source) return fallback;
@@ -184,7 +187,12 @@ function applyBoundSelectorTemplate(guild, slot, fallback) {
   if (source.author?.name) embed.setAuthor({name:source.author.name,...(source.author.iconURL?{iconURL:source.author.iconURL}:{})});
   if (source.imageURL) embed.setImage(source.imageURL);
   if (source.thumbnailURL) embed.setThumbnail(source.thumbnailURL);
+  embed.toJSON();
   return embed;
+  } catch (error) {
+    console.warn('[RoleSelector] Invalid bound template:', error.message);
+    return fallback;
+  }
 }
 
 function memberLauncherPayload(guild, allowedIds = null, deploymentId = null) {
@@ -255,7 +263,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
       .addOptions(opts)));
     if (group.allowRemove && !group.minSelections) components.push(row(button(customId('roleSelector:clear', group.id, deploymentId || 'global'), emojiLabel('ADMIN_PURGE', 'Clear Selection'))));
   }
-  return { embeds: [applyBoundSelectorTemplate(guild, 'member_group', embed)], components: components.filter((x) => x.components.length) };
+  return { embeds: [applyBoundSelectorTemplate(guild, 'member_group', embed, member)], components: components.filter((x) => x.components.length) };
 }
 
 async function freshMember(i) { return i.guild.members.fetch(i.user.id).catch(() => i.member); }
