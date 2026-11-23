@@ -1220,6 +1220,9 @@ async function verificationLifecycleAudit() {
     contains(lifecycle, 'await manager.handleMemberUpdate(oldMember,newMember)', 'Discord screening clearance delegates to the single manager audit path');
     contains(manager, "'discord_screening_completed'", 'Discord screening clearance is recorded in member history');
     contains(manager, 'if(!observedTransition)return {handled:false};', 'A non-pending join cannot be mistaken for observed Discord screening clearance');
+    contains(manager, "threadMode==='threaded'||threadMode==='hybrid'", 'Threaded logging ignores category-specific destinations');
+    contains(manager, "if(threadMode==='threaded'||threadMode==='hybrid')return false;", 'Threaded logging cannot fall back to unrelated channels');
+    contains(panel, 'Verification · Security Passports', 'Threaded logging shows a simplified member security passport interface');
     contains(manager, 'Approving administrator: not provided by Discord.', 'Screening logs do not invent an approver');
     contains(manager, "await logEvent(m.guild,section,'attempt',", 'Screening clearance writes to the member activity thread');
 
