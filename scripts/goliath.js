@@ -1295,6 +1295,21 @@ async function verificationLifecycleAudit() {
 
     // Regression contracts: relocated panels must retire old buttons, and stale
     // interactions must fail closed using the current channel and message IDs.
+    // Completion must fail closed: all required challenges and Discord role
+    // confirmation precede the verified state and every deferred integration.
+    const completionStart = flow.indexOf('async function complete(m,c,steps=null)');
+    const completionEnd = flow.indexOf('async function recordVerificationFailure(', completionStart);
+    assert(completionStart >= 0 && completionEnd > completionStart, 'Verification completion function missing');
+    const completion = flow.slice(completionStart, completionEnd);
+    const requiredGate = completion.indexOf("required.some(step=>!completed.has(step))");
+    const roleConfirmation = completion.indexOf("const confirmed=await m.guild.members.fetch({user:m.id,force:true})");
+    const verifiedTransition = completion.indexOf("state:'verified'");
+    assert(requiredGate >= 0 && roleConfirmation > requiredGate && verifiedTransition > roleConfirmation,
+      'Verification must finish required security checks and confirm Discord roles before marking verified');
+    for (const integration of ['releaseDeferredJoinRoles(confirmed)', 'releaseDeferredInviteRoles(confirmed)', 'releaseDeferredWelcome(confirmed)']) {
+      assert(completion.indexOf(integration) > verifiedTransition,
+        `Verification must not release ${integration} before confirmed completion`);
+    }
     // Verification audit embeds must retain the agreed member identity, event timing,
     // and colour semantics across pending, success, and failure events.
     for (const [event, color] of [['join', '0xfefefe'], ['success', '0x2ecc71'], ['failure', '0xe74c3c']]) {
