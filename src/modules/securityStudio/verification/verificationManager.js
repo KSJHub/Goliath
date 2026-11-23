@@ -200,7 +200,9 @@ async function logVerificationPending(m,section){
 }
 async function reconcileDiscordScreening(m,section,source,observedTransition=false){
   if(!m?.guild?.id||m.user?.bot||!section.enabled||m.pending!==false)return {handled:false};
-  if(!observedTransition&&!(hasDiscordScreening(m.guild)&&(section.settings.security?.discordScreening===true||section.settings.flow?.discordScreeningGate===true)))return {handled:false};
+  // A non-pending member is not evidence of a completed screening transition.
+  // Only a witnessed Discord pending:true -> pending:false update proves clearance.
+  if(!observedTransition)return {handled:false};
   const gid=m.guild.id,uid=m.id,session=verificationStore.getSession(gid,uid);
   if(!session||session.screeningLoggedSessionId===session.sessionId)return {handled:false};
   const sessionId=session.sessionId;
