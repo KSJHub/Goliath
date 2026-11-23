@@ -162,6 +162,17 @@ async function releaseDeferredWelcome(member) {
       // or overwrite the newer membership's delivery checkpoint.
       const latest = getWelcomeSection(member.guild.id).deferredWelcomes[member.id];
       if (latest && latest.joinedAt === pending.joinedAt) {
+        if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
+          try {
+            const verificationStore = require('../../securityStudio/verification/verificationStore');
+            if (verificationStore.getSession(member.guild.id, member.id)?.state === 'verified') {
+              verificationStore.addSecurityHistory(member.guild.id, member.id, {
+                type: 'verification_deferred_release_incomplete', integration: 'welcome',
+                failedDestinations: [...(!publicDone ? ['public'] : []), ...(!dmDone ? ['dm'] : [])]
+              });
+            }
+          } catch (error) { console.error('[Welcome] Failed to record deferred verification delivery:', error); }
+        }
         updateWelcomeSection(member.guild.id, section => {
           const current = section.deferredWelcomes[member.id];
           if (!current || current.joinedAt !== pending.joinedAt) return section;
