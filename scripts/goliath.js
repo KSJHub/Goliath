@@ -1311,6 +1311,9 @@ async function verificationLifecycleAudit() {
       contains(source, 'verification_deferred_release_incomplete', 'Verification records partial deferred invite role failures');
       contains(source, 'inviteRelease.failed.length', 'Verification inspects failed invite role grants');
     }
+    const autoRolesIntegration = read('./src/modules/roleStudio/autoRoles/autoRoles.js');
+    contains(autoRolesIntegration, "integration: 'auto_roles'", 'Auto Roles records incomplete deferred verification grants');
+    contains(autoRolesIntegration, 'failedRoleIds: remaining.slice(0, 50)', 'Auto Roles preserves outstanding role IDs in security history');
     for (const integration of ['auto_roles', 'invite_roles', 'welcome']) {
       contains(flow, `integration:'${integration}'`, `Verification continuation records failed ${integration} release`);
       contains(manager, `integration:'${integration}'`, `Verification manager records failed ${integration} release`);
