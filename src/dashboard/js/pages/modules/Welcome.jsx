@@ -45,7 +45,7 @@ function PresetLibrary({theme,config,scheduled,busy,onAction,onLoad,onRestore}) 
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       {btn('Copy active message',()=>setContent(active||''))}
       {btn('Load Message',()=>onLoad(scope,selected.content),!selected,'primary')}
-      {btn('Save',()=>run('save'),!selected||!content.trim(),'success')}
+      {btn('Save Preset Edits',()=>run('save'),!selected||!content.trim()||content===selected.content,'success')}
       {btn('Save As',()=>run('saveAs'),!name.trim()||!content.trim(),'success')}
       {btn('Rename',()=>run('rename'),!selected||!name.trim())}
       {btn('Duplicate',()=>run('duplicate'),!selected||!name.trim())}
@@ -62,7 +62,7 @@ function PresetLibrary({theme,config,scheduled,busy,onAction,onLoad,onRestore}) 
       {btn('Restore Original',async()=>{if(await goliathDialog.confirm('Restore the original default and activate it? Saved presets and embeds are retained.',{title:'Restore Original',danger:true,confirmLabel:'Restore'})){if(await onAction({scope,action:'activateOriginal'}))setDefaultDraft(null);}},false,'danger')}
     </div>
     <textarea aria-label="Preset JSON" placeholder="Paste preset JSON to import, or export here" rows={4} value={json} onChange={e=>setJson(e.target.value)} style={fieldStyle(theme)}/>
-    <div style={{display:'flex',gap:8}}>{btn('Export JSON',()=>setJson(JSON.stringify({version:1,scope,presets:Object.values(all),defaultMessage:config?.normalDefaults?.[scope]},null,2)))}{btn('Import JSON',()=>{try{setImportError('');onAction({scope,action:'import',data:JSON.parse(json)});}catch{setImportError('Invalid JSON');}},!json.trim())}</div>
+    <div style={{display:'flex',gap:8}}>{btn('Export JSON',()=>setJson(JSON.stringify({version:1,scope,presets:Object.values(all),defaultMessage:config?.normalDefaults?.[scope]},null,2)))}{btn('Import JSON',async()=>{let data;try{data=JSON.parse(json);}catch{setImportError('Invalid JSON');return;}setImportError('');await onAction({scope,action:'import',data});},!json.trim())}</div>
     {importError&&<div role="alert">{importError}</div>}
   </div>;
 }
