@@ -160,11 +160,6 @@ async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`})
     .setTimestamp();
   return {embeds:[embed],components:[
-    row(new StringSelectMenuBuilder().setCustomId('admin:welcome:navigate').setPlaceholder('Choose message workspace').addOptions(
-      {label:'Public Welcome',description:'Build and configure the instant public greeting',value:'instant',emoji:EMOJIS.WELCOME_INSTANT},
-      {label:'DM Welcome',description:'Build and configure private greetings',value:'dm',emoji:EMOJIS.WELCOME_DM},
-      {label:'Scheduled Welcome',description:'Build and configure batch greetings',value:'scheduled',emoji:EMOJIS.WELCOME_SCHEDULED}
-    )),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:homeChannel').setPlaceholder('Choose public destination').setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(button('admin:welcome:instant',emojiLabel('BUILDER','Public Builder'),ButtonStyle.Primary),button('admin:welcome:dm',emojiLabel('BUILDER','DM Builder'),ButtonStyle.Primary),button('admin:welcome:scheduled',emojiLabel('BUILDER','Scheduled Builder'),ButtonStyle.Primary)),
     row(button('admin:welcome:settings',emojiLabel('SETTINGS','Settings')),button('admin:welcome:review',emojiLabel('HEALTHY','Review Readiness')),button('admin:welcome:mentions',emojiLabel('WELCOME_MENTIONS','Mentions'))),
