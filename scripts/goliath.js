@@ -1367,6 +1367,7 @@ async function verificationLifecycleAudit() {
       const assert=require('node:assert/strict');
       ${lockSource}
       const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
+      const challengeRuntime={recover:()=>({ok:true,changed:false})};
       ${resumePrefix}
       (async()=>{
         let release;
@@ -1407,6 +1408,7 @@ async function verificationLifecycleAudit() {
       const assert=require('node:assert/strict');
       ${lockSource}
       const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
+      const challengeRuntime={recover:()=>({ok:true,changed:false})};
       const roles={verified:['verified'],auto:[],pending:[],verifying:[],quarantine:['quarantine']};
       const config={configRevision:1,settings:{roles},messages:{successLog:'Verification complete'}};
       const auditEvents=[];
