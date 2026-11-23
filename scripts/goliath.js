@@ -1295,6 +1295,17 @@ async function verificationLifecycleAudit() {
 
     // Regression contracts: relocated panels must retire old buttons, and stale
     // interactions must fail closed using the current channel and message IDs.
+    // Verification audit embeds must retain the agreed member identity, event timing,
+    // and colour semantics across pending, success, and failure events.
+    for (const [event, color] of [['join', '0xfefefe'], ['success', '0x2ecc71'], ['failure', '0xe74c3c']]) {
+      assert(new RegExp(event + ':\\\\{[^\\\\n]*color:' + color).test(manager),
+        `Verification ${event} log must retain its agreed embed colour`);
+    }
+    for (const field of ["name:'👤 Member'", "name:'🏷️ Discord Username'", "name:'🆔 User ID'", "name:'🕒 Event Time'", "name:'📋 Event Details'"]) {
+      contains(manager, field, `Verification audit log preserves ${field}`);
+    }
+    contains(manager, '<t:${timestamp}:R>', 'Verification audit log provides Discord relative timestamps');
+    contains(manager, 'allowedMentions:{parse:[],users:[],roles:[]}', 'Verification audit logs prevent unsolicited mentions');
     contains(manager, 'if(existing&&existing.id!==message.id)', 'relocation cleans up old panel message');
     contains(manager, 'await existing.delete()', 'relocation deletes old panel message');
     contains(manager, 'await existing.edit({components:[]})', 'relocation disables old buttons if deletion fails');
