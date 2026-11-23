@@ -1,5 +1,6 @@
 'use strict';
 const { createHash } = require('node:crypto');
+const { EMOJIS } = require('../../../core/ui/emojis');
 const { PermissionFlagsBits: P } = require('discord.js');
 const store = require('./games');
 const providers = require('./gamesProviders');
@@ -107,7 +108,7 @@ async function processMultiDestinationGuild(guild, config) {
         const first = fresh[0];
         const detail = fresh.length === 1 && first.description ? first.description.slice(0, 400).replace(/@/g, '@\\u200b') + '\n\n' : '';
         await channel.send({ content: route.roleId ? `<@&${route.roleId}>` : '',
-          embeds: [{ title: `🎁 ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`,
+          embeds: [{ title: `${EMOJIS.GAME_GIFT} ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`,
             description: detail + description, ...(first.image ? { thumbnail: { url: first.image } } : {}),
             color: SECTIONS[0].color, footer: { text: 'Goliath Free Games · New offers' },
             ...(config.showTimestamps === false ? {} : { timestamp: new Date(now).toISOString() }) }],
@@ -179,7 +180,7 @@ async function processGuildUnlocked(guild) {
       description += '\n[Offers provided by GamerPower](https://www.gamerpower.com/)';
       const first = fresh[0];
       const detail = fresh.length === 1 && first.description ? first.description.slice(0, 400).replace(/@/g, '@\u200b') + '\n\n' : '';
-      await channel.send({ components: [{ type: 1, components: fresh.slice(0, 5).map((offer, index) => ({ type: 2, style: 5, label: fresh.length === 1 ? 'View offer & claim' : `View offer ${index + 1}`, url: offer.url })) }], content: config.roleId ? `<@&${config.roleId}>` : '', embeds: [{ title: `🎁 ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`, description: detail + description, ...(first.image ? { thumbnail: { url: first.image } } : {}), color: SECTIONS[0].color, footer: { text: 'Goliath Free Games · New offers' }, ...(config.showTimestamps === false ? {} : { timestamp: new Date(now).toISOString() }) }], allowedMentions: { parse: [], roles: config.roleId ? [config.roleId] : [] } });
+      await channel.send({ components: [{ type: 1, components: fresh.slice(0, 5).map((offer, index) => ({ type: 2, style: 5, label: fresh.length === 1 ? 'View offer & claim' : `View offer ${index + 1}`, url: offer.url })) }], content: config.roleId ? `<@&${config.roleId}>` : '', embeds: [{ title: `${EMOJIS.GAME_GIFT} ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`, description: detail + description, ...(first.image ? { thumbnail: { url: first.image } } : {}), color: SECTIONS[0].color, footer: { text: 'Goliath Free Games · New offers' }, ...(config.showTimestamps === false ? {} : { timestamp: new Date(now).toISOString() }) }], allowedMentions: { parse: [], roles: config.roleId ? [config.roleId] : [] } });
     }
     return { offerCount: offers.length, pages: pages.length };
   } catch (error) {
