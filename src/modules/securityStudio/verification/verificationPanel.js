@@ -140,18 +140,18 @@ function resetSingleMessageConfirm(g,user,type){return{embeds:[emb(emojiLabel('W
 function resetMessagesConfirm(g,user){return{embeds:[emb(emojiLabel('WARNING', 'Reset Verification Messages'),['**Confirmation required**',`This will replace all **${MESSAGE_TYPES.length} message templates** with their defaults. This cannot be undone.`,'**Confirm Reset All:** Replace all templates.','**Cancel or Back:** Keep all current wording.'],user,0xED4245)],components:[row(button('admin:verification:resetMessages','Confirm Reset All',ButtonStyle.Danger),button('admin:verification:page:messages','Cancel',ButtonStyle.Secondary)),finalNav('messages')]};}
 function logsPage(g,user,st){
  const cfg=settings(g.id),mode=cfg.threadLogging?.mode||'standard';
- if(mode!=='standard'){
-  const embed=emb('🛡️ Verification · Security Passports',[
-   'All member verification events are kept together in one staff-only channel.',
-   'Category-specific channel routes are inactive while Security Passports are enabled.'
-  ],user).addFields(
-   {name:'🧵 Active mode',value:'**Security Passports (threads)**',inline:false},
-   {name:'📍 Single destination',value:channelText(cfg.threadLogging?.channelId),inline:false},
-   {name:'📂 Member history',value:'One case thread per verification session. Join, Pending, screening, challenges, staff decisions and results stay together.',inline:false},
-   {name:'⚙️ Configuration',value:'Use Thread Settings to change destination and case policies. Switch to Channel Logs to configure individual categories.',inline:false}
-  );
-  return {embeds:[embed],components:[row(button('admin:verification:threadSettings','🧵 Thread Settings',ButtonStyle.Primary)),finalNav('home')]};
- }
+ if(mode==='standard')return channelLogsPage(g,user,st);
+ const embed=emb('🛡️ Verification · Security Passports',[
+  'All verification activity for each member stays in one staff-only case thread.',
+  'Channel category destinations are inactive in this mode.'
+ ],user).addFields(
+  {name:'🧵 Logging mode',value:'Security Passports (threads)',inline:false},
+  {name:'📍 Destination',value:channelText(cfg.threadLogging?.channelId),inline:false},
+  {name:'📂 Security history',value:'Join → Pending → Screening → Challenges → Staff decisions → Verified or rejected',inline:false},
+  {name:'🕒 Inactive case archive',value:'7 days (fixed)',inline:false}
+ );
+ return {embeds:[embed],components:[row(button('admin:verification:threadSettings','⚙️ Configure Security Passports',ButtonStyle.Primary)),finalNav('home')]};
+}
 function channelLogsPage(g,user,st){const c=settings(g.id),types=['default','all',...LOG_TYPES],type=types.includes(st.logType)?st.logType:'default',fallback=c.logChannelId,overrides=LOG_TYPES.filter(x=>c.logs?.[x+'ChannelId']),inherited=LOG_TYPES.length-overrides.length,selected=type==='default'?'Default channel':type==='all'?'All categories':title(type),destination=type==='default'?fallback:type==='all'?null:c.logs?.[type+'ChannelId']||fallback;const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:logType').setPlaceholder('Select a log category to configure').addOptions(types.map(x=>({label:x==='default'?'Default channel':x==='all'?'Set all categories':title(x),value:x,emoji:x==='default'?'📋':x==='all'?'📚':c.logs?.[x+'ChannelId']?'📌':fallback?'🔗':'⚪',default:x===type,description:x==='default'?'Fallback for categories without an override':x==='all'?'Replace all destinations':c.logs?.[x+'ChannelId']?'Custom destination':fallback?'Uses default':'Not configured'})));const channel=new ChannelSelectMenuBuilder().setCustomId(`admin:verification:logChannel:${type}`).setPlaceholder(type==='all'?'Select channel for all categories':type==='default'?'Select default log channel':'Select custom channel or clear to inherit').setMinValues(type==='all'?1:0).setMaxValues(1).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement);const configured=type==='default'?fallback:type==='all'?null:c.logs?.[type+'ChannelId'];if(configured&&g.channels.cache.has(configured))channel.setDefaultChannels(configured);const embed=emb(emojiLabel('INCIDENT_AUDIT', 'Verification · Logs'),['Choose where verification activity is recorded. Set one default channel for all categories, or assign individual categories their own channels.'],user).addFields({name:'1 · 📋 Default channel',value:channelText(fallback)+' — Used whenever a category has no custom channel.',inline:false},{name:'2 · 📊 Logging coverage',value:`**Configured:** ${overrides.length+(fallback?inherited:0)}/${LOG_TYPES.length}  ·  **Custom:** ${overrides.length}  ·  **Inherited:** ${fallback?inherited:0}\n**Without channel routing:** ${fallback?0:inherited}`,inline:false},{name:'3 · 📌 Category destinations',value:LOG_TYPES.map(x=>`**${title(x)}:** ${c.logs?.[x+'ChannelId']?'📌 '+channelText(c.logs[x+'ChannelId']):fallback?'🔗 Inherited':'⚪ Not configured'}`).join('\n').slice(0,1024),inline:false},{name:'4 · ✏️ Editing: '+selected,value:type==='all'?'Selecting a channel sets the default and replaces every individual category destination.':`**Current:** ${channelText(destination)}${type!=='default'&&!configured&&fallback?' (inherited)':''}`,inline:false},{name:'5 · ℹ️ How to manage destinations',value:'**Category selector:** Choose what to configure.\n**Channel selector:** Assign its destination; clear an individual override to inherit the default.\n**Set all categories:** Replace the default and individual destinations.\n**Clear All:** Remove standard channel destinations after confirmation.\n**Thread Settings:** Configure session-based logging separately.',inline:false});embed.addFields({name:'6 · 🧵 Session logging',value:'**Mode:** '+title(c.threadLogging?.mode||'standard')+'\n**Destination:** '+channelText(c.threadLogging?.channelId)+'\n**Standard:** Use configured channel destinations.\n**Threaded:** Group events into session threads.\n**Hybrid:** Maintain a channel summary and session thread.',inline:false});return{embeds:[embed],components:[row(menu),row(channel),row(button('admin:verification:threadSettings','🧵 Thread Settings',ButtonStyle.Secondary)),finalNav('home',button('admin:verification:clearEveryLog',emojiLabel('CLOSE_X','Clear All'),ButtonStyle.Danger,!(fallback||overrides.length)))]};}
 function threadSettingsPage(g,user){
  const t=settings(g.id).threadLogging||{},mode=t.mode||'standard';
@@ -160,13 +160,13 @@ function threadSettingsPage(g,user){
  if(t.channelId&&g.channels.cache.has(t.channelId))channel.setDefaultChannels(t.channelId);
  const on=v=>v?'🟢 On':'🔴 Off';
  const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Thread Settings'),['Organise security logs into a dedicated case for each verification session. Changes save immediately.'],user).addFields(
- {name:'1 · 📋 Logging mode',value:'**Current:** '+title(mode)+'\n📄 **Standard:** Individual logs in configured channels.\n🧵 **Threaded:** One thread per member session.\n📌 **Hybrid:** A live channel summary plus detailed thread.',inline:false},
+ {name:'1 · 📋 Logging mode',value:'**Current:** '+title(mode)+'\n📄 **Channel Logs:** Default channel with optional category destinations.\n🧵 **Security Passports:** One staff-only channel with a thread for each member.',inline:false},
  {name:'2 · 🔒 Destination',value:'**Channel:** '+channelText(t.channelId)+'\nChoose a staff-only text channel. Category routes are ignored in Security Passports mode. Failed thread delivery will not redirect private logs into other channels.',inline:false},
  {name:'3 · 🕒 Auto-hide',value:'**Inactivity:** 7 days (fixed)'+'\nArchives inactive threads without deleting their history.',inline:false},
  {name:'4 · 🏷️ Case naming',value:'**Example:** Verification • '+(t.naming==='id'?'123456789012345678':t.naming==='username'?'member':'member • 123456789012345678')+'\nChoose how staff identify each case.',inline:false},
  {name:'5 · ⚙️ Case policies',value:'**Success archive:** '+on(t.archiveOnSuccess!==false)+' · **Success lock:** '+on(t.lockOnSuccess)+'\n**Failure archive:** '+on(t.archiveOnFailure)+' · **Quarantine archive:** '+on(t.archiveOnQuarantine)+'\nOpen Case Policies to change these behaviours.',inline:false});
  return {embeds:[embed],components:[
- select('mode','Choose logging mode',[['standard','Standard','📄','Individual channel logs'],['threaded','Threaded','🧵','Dedicated member case threads'],['hybrid','Hybrid','📌','Channel summary and thread']],mode),
+ select('mode','Choose logging mode',[['standard','Channel Logs','📄','Default channel and category routing'],['threaded','Security Passports','🧵','One channel with member case threads']],mode),
  row(channel),
 
  select('naming','Choose case naming',[['both','Username + User ID','🏷️','Show both identifiers'],['username','Username','👤','Show the member username'],['id','User ID','🆔','Show the Discord user ID']],t.naming||'both'),
