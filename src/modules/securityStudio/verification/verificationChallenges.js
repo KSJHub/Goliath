@@ -107,6 +107,7 @@ function createMathCaptcha(config = {}) {
     prompt: `Security check: what is ${a} ${op} ${b}?`,
     challengeType: 'math',
     difficulty,
+    regenerateOnFailure: config.regenerateOnFailure !== false,
     ...answerFields(answer),
   });
 }
@@ -277,6 +278,10 @@ function answer(guildId, userId, challengeId, suppliedAnswer) {
     passedRounds: correct && challenge.method === 'minigame' ? Number(challenge.rounds || 1) : Number(challenge.passedRounds || 0),
     resolvedAt: status === 'pending' ? null : now(),
   };
+  if (!correct && status === 'pending' && challenge.method === 'captcha' && challenge.regenerateOnFailure !== false) {
+    const regenerated = createMathCaptcha({ difficulty: challenge.difficulty, maxChallengeAttempts: challenge.maxAttempts, regenerateOnFailure: true });
+    Object.assign(updated, { prompt: regenerated.prompt, answerHash: regenerated.answerHash, answerSalt: regenerated.answerSalt });
+  }
   verificationStore.upsertSession(guildId, userId, {
     activeChallenge: updated,
     activeSecurityMethod: status === 'pending' ? challenge.method : null,
