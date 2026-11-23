@@ -102,6 +102,7 @@ const EMOJIS = Object.freeze({
   RSVP_MAYBE: '❔',
   SPARKLES: '✨',
   GAMEPAD: '🎮',
+  GAME_GIFT: '🎁',
   JOYSTICK: '🕹️',
   COMPUTER: '💻',
   SUCCESS: '✅',
