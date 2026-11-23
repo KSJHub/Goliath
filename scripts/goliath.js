@@ -1148,6 +1148,40 @@ async function verificationLifecycleAudit() {
     const verificationStartup = read('./src/modules/securityStudio/verification/verification.js');
     // Recovery and dashboard contracts: guard against silent regressions in
     // session restart, expired modal submissions, and operational visibility.
+    // Execute the actual session restart helper against a previously locked session.
+    // This tests the persisted patch, not just the presence of source text.
+    {
+      const start = store.indexOf('function resetActiveSession(guildId,userId)');
+      const end = store.indexOf('function beginChallenge(', start);
+      assert(start >= 0 && end > start, 'Verification session restart helper missing');
+      const previous = {
+        sessionId: 'old-session', state: 'timed_out',
+        activeChallenge: { challengeId: 'old-challenge', status: 'pending' },
+        activeSecurityMethod: 'captcha',
+        staffApprovalContinuationPending: { challengeId: 'old-challenge' },
+        staffActionProcessingPending: { challengeId: 'old-challenge' },
+        securityConfigRevision: 7,
+        startedAt: '2026-01-01T00:00:00.000Z',
+        completedSecurity: ['captcha'],
+        failedAttempts: 3,
+      };
+      let persisted = { ...previous };
+      const restart = new Function('upsertSession', 'createId', store.slice(start, end) + '\\nreturn resetActiveSession;')(
+        (_guildId, _userId, patch) => { persisted = { ...persisted, ...patch }; return persisted; },
+        () => 'fresh-session'
+      );
+      restart('guild', 'member');
+      assert.equal(persisted.sessionId, 'fresh-session', 'Restart must rotate session ID');
+      assert.equal(persisted.state, 'new', 'Restart must reset lifecycle state');
+      assert.equal(persisted.activeChallenge, null, 'Restart must discard old challenge');
+      assert.equal(persisted.activeSecurityMethod, null, 'Restart must discard old security method');
+      assert.equal(persisted.staffApprovalContinuationPending, null, 'Restart must release approval lock');
+      assert.equal(persisted.staffActionProcessingPending, null, 'Restart must release staff action lock');
+      assert.equal(persisted.securityConfigRevision, null, 'Restart must discard stale security revision');
+      assert.deepEqual(persisted.completedSecurity, [], 'Restart must not inherit passed challenges');
+      assert.equal(persisted.failedAttempts, 0, 'Restart must reset session failure count');
+      assert.equal(persisted.startedAt, null, 'Restart must reset expiry clock');
+    }
     contains(store, 'staffApprovalContinuationPending:null,staffActionProcessingPending:null', 'restart clears stale staff processing locks');
     contains(store, 'activeChallenge:null,activeSecurityMethod:null', 'restart clears stale security challenge markers');
     contains(challengeInteractions, 'runtime.recover(interaction.guildId, parsed.userId);', 'answer modal reconciles session state before processing');
