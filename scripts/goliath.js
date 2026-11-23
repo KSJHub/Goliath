@@ -1636,7 +1636,7 @@ async function verificationLifecycleAudit() {
     
     return true;
   } catch (error) {
-    console.error(`❌ Verification lifecycle audit failed: ${error.message}`);
+    console.error(`❌ Verification lifecycle audit failed: ${error.stack || error.message}`);
     return false;
   }
 }
