@@ -14,6 +14,7 @@ function normalizeList(payload, key) { if (Array.isArray(payload)) return payloa
 function box(theme) { return { border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, borderRadius: 20, boxShadow: theme.shadow, padding: 20 }; }
 function btn(theme, tone = 'default') { return { border: `1px solid ${theme.cardBorder}`, background: tone === 'primary' ? 'rgba(37,99,235,.22)' : tone === 'danger' ? 'rgba(220,38,38,.2)' : 'rgba(15,23,42,.45)', color: theme.cardText, borderRadius: 12, padding: '9px 12px', fontWeight: 900, cursor: 'pointer' }; }
 function Input({ theme, ...props }) { return <input {...props} style={{ width: '100%', padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText, ...(props.style || {}) }} />; }
+function optionLineCount(text) { return String(text || '').split(/\r?\n/).filter(line => line.trim()).length; }
 function parseOptions(text, existing = []) {
   const byLabel = new Map((existing || []).map((item) => [String(item.label || '').toLowerCase(), item]));
   return String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 25).map((line, index) => {
@@ -255,7 +256,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       {wizardStep === 4 && <div style={card}><h3>{newDraft.appearance?.title || newDraft.name}</h3><p>{newDraft.appearance?.description || newDraft.description}</p>{parseOptions(newDraft.optionsText).map((o,index)=><div key={index}>{o.emoji} {o.label}</div>)}<p>Create this selector, then select it in Panel Publishing to publish it.</p></div>}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button disabled={wizardStep===0 || busy} style={btn(theme)} onClick={()=>setWizardStep(s=>s-1)}>Previous Step</button>
-        {wizardStep < 4 ? <button disabled={busy || !newDraft.name.trim() || (wizardStep===1 && (!parseOptions(newDraft.optionsText).length || parseOptions(newDraft.optionsText).length>25 || (newDraft.selectionMode==='multiple' && (Number(newDraft.minSelections)<0 || Number(newDraft.maxSelections)<1 || Number(newDraft.minSelections)>Number(newDraft.maxSelections))))) || (wizardStep===2 && newDraft.controlMode==='buttons' && parseOptions(newDraft.optionsText).length>15)} style={btn(theme,'primary')} onClick={()=>setWizardStep(s=>s+1)}>Next Step</button> : <button disabled={busy || !newDraft.name.trim()} style={btn(theme,'primary')} onClick={createGroup}>Create Selector</button>}
+        {wizardStep < 4 ? <button disabled={busy || !newDraft.name.trim() || (wizardStep===1 && (!parseOptions(newDraft.optionsText).length || optionLineCount(newDraft.optionsText)>25 || (newDraft.selectionMode==='multiple' && (Number(newDraft.minSelections)<0 || Number(newDraft.maxSelections)<1 || Number(newDraft.minSelections)>Number(newDraft.maxSelections))))) || (wizardStep===2 && newDraft.controlMode==='buttons' && optionLineCount(newDraft.optionsText)>15)} style={btn(theme,'primary')} onClick={()=>setWizardStep(s=>s+1)}>Next Step</button> : <button disabled={busy || !newDraft.name.trim()} style={btn(theme,'primary')} onClick={createGroup}>Create Selector</button>}
       </div>
     </section>
 
