@@ -149,7 +149,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
       // disconnected thread-start notification and keeps the case discoverable.
       const summary=await parent.send(caseSummaryOptions(null));
       summaryId=summary.id;
-      thread=await summary.startThread({name,autoArchiveDuration:t.archiveMinutes});
+      thread=await summary.startThread({name,autoArchiveDuration:10080});
       if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
       setSession(g.id,userId,{logThreadId:thread.id,logThreadSessionId:session.sessionId,logSummaryId:summaryId});
     }
