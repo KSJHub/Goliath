@@ -154,7 +154,7 @@ async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
       '**Readiness**　'+(issues.length?issues.length+' items to review':'Ready'),
       '**Delivery**　'+(enabled?'Enabled':'Disabled')+'　•　**Queue**　'+(scheduledHealth.waitingMembers??'Unavailable'),
       '',
-      '### ➜ Next Step',
+      '### ' + emojiLabel('NEXT_STEP', 'Next Step'),
       nextStep
     ].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`})
@@ -414,7 +414,7 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
 if(customId==='admin:welcome:review'){
   const guild=interaction.guild,instant=await welcome.buildHealthReport(guild),scheduled=await scheduledWelcomeHealth.buildHealth(guild);
   const warnings=[...(instant.warnings||[]),...(scheduled.warnings||scheduled.issues||[])];
-  return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(warnings.length?0xfaa61a:0x57f287).setTitle('Welcome Readiness').setDescription(['### Delivery Validation','**Instant**　'+(instant.healthy?'Healthy':'Review required'),'**Scheduled**　'+(scheduled.healthy?'Healthy':'Review required'),'','### Diagnostics',...(warnings.length?warnings.map(w=>'• '+String(w)):['No reported warnings.'])].join('\n').slice(0,4096))],components:[row(button('admin:welcome:review','Recheck',ButtonStyle.Primary),button('admin:welcome:repairAll','Repair',ButtonStyle.Secondary)),row(button('admin:welcome','Back'))]});
+  return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(warnings.length?0xfaa61a:0x57f287).setTitle('Welcome Readiness').setDescription(['### '+emojiLabel('STATUS','Delivery Validation'),'**Instant**　'+(instant.healthy?'Healthy':'Review required'),'**Scheduled**　'+(scheduled.healthy?'Healthy':'Review required'),'','### '+emojiLabel('WELCOME_DIAGNOSTICS','Diagnostics'),...(warnings.length?warnings.map(w=>'• '+String(w)):['No reported warnings.'])].join('\n').slice(0,4096))],components:[row(button('admin:welcome:review','Recheck',ButtonStyle.Primary),button('admin:welcome:repairAll','Repair',ButtonStyle.Secondary)),row(button('admin:welcome','Back'))]});
 }
 if(/^admin:welcome:templatePage:(public|dm):\d+$/.test(customId)){const [, , ,scope,rawPage]=customId.split(':');setSelection(interaction.guild.id,interaction.user.id,scope,{page:Number(rawPage)});return updatePanel(interaction,await (scope==='dm'?buildDmPanel:buildInstantPanel)(interaction.guild,displayName(interaction),interaction.user.id));}
 if(interaction.isStringSelectMenu?.()&&customId==='admin:welcome:navigate'){const choice=interaction.values?.[0];if(choice==='instant')return updatePanel(interaction,await buildInstantPanel(interaction.guild,displayName(interaction),interaction.user.id));if(choice==='dm')return updatePanel(interaction,await buildDmPanel(interaction.guild,displayName(interaction),interaction.user.id));if(choice==='scheduled')return updatePanel(interaction,await buildScheduledPanel(interaction.guild,displayName(interaction)));if(choice==='mentions')return updatePanel(interaction,buildMentionSettingsPanel(interaction.guild,displayName(interaction)));throw new Error('Choose a valid Welcome workspace.');}
