@@ -133,14 +133,22 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
     if(thread?.locked)return false;
     let summaryId=thread?session.logSummaryId:null;
-    if(thread&&t.mode==='hybrid'&&!summaryId){const summary=await parent.send(options);summaryId=summary.id;if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;setSession(g.id,userId,{logSummaryId:summaryId});}
+    // The parent channel receives one branded, editable case card. Its thread
+    // contains the detailed event timeline; subsequent events update the card.
+    const caseSummaryOptions=threadId=>{
+      const card=EmbedBuilder.from(embed);
+      card.setTitle(`💎 Verification Case • ${style.title}`);
+      card.setDescription('**Goliath Verification Studio**\\nIndividual member security activity and review.');
+      card.addFields({name:'🧵 Activity Thread',value:threadId?`[Open verification activity](https://discord.com/channels/${g.id}/${threadId})`:'Creating secure activity thread…',inline:false});
+      return {embeds:[card],allowedMentions:{parse:[],users:[],roles:[]}};
+    };
     if(!thread){
       const name=('Verification • '+(t.naming==='id'?userId:t.naming==='username'?(username||userId):(username||'Member')+' • '+userId)).slice(0,100);
-      if(t.mode==='hybrid'){
-        const summary=await parent.send(options);
-        summaryId=summary.id;
-        thread=await summary.startThread({name,autoArchiveDuration:t.archiveMinutes});
-      }else thread=await parent.threads.create({name,autoArchiveDuration:t.archiveMinutes,type:11});
+      // Starting the thread from its parent case card avoids a second,
+      // disconnected thread-start notification and keeps the case discoverable.
+      const summary=await parent.send(caseSummaryOptions(null));
+      summaryId=summary.id;
+      thread=await summary.startThread({name,autoArchiveDuration:t.archiveMinutes});
       if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
       setSession(g.id,userId,{logThreadId:thread.id,logThreadSessionId:session.sessionId,logSummaryId:summaryId});
     }
@@ -149,8 +157,13 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(thread.archived)await thread.setArchived(false);
     if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
     await thread.send(options);
-    if(t.mode==='hybrid'&&summaryId){
-      try{const summary=await parent.messages.fetch(summaryId);await summary.edit(options);}catch(error){console.error('[Verification] Case summary update failed:',error?.message||error);}
+    if(!summaryId){
+      const summary=await parent.send(caseSummaryOptions(thread.id));
+      summaryId=summary.id;
+      if(verificationStore.getSession(g.id,userId)?.sessionId===session.sessionId)setSession(g.id,userId,{logSummaryId:summaryId});
+    }else{
+      try{const summary=await parent.messages.fetch(summaryId);await summary.edit(caseSummaryOptions(thread.id));}
+      catch(error){console.error('[Verification] Case summary update failed:',error?.message||error);}
     }
     if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return true;
     if(type==='roles'&&verificationStore.getSession(g.id,userId)?.state==='verified'){
