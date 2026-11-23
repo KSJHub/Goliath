@@ -927,6 +927,8 @@ async function verificationAnswerAudit() {
   const first = runtime().submitAnswer(guild, user, user, challenge.challengeId, sequenceAnswer(challenge));
   assert.equal(first.reason, 'next_round');
   assert.equal(first.complete, false);
+  assert.notEqual(first.challenge.challengeId, challenge.challengeId, 'Each mini-game round must have a fresh challenge identity');
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, sequenceAnswer(challenge)).reason, 'stale_challenge', 'Previous-round answers must be rejected');
   assert.equal(runtime().submitAnswer(guild, user, user, first.challenge.challengeId, sequenceAnswer(first.challenge)).ok, true);
 
   // Existing broken challenges fail without a strike and are replaced on an explicit restart.
@@ -1051,6 +1053,8 @@ async function verificationAnswerAudit() {
         assert.equal(result.complete, round === rounds);
         if (round < rounds) {
           assert.equal(result.reason, 'next_round');
+          assert.notEqual(result.challenge.challengeId, c.challengeId, 'Round identity must rotate');
+          assert.equal(exhaustive.answer(guild, user, c.challengeId, gameSolution(c)).reason, 'stale_challenge');
           assert.notEqual(sample.activeChallenge.answerHash, previousHash);
           c = result.challenge;
         } else assert.equal(result.challenge.passedRounds, rounds);
