@@ -898,6 +898,7 @@ async function handleRoleSelectorInteraction(i) {
         if (!i.values?.[0] || i.values[0] === '__none__') throw new Error('Choose a template.');
         templates.bindTemplate(i.guildId,'role_selector',slot,i.values[0]);
       } else if (action === 'templateReset') templates.unbindTemplate(i.guildId,'role_selector',slot);
+      if (action === 'templateBind' || action === 'templateReset') await syncDeploymentState(i.guild, group.id);
       return respond(i,buildSelectorTemplates(i.guildId,group,page));
     }
     if (id === 'admin:roleSelector:groups') return respond(i, buildGroupsPanel(i.guildId));
