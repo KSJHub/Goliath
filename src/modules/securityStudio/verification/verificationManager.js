@@ -48,7 +48,12 @@ function hasAnyRole(m,ids){return cleanIds(ids).some(id=>m.roles.cache.has(id));
 function isBypass(m,s){return hasAnyRole(m,roleIds(s,'bypass'))||(s.allowStaffBypass&&canManageVerification(m));}
 async function logEvent(g,section,type,content,subjectUserId=null){
   if(!content)return false;
-  const configured=section.settings?.logs?.[`${type}ChannelId`]||section.settings?.logChannelId;
+  const threadMode=section.settings?.threadLogging?.mode;
+  // A member security passport has exactly one destination in threaded mode.
+  // Category-specific routes are exclusively for standard channel logging.
+  const configured=threadMode==='threaded'||threadMode==='hybrid'
+    ?section.settings?.threadLogging?.channelId
+    :section.settings?.logs?.[`${type}ChannelId`]||section.settings?.logChannelId;
   const c=configured?(g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null)):null;
   const raw=String(content).trim();
   const styles={
@@ -109,6 +114,7 @@ async function logEvent(g,section,type,content,subjectUserId=null){
     }catch(error){console.error('[Verification] Thread delivery fallback:',error?.message||error);}
   }
   try{
+    if(threadMode==='threaded'||threadMode==='hybrid')return false;
     if(!c?.send)return false;
     await c.send(options);
     return true;
