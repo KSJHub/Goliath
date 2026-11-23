@@ -109,7 +109,7 @@ function normalPresetPanel(guild,userId,scope){
   const prefix='admin:welcome:normal:';
   return {embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle(emojiLabel('PRESETS','Welcome Preset Manager')).setDescription(['Save, load and organise normal welcome messages without changing linked embeds.','','### '+emojiLabel('WORKSPACE','Workspace'),'**Workspace:** '+({public:'Instant Public',dm:'Instant DM',scheduled:'Scheduled Welcome'}[scope]),'**Saved presets:** '+entries.length,'**Page:** '+(page+1)+' / '+Math.max(1,Math.ceil(entries.length/25)),'**Selected:** '+(has?presets[selected].name:'None'),has?'**Status:** '+(presets[selected].content===config.normalDefaults?.[scope]?'Default message':'Saved preset'):'Select a preset to inspect it. Selecting does not overwrite your active message.','','### '+emojiLabel('PRESETS',has?'Selected Message':'Active Normal Message'),(has?presets[selected].content:activeNormalMessage(guild.id,scope,config)||'No normal message saved.').slice(0,1800)].join('\n'))],components:[
     row(menu),
-    row(button(prefix+'load:'+scope,emojiLabel('MOD_CASE_OPEN','Load Message'),ButtonStyle.Primary,!has),button(prefix+'save:'+scope,emojiLabel('PRESETS','Update / Save'),ButtonStyle.Success,!has),button(prefix+'saveAs:'+scope,emojiLabel('ADD','Save As'),ButtonStyle.Success)),
+    row(button(prefix+'load:'+scope,emojiLabel('MOD_CASE_OPEN','Load Message'),ButtonStyle.Primary,!has),button(prefix+'save:'+scope,emojiLabel('PRESETS','Update / Save'),ButtonStyle.Success,!has),button(prefix+'editPreset-'+selected+':'+scope,emojiLabel('EDIT','Edit Preset'),ButtonStyle.Secondary,!has),button(prefix+'saveAs:'+scope,emojiLabel('ADD','Save As'),ButtonStyle.Success)),
     row(button(prefix+'rename:'+scope,emojiLabel('EDIT','Rename'),ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,emojiLabel('DOCUMENT','Duplicate'),ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,emojiLabel('DELETE','Delete'),ButtonStyle.Danger,!has)),
     row(button(prefix+'default:'+scope,emojiLabel('USER_STARBOARD','Set Default'),ButtonStyle.Secondary,!has),button(prefix+'defaults:'+scope,'Manage Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,emojiLabel('WELCOME_EXPORT','Export'),ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,emojiLabel('VARIABLES','Variables'),ButtonStyle.Secondary)),
     row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='scheduled'?'scheduled':scope==='dm'?'dm':'instant'),emojiLabel('BACK','Back')))
@@ -366,6 +366,19 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
     if(!content||content.length>limit)throw new Error('Save a valid normal message or select a preset first.');
     const id=action==='rename'?selected:require('node:crypto').randomUUID();
     mutate(all=>{if(Object.entries(all).some(([key,v])=>key!==id&&v.name.toLowerCase()===name.toLowerCase()))throw new Error('That preset name already exists.');if(action==='rename'&&!all[id])throw new Error('Preset no longer exists.');all[id]={name,content};return all;});
+    setSelection(guildId,userId,scope,{presetId:id});
+    return interaction.reply({...panel(),ephemeral:true});
+  }
+  if(action.startsWith('editPreset-')){
+    const id=action.slice('editPreset-'.length),preset=Object.hasOwn(presets,id)?presets[id]:null;
+    if(!preset)throw new Error('Selected preset no longer exists.');
+    const field=new TextInputBuilder().setCustomId('content').setLabel('Preset message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limit).setValue(preset.content.slice(0,limit));
+    return interaction.showModal(new ModalBuilder().setCustomId('admin:welcome:normal:savePreset-'+id+':'+scope).setTitle('Edit Saved Preset').addComponents(row(field)));
+  }
+  if(action.startsWith('savePreset-')&&interaction.isModalSubmit?.()){
+    const id=action.slice('savePreset-'.length),content=interaction.fields.getTextInputValue('content').trim();
+    if(!content||content.length>limit)throw new Error('Enter a valid preset message.');
+    mutate(all=>{if(!Object.hasOwn(all,id))throw new Error('Preset no longer exists.');all[id]={...all[id],content};return all;});
     setSelection(guildId,userId,scope,{presetId:id});
     return interaction.reply({...panel(),ephemeral:true});
   }
