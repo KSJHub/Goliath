@@ -73,6 +73,15 @@ router.post('/:guildId/normal-presets', async (req,res) => {
     const limit=scope==='scheduled'?1800:2000;
     const validate=(value,max,label)=>{if(typeof value!=='string'||!value.trim()||value.length>max)throw new Error('Invalid '+label);return value.trim();};
     const meta={actorId:getActorId(req),action:'welcome_normal_preset'};
+    if(action==='activateOriginal'){
+      const original=scope==='scheduled'?"**👋 Welcome to our newest members!**\n\nLet's give a warm welcome to our newest arrivals.\n\nWe're delighted to have you here. Make yourself at home and enjoy the community! 🎉":scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.';
+      if(scope==='scheduled'){
+        scheduledWelcome.updateScheduledConfig(guildId,{message:original,templateId:null},meta);
+        welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:original}}),meta);
+      }else welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:original},normalMessages:{...s.normalMessages,[scope]:original},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),meta);
+      return success(res,{config:canonicalConfig(guildId)});
+    }
+
     welcome.updateWelcomeSection(guildId, section=>{
       const all={...section.normalPresets?.[scope]}, current=Object.hasOwn(all,id)?all[id]:null;
       if(!['saveAs','import','editDefault','restoreDefault'].includes(action)&&!current)throw new Error('Preset no longer exists.');
