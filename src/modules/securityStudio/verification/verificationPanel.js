@@ -148,13 +148,13 @@ function threadSettingsPage(g,user){
  const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Thread Settings'),['Organise security logs into a dedicated case for each verification session. Changes save immediately.'],user).addFields(
  {name:'1 · 📋 Logging mode',value:'**Current:** '+title(mode)+'\n📄 **Standard:** Individual logs in configured channels.\n🧵 **Threaded:** One thread per member session.\n📌 **Hybrid:** A live channel summary plus detailed thread.',inline:false},
  {name:'2 · 🔒 Destination',value:'**Channel:** '+channelText(t.channelId)+'\nChoose a staff-only text channel. Individual log destinations remain the fallback if thread delivery fails.',inline:false},
- {name:'3 · 🕒 Auto-hide',value:'**Inactivity:** '+({60:'1 hour',1440:'24 hours',4320:'3 days',10080:'7 days'}[t.archiveMinutes]||'24 hours')+'\nArchives inactive threads without deleting their history.',inline:false},
+ {name:'3 · 🕒 Auto-hide',value:'**Inactivity:** 7 days (fixed)'+'\nArchives inactive threads without deleting their history.',inline:false},
  {name:'4 · 🏷️ Case naming',value:'**Example:** Verification • '+(t.naming==='id'?'123456789012345678':t.naming==='username'?'member':'member • 123456789012345678')+'\nChoose how staff identify each case.',inline:false},
  {name:'5 · ⚙️ Case policies',value:'**Success archive:** '+on(t.archiveOnSuccess!==false)+' · **Success lock:** '+on(t.lockOnSuccess)+'\n**Failure archive:** '+on(t.archiveOnFailure)+' · **Quarantine archive:** '+on(t.archiveOnQuarantine)+'\nOpen Case Policies to change these behaviours.',inline:false});
  return {embeds:[embed],components:[
  select('mode','Choose logging mode',[['standard','Standard','📄','Individual channel logs'],['threaded','Threaded','🧵','Dedicated member case threads'],['hybrid','Hybrid','📌','Channel summary and thread']],mode),
  row(channel),
- select('archiveMinutes','Choose inactivity auto-hide',[['60','1 hour','🕒','Archive after one hour of inactivity'],['1440','24 hours','🕒','Archive after one day of inactivity'],['4320','3 days','🕒','Archive after three days of inactivity'],['10080','7 days','🕒','Archive after seven days of inactivity']],t.archiveMinutes||1440),
+
  select('naming','Choose case naming',[['both','Username + User ID','🏷️','Show both identifiers'],['username','Username','👤','Show the member username'],['id','User ID','🆔','Show the Discord user ID']],t.naming||'both'),
  row(button('admin:verification:threadBack',emojiLabel('BACK','Back'),ButtonStyle.Primary),button('admin:verification:threadPolicies','⚙️ Case Policies',ButtonStyle.Secondary),button('admin:verification:page:settings',emojiLabel('MODERATION_DASHBOARD','Settings'),ButtonStyle.Secondary))]};
 }
@@ -290,7 +290,7 @@ async function handleVerificationAdminInteraction(i){const id=String(i.customId|
  if(id==='admin:verification:threadChannel'||id.startsWith('admin:verification:threadOption:')||id.startsWith('admin:verification:threadToggle:')){
  const t={...settings(i.guildId).threadLogging};
  if(id==='admin:verification:threadChannel'){const cid=i.values?.[0]||null;const ch=cid?await i.guild.channels.fetch(cid):null;if(cid&&(!ch||ch.type!==ChannelType.GuildText||ch.permissionsFor(i.guild.roles.everyone)?.has('ViewChannel')!==false))throw new Error('Select a staff-only text channel.');t.channelId=cid;}
- else if(id.startsWith('admin:verification:threadOption:')){const key=id.split(':').pop(),value=i.values?.[0];const allowed={mode:['standard','threaded','hybrid'],archiveMinutes:['60','1440','4320','10080'],naming:['both','username','id']};if(!allowed[key]?.includes(value))throw new Error('Invalid thread setting.');t[key]=key==='archiveMinutes'?Number(value):value;}
+ else if(id.startsWith('admin:verification:threadOption:')){const key=id.split(':').pop(),value=i.values?.[0];const allowed={mode:['standard','threaded','hybrid'],naming:['both','username','id']};if(!allowed[key]?.includes(value))throw new Error('Invalid thread setting.');t[key]=value;}
  else{const key=id.split(':').pop();if(!['archiveOnSuccess','lockOnSuccess','archiveOnFailure','archiveOnQuarantine'].includes(key))throw new Error('Invalid thread toggle.');t[key]=key==='archiveOnSuccess'?t[key]===false:!t[key];}
  save(i.guildId,{threadLogging:t},i.user.id);await respond(i,id.startsWith('admin:verification:threadToggle:')?threadPoliciesPage(i.guild,user):threadSettingsPage(i.guild,user));return true;}
  if(id==='admin:verification:logType'){st.logType=i.values?.[0]||'default';await respond(i,logsPage(i.guild,user,st));return true;}
