@@ -897,6 +897,14 @@ async function verificationAnswerAudit() {
   assert.equal(wrong.attempts, 1);
   assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, ' 72 ').ok, true);
 
+  reset();
+  store.upsertSession(guild, user, { startedAt: new Date(Date.now() - 3600000).toISOString() });
+  const timedSettings = { security: { sessionTimeoutMinutes: 1, captchaConfig: { maxChallengeAttempts: 3 } } };
+  store.updateSettings(guild, { security: { ...store.getVerificationSection(guild).settings.security, sessionTimeoutMinutes: 1 } });
+  assert.equal(runtime().startStep(guild, user, 'captcha', timedSettings).reason, 'session_expired');
+  assert.equal(runtime().submitAnswer(guild, user, user, 'expired-id', '72').reason, 'session_expired');
+  assert.equal(runtime().resolveStaffAction(guild, user, 'expired-id', 'staff', 'approve').reason, 'session_expired');
+
   reset(); numbers = [42, 30, 0];
   const rotating = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { maxChallengeAttempts: 3, regenerateOnFailure: true } } }).challenge;
   numbers = [20, 10, 0];
