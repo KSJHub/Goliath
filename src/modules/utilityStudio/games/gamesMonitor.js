@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/ui/emojis');
 const { createHash } = require('node:crypto');
 const { PermissionFlagsBits: P } = require('discord.js');
 const store = require('./games');
@@ -107,7 +108,7 @@ async function processMultiDestinationGuild(guild, config) {
         const first = fresh[0];
         const detail = fresh.length === 1 && first.description ? first.description.slice(0, 400).replace(/@/g, '@\\u200b') + '\n\n' : '';
         await channel.send({ content: route.roleId ? `<@&${route.roleId}>` : '',
-          embeds: [{ title: `🎁 ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`,
+          embeds: [{ title: `${EMOJIS.USER_GIVEAWAYS} ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`,
             description: detail + description, ...(first.image ? { thumbnail: { url: first.image } } : {}),
             color: SECTIONS[0].color, footer: { text: 'Goliath Free Games · New offers' },
             ...(config.showTimestamps === false ? {} : { timestamp: new Date(now).toISOString() }) }],
