@@ -1307,6 +1307,10 @@ async function verificationLifecycleAudit() {
     contains(manager, 'subjectUserId=null', 'Verification audit logger accepts explicit member identity');
     contains(manager, "String(subjectUserId||'')", 'Verification audit logger uses explicit member ID when mention is absent');
     contains(flow, 'logEvent(g,c,type,content,userId)', 'Verification continuation passes member identity to audit logger');
+    for (const integration of ['auto_roles', 'invite_roles', 'welcome']) {
+      contains(flow, `integration:'${integration}'`, `Verification continuation records failed ${integration} release`);
+      contains(manager, `integration:'${integration}'`, `Verification manager records failed ${integration} release`);
+    }
     contains(manager, '<t:${timestamp}:R>', 'Verification audit log provides Discord relative timestamps');
     contains(manager, 'allowedMentions:{parse:[],users:[],roles:[]}', 'Verification audit logs prevent unsolicited mentions');
     contains(manager, 'if(existing&&existing.id!==message.id)', 'relocation cleans up old panel message');
