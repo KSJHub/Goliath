@@ -913,6 +913,22 @@ async function verificationAnswerAudit() {
   store.upsertSession(guild, user, { startedAt: new Date(Date.now() - 3600000).toISOString() });
   assert.equal(runtime().resolveStaffAction(guild, user, 'expired-id', 'staff', 'approve').reason, 'session_expired');
 
+  reset();
+  store.upsertSession(guild, user, { startedAt: new Date(Date.now() - 3600000).toISOString() });
+  const recovered = runtime().recoverGuild(guild);
+  assert.equal(recovered.ok, true);
+  assert.equal(recovered.results.find(item => item.userId === user)?.reason, 'session_expired');
+  assert.equal(store.getSession(guild, user).state, 'timed_out');
+  assert.equal(runtime().recoverGuild(guild).repaired, 0, 'Timeout recovery must be idempotent');
+
+  reset();
+  store.upsertSession(guild, user, {
+    startedAt: new Date(Date.now() - 3600000).toISOString(),
+    staffApprovalContinuationPending: { challengeId: 'pending-staff', staffUserId: 'staff', recordedAt: new Date().toISOString() },
+  });
+  assert.equal(runtime().recover(guild, user).reason, 'staff_approval_continuation_in_progress');
+  assert.notEqual(store.getSession(guild, user).state, 'timed_out', 'In-flight staff approval must not be interrupted');
+
   reset(); numbers = [42, 30, 0];
   const rotating = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { maxChallengeAttempts: 3, regenerateOnFailure: true } } }).challenge;
   numbers = [20, 10, 0];
