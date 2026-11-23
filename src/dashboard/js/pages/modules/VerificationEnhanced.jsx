@@ -41,18 +41,18 @@ function panelDraft(panel, moduleConfig, adminConfig) {
   const template = panel || moduleConfig.panelTemplate || {};
   return {
     channelId: panel?.channelId || adminConfig.verificationChannelId || DEFAULT_PANEL_DRAFT.channelId,
-    title: template.title || DEFAULT_PANEL_DRAFT.title,
-    description: template.description || DEFAULT_PANEL_DRAFT.description,
+    title: template.title ?? DEFAULT_PANEL_DRAFT.title,
+    description: template.description ?? DEFAULT_PANEL_DRAFT.description,
     color: template.color || DEFAULT_PANEL_DRAFT.color,
     footer: template.footer ?? DEFAULT_PANEL_DRAFT.footer,
     showHeader: template.showHeader !== false,
     showFooter: template.showFooter !== false,
     showTimestamp: template.showTimestamp !== false,
-    buttonLabel: template.buttonLabel || DEFAULT_PANEL_DRAFT.buttonLabel,
-    buttonEmoji: template.buttonEmoji || DEFAULT_PANEL_DRAFT.buttonEmoji,
+    buttonLabel: template.buttonLabel ?? DEFAULT_PANEL_DRAFT.buttonLabel,
+    buttonEmoji: template.buttonEmoji ?? DEFAULT_PANEL_DRAFT.buttonEmoji,
     buttonStyle: template.buttonStyle || DEFAULT_PANEL_DRAFT.buttonStyle,
-    imageUrl: template.imageUrl || DEFAULT_PANEL_DRAFT.imageUrl,
-    thumbnailUrl: template.thumbnailUrl || DEFAULT_PANEL_DRAFT.thumbnailUrl,
+    imageUrl: template.imageUrl ?? DEFAULT_PANEL_DRAFT.imageUrl,
+    thumbnailUrl: template.thumbnailUrl ?? DEFAULT_PANEL_DRAFT.thumbnailUrl,
   };
 }
 
