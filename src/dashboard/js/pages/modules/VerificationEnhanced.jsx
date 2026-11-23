@@ -381,7 +381,9 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     finally { setBusy(''); }
   }
 
-  function selectPanel(panelId) {
+  async function selectPanel(panelId) {
+    if (panelId === selectedPanelId) return;
+    if (panelDraftDirty.current && !await goliathDialog.confirm('Discard your unsaved verification panel changes and switch panels?', { title: 'Unsaved Verification Panel Changes' })) return;
     explicitNewPanel.current = !panelId;
     setSelectedPanelId(panelId);
     panelDraftDirty.current = false;
