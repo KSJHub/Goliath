@@ -882,7 +882,7 @@ async function verificationAnswerAudit() {
   assert.equal(started.challenge.prompt, 'Security check: what is 42 + 30?');
   assert.equal(runtime().submitAnswer(guild, user, user, started.challenge.challengeId, '72').ok, true, 'Correct answer to persisted 42 + 30 CAPTCHA must pass through the real runtime and store');
   assert.equal(data.sessions[user].completedSecurity.includes('captcha'), true);
-  const settings = { security: { captchaConfig: { maxChallengeAttempts: 3 } } };
+  const settings = { security: { captchaConfig: { maxChallengeAttempts: 3, regenerateOnFailure: false } } };
   const startMath = () => { reset(); numbers = [42, 30, 0]; return runtime().startStep(guild, user, 'captcha', settings).challenge; };
   let challenge = startMath();
   const saved = clone(store.getSession(guild, user).activeChallenge);
@@ -896,6 +896,16 @@ async function verificationAnswerAudit() {
   assert.equal(wrong.reason, 'incorrect');
   assert.equal(wrong.attempts, 1);
   assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, ' 72 ').ok, true);
+
+  reset(); numbers = [42, 30, 0];
+  const rotating = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { maxChallengeAttempts: 3, regenerateOnFailure: true } } }).challenge;
+  numbers = [20, 10, 0];
+  const retry = runtime().submitAnswer(guild, user, user, rotating.challengeId, '73');
+  assert.equal(retry.reason, 'incorrect');
+  assert.equal(retry.challenge.prompt, 'Security check: what is 20 + 10?');
+  assert.equal(retry.challenge.expiresAt, rotating.expiresAt);
+  assert.equal(retry.attemptsRemaining, 2);
+  assert.equal(runtime().submitAnswer(guild, user, user, rotating.challengeId, '30').ok, true);
 
   for (const difficulty of ['easy', 'normal', 'hard']) {
     for (let index = 0; index < 15; index++) {
@@ -977,7 +987,7 @@ async function verificationAnswerAudit() {
   }
   function checkMath(difficulty, a, b, op = '+') {
     const values = difficulty === 'normal' ? [a, b, op === '+' ? 0 : 1] : [a, b];
-    const c = begin('captcha', { difficulty, maxChallengeAttempts: 3 }, values);
+    const c = begin('captcha', { difficulty, maxChallengeAttempts: 3, regenerateOnFailure: false }, values);
     const x = op === '-' ? Math.max(a, b) : a, y = op === '-' ? Math.min(a, b) : b;
     assert.equal(c.prompt, `Security check: what is ${x} ${op} ${y}?`);
     const expected = op === '+' ? a + b : op === '-' ? Math.abs(a - b) : a * b;
