@@ -2467,6 +2467,30 @@ function socialStudioLifecycleAudit() {
     const compactFacebook = facebook.replace(/\s+/g, '');
     const compactTikTok = tiktok.replace(/\s+/g, '');
     
+    // Exercise the actual refresh decision, including status-only updates.
+    const refreshStart = core.indexOf('function liveMessageUpdateDue(');
+    const refreshEnd = core.indexOf('\nasync function', refreshStart);
+    assert(refreshStart >= 0 && refreshEnd > refreshStart);
+    const refreshDue = new Function('LIVE_MESSAGE_REFRESH_INTERVALS', 'LIVE_MESSAGE_REFRESH_MS',
+      core.slice(refreshStart, refreshEnd) + ';return liveMessageUpdateDue;')(new Set([600000]), 600000);
+    for (const [platform, before, after, enabled, expected] of [
+      ['tiktok', 'LIVE', 'PAUSED', false, true],
+      ['tiktok', 'PAUSED', 'LIVE', false, true],
+      ['tiktok', 'LIVE', 'LIVE', false, false],
+      ['twitch', 'LIVE', 'PAUSED', false, false],
+      ['tiktok', 'LIVE', 'LIVE', true, true]
+    ]) {
+      assert.equal(refreshDue({platform}, {isLive:true,lastLiveEvent:{liveStatus:before},lastLiveMessageUpdatedAt:1},
+        {isLive:true,event:{liveStatus:after}}, {liveMessageRefreshEnabled:enabled}), expected);
+    }
+    const diagnosticStart = compactCore.indexOf('if(options.diagnosticOnly===true){');
+    const diagnosticEnd = compactCore.indexOf('constdelivered=[];', diagnosticStart);
+    assert(diagnosticStart >= 0 && diagnosticEnd > diagnosticStart);
+    const diagnostic = compactCore.slice(diagnosticStart, diagnosticEnd);
+    assert(diagnostic.includes('state:{...previous,lastCheckedAt:state.lastCheckedAt,lastStatus:state.lastStatus,lastError:state.lastError}'));
+    assert(!diagnostic.includes('verifyTikTokWideImage(') && !diagnostic.includes('sameActiveBroadcast'));
+    assert(compactCore.includes('negative&&misses>=3&&Number.isFinite(elapsed)&&elapsed>=120000'));
+
     const contracts = [
       ['OFFLINE transition', 'checked.isLive===false&&previous.isLive===true'],
       ['stable ended identity', 'id:`ended:${previous.liveEventId||prior.id||account.accountId}`'],
