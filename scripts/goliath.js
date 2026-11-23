@@ -1416,6 +1416,49 @@ async function verificationLifecycleAudit() {
     contains(flow, 'quarantine_late_completion_requires_review', 'protect quarantine state from late completion');
     const terminalGuard = "['verified','quarantined','review','rejected','failed','timed_out'].includes";
     const completionFlow = flow.slice(flow.indexOf('async function complete('), flow.indexOf('async function recordVerificationFailure('));
+
+    // Execute the production role-confirmation branch with simulated Discord roles.
+    {
+      const start = completionFlow.indexOf('if(!confirmed||![...verified,...auto].every(');
+      const end = completionFlow.indexOf('challengeRuntime.recover(m.guild.id,m.id);const after=', start);
+      assert(start >= 0 && end > start, 'Role confirmation and rollback branch must exist');
+      const check = new Function('confirmed', 'verified', 'auto', 'remove', 'applied', 'm', 'verificationStore',
+        'return (async()=>{' + completionFlow.slice(start, end) + 'return {ok:true};})()');
+      const makeRole = id => ({ id });
+      const verifiedRole = makeRole('verified'), pendingRole = makeRole('pending');
+      const run = async ({ confirmedRoles, fetchResult = true, removalFails = false }) => {
+        const held = new Set(confirmedRoles);
+        const removed = [], history = [];
+        let state = 'verifying';
+        const member = { roles: {
+          cache: { has: id => held.has(id) },
+          remove: async role => { if (removalFails) throw new Error('Discord denied removal'); held.delete(role.id); removed.push(role.id); },
+        }};
+        const guild = { id: 'guild', members: { fetch: async () => fetchResult ? member : null } };
+        const storeDouble = {
+          getSession: () => ({ state }),
+          upsertSession: (_g, _u, patch) => { state = patch.state; },
+          addSecurityHistory: (_g, _u, event) => history.push(event),
+        };
+        const result = await check(fetchResult ? member : null, [verifiedRole], [], [pendingRole],
+          { added: [verifiedRole] }, { guild, id: 'member' }, storeDouble);
+        return { result, removed, history, state, held };
+      };
+      const success = await run({ confirmedRoles: ['verified'] });
+      assert.equal(success.result.ok, true, 'Confirmed roles must continue verification');
+      assert.deepEqual(success.removed, [], 'Successful confirmation must not roll back roles');
+      const missingPendingRemoval = await run({ confirmedRoles: ['verified', 'pending'] });
+      assert.equal(missingPendingRemoval.result.review, true, 'Unremoved pending role must block verification');
+      assert.deepEqual(missingPendingRemoval.removed, ['verified'], 'Failed confirmation must revoke newly granted Verified role');
+      assert.equal(missingPendingRemoval.state, 'review');
+      assert.deepEqual(missingPendingRemoval.history[0].rollbackFailedRoleIds, []);
+      const denied = await run({ confirmedRoles: ['verified', 'pending'], removalFails: true });
+      assert.equal(denied.result.review, true);
+      assert.deepEqual(denied.history[0].rollbackFailedRoleIds, ['verified'], 'Rollback permission failure must be audited');
+      const unavailable = await run({ confirmedRoles: [], fetchResult: false });
+      assert.equal(unavailable.result.review, true);
+      assert.deepEqual(unavailable.history[0].rollbackFailedRoleIds, ['verified'], 'Unreachable member must be flagged for manual reconciliation');
+    }
     const failureFlow = flow.slice(flow.indexOf('async function recordVerificationFailure('), flow.indexOf('async function quarantineVerificationMember('));
     const quarantineFlow = flow.slice(flow.indexOf('async function quarantineVerificationMember('), flow.indexOf('async function resumeVerification('));
     assert(completionFlow.split(terminalGuard).length >= 3, 'Completion must recheck terminal state before and after role changes.');
