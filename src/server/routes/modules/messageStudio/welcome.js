@@ -100,7 +100,7 @@ router.post('/:guildId/normal-presets', async (req,res) => {
       else if(action==='default')defaults={...defaults,[scope]:current.content};
       else if(action==='editDefault')defaults={...defaults,[scope]:validate(content,limit,'default message')};
       else if(action==='restoreDefault'){defaults={...defaults};delete defaults[scope];}
-      else if(action==='import'){const data=req.body.data;if(data?.version!==1||data.scope!==scope||!Array.isArray(data.presets)||data.presets.length>100)throw new Error('Invalid preset export.');if(data.defaultMessage!==undefined)validate(data.defaultMessage,limit,'default message');for(const v of data.presets){const label=unique(validate(v?.name,80,'preset name'));all[require('node:crypto').randomUUID()]={name:label,content:validate(v?.content,limit,'message')};}}
+      else if(action==='import'){const data=req.body.data;if(data?.version!==1||data.scope!==scope||!Array.isArray(data.presets)||data.presets.length>100)throw new Error('Invalid preset export.');if(data.defaultMessage!==undefined)defaults={...defaults,[scope]:validate(data.defaultMessage,limit,'default message')};for(const v of data.presets){const label=unique(validate(v?.name,80,'preset name'));all[require('node:crypto').randomUUID()]={name:label,content:validate(v?.content,limit,'message')};}}
       else throw new Error('Invalid preset action.');
       return {...section,normalPresets:{...section.normalPresets,[scope]:all},normalDefaults:defaults};
     },meta);
