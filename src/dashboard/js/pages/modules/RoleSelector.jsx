@@ -41,9 +41,9 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const [wizardStep, setWizardStep] = useState(0);
   const [wizardPreviewChoices, setWizardPreviewChoices] = useState([]);
   useEffect(() => { setWizardStep(0); setNewDraft(blankGroup()); setWizardPreviewChoices([]); }, [guildId]);
-  useEffect(() => { setWizardPreviewChoices([]); }, [newDraft.optionsText, newDraft.selectionMode]);
+  useEffect(() => { setWizardPreviewChoices([]); }, [newDraft.optionsText, newDraft.selectionMode, newDraft.controlMode]);
   const [previewChoices, setPreviewChoices] = useState([]);
-  useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode]);
+  useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode, editDraft.controlMode]);
   const [panelDraft, setPanelDraft] = useState({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});
   useEffect(() => { setPanelDraft({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}}); }, [guildId]);
   const [templatePayload, setTemplatePayload] = useState({});
@@ -106,7 +106,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
     setPreviewChoices(old => {
       const next = editDraft.selectionMode === 'single' ? [key] : old.includes(key) ? old.filter(x => x !== key) : [...old, key];
       const min = Math.max(0, Number(editDraft.minSelections) || 0);
-      const max = editDraft.selectionMode === 'single' ? 1 : Math.max(1, Number(editDraft.maxSelections) || 25);
+      const max = editDraft.selectionMode === 'single' ? 1 : Math.min(parseOptions(editDraft.optionsText, selectedGroup?.options).filter(option => option.enabled !== false).length, Math.max(1, Number(editDraft.maxSelections) || 25));
       if (next.length > max || (next.length < min && next.length < old.length) || (!next.length && !editDraft.allowRemove)) return old;
       return next;
     });
