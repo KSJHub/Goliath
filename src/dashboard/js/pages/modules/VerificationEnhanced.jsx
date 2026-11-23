@@ -411,12 +411,14 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   async function removePanel() {
     if (advancedDirty.current) { setError('Save or discard advanced settings before removing a panel.'); return; }
     if (!selectedPanelId) return;
+    if (panelDraftDirty.current && !await goliathDialog.confirm('Deleting this verification panel will discard its unsaved design changes. Continue?', { title: 'Unsaved Verification Panel Changes', danger: true })) return;
     if (!await goliathDialog.confirm('Delete this verification panel message and its saved record?', { title: 'Delete Verification Panel?', danger: true, confirmLabel: 'Delete Panel' })) return;
     setBusy('delete');
     setError('');
     try {
       await api.deleteVerificationPanel(guildId, selectedPanelId, data?.configRevision);
       setSelectedPanelId('');
+      explicitNewPanel.current = false;
       panelDraftDirty.current = false;
       await load();
       setNotice('Verification panel deleted.');
