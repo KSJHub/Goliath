@@ -1298,8 +1298,8 @@ async function verificationLifecycleAudit() {
     // Verification audit embeds must retain the agreed member identity, event timing,
     // and colour semantics across pending, success, and failure events.
     for (const [event, color] of [['join', '0xfefefe'], ['success', '0x2ecc71'], ['failure', '0xe74c3c']]) {
-      assert(new RegExp(event + ':\\\\{[^\\\\n]*color:' + color).test(manager),
-        `Verification ${event} log must retain its agreed embed colour`);
+      const styleLine = manager.split('\n').find(line => line.trimStart().startsWith(event + ':{')) || '';
+      assert(styleLine.includes('color:' + color), `Verification ${event} log must retain its agreed embed colour`);
     }
     for (const field of ["name:'👤 Member'", "name:'🏷️ Discord Username'", "name:'🆔 User ID'", "name:'🕒 Event Time'", "name:'📋 Event Details'"]) {
       contains(manager, field, `Verification audit log preserves ${field}`);
