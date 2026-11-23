@@ -28,15 +28,17 @@ function CustomEditor({ theme, value, onChange, onSave, busy, dm = false }) {
 }
 
 function PresetLibrary({theme,config,scheduled,busy,onAction,onLoad,onRestore}) {
-  const [scope,setScope]=useState('public'),[id,setId]=useState(''),[name,setName]=useState(''),[content,setContent]=useState(''),[json,setJson]=useState('');
+  const [scope,setScope]=useState('public'),[id,setId]=useState(''),[name,setName]=useState(''),[content,setContent]=useState(''),[json,setJson]=useState(''),[defaultDraft,setDefaultDraft]=useState(null),[importError,setImportError]=useState('');
+  const factory=scope==='scheduled'?"**👋 Welcome to our newest members!**\n\nLet's give a warm welcome to our newest arrivals.\n\nWe're delighted to have you here. Make yourself at home and enjoy the community! 🎉":scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.';
+  const savedDefault=config?.normalDefaults?.[scope]||factory;
   const all=config?.normalPresets?.[scope]||{}, selected=all[id], limit=scope==='scheduled'?1800:2000;
   const active=scope==='scheduled'?scheduled?.message:config?.normalMessages?.[scope];
   const run=action=>onAction({scope,action,id,name,content});
   const btn=(label,fn,disabled=false,tone='default')=><button type="button" style={buttonStyle(theme,tone)} disabled={!!busy||disabled} onClick={fn}>{label}</button>;
   return <div style={{display:'grid',gap:12}}>
     <strong>Message Preset Library</strong>
-    <select aria-label="Workspace" style={fieldStyle(theme)} value={scope} onChange={e=>{setScope(e.target.value);setId('');setName('');setContent('');setJson('');}}><option value="public">Instant Public</option><option value="dm">Instant DM</option><option value="scheduled">Scheduled Welcome</option></select>
-    <select aria-label="Saved preset" style={fieldStyle(theme)} value={selected?id:''} onChange={e=>{const key=e.target.value;setId(key);setName(all[key]?.name||'');setContent(all[key]?.content||'');}}><option value="">Select a preset</option>{Object.entries(all).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([key,v])=><option key={key} value={key}>{v.content===config?.normalDefaults?.[scope]?'⭐ ':''}{v.name}</option>)}</select>
+    <ThemedSelect theme={theme} aria-label="Workspace" style={fieldStyle(theme)} value={scope} onChange={e=>{setScope(e.target.value);setId('');setName('');setContent('');setJson('');setDefaultDraft(null);setImportError('');}}><option value="public">Instant Public</option><option value="dm">Instant DM</option><option value="scheduled">Scheduled Welcome</option></ThemedSelect>
+    <ThemedSelect theme={theme} aria-label="Saved preset" style={fieldStyle(theme)} value={selected?id:''} onChange={e=>{const key=e.target.value;setId(key);setName(all[key]?.name||'');setContent(all[key]?.content||'');}}><option value="">Select a preset</option>{Object.entries(all).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([key,v])=><option key={key} value={key}>{v.content===config?.normalDefaults?.[scope]?'⭐ ':''}{v.name}</option>)}</ThemedSelect>
     <input aria-label="Preset name" placeholder="Preset name" maxLength={80} value={name} onChange={e=>setName(e.target.value)} style={fieldStyle(theme)}/>
     <textarea aria-label="Preset message" rows={5} maxLength={limit} value={content} onChange={e=>setContent(e.target.value)} style={fieldStyle(theme)}/>
     <div style={{whiteSpace:'pre-wrap'}}>{renderWelcomePreview(content)}</div>
@@ -47,12 +49,21 @@ function PresetLibrary({theme,config,scheduled,busy,onAction,onLoad,onRestore}) 
       {btn('Save As',()=>run('saveAs'),!name.trim()||!content.trim(),'success')}
       {btn('Rename',()=>run('rename'),!selected||!name.trim())}
       {btn('Duplicate',()=>run('duplicate'),!selected||!name.trim())}
-      {btn('Delete',()=>{if(window.confirm('Delete this saved preset? Active messages will not change.'))run('delete');},!selected,'danger')}
+      {btn('Delete',async()=>{if(await goliathDialog.confirm('Delete this saved preset? Active messages will not change.',{title:'Delete preset?',danger:true,confirmLabel:'Delete'}))run('delete');},!selected,'danger')}
       {btn('Set Default',()=>run('default'),!selected)}
-      {btn('Load Default',()=>onRestore(scope,config.normalDefaults[scope]),!config?.normalDefaults?.[scope])}
+
+    </div>
+    <strong>Default Message</strong>
+    <textarea aria-label="Default message" rows={5} maxLength={limit} value={defaultDraft??savedDefault} onChange={e=>setDefaultDraft(e.target.value)} style={fieldStyle(theme)}/>
+    <div style={{whiteSpace:'pre-wrap'}}>{renderWelcomePreview(defaultDraft??savedDefault)}</div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      {btn('Save Default',async()=>{if(await onAction({scope,action:'editDefault',content:defaultDraft??savedDefault}))setDefaultDraft(null);},defaultDraft===null||!defaultDraft.trim(),'success')}
+      {btn('Load Default',async()=>{if(await goliathDialog.confirm('Activate the saved default as a normal message?',{title:'Load Default',confirmLabel:'Activate'}))await onRestore(scope,savedDefault);},false,'primary')}
+      {btn('Restore Original',async()=>{if(await goliathDialog.confirm('Restore the original default and activate it? Saved presets and embeds are retained.',{title:'Restore Original',danger:true,confirmLabel:'Restore'})){if(await onAction({scope,action:'editDefault',content:factory})){setDefaultDraft(null);await onRestore(scope,factory);}}},false,'danger')}
     </div>
     <textarea aria-label="Preset JSON" placeholder="Paste preset JSON to import, or export here" rows={4} value={json} onChange={e=>setJson(e.target.value)} style={fieldStyle(theme)}/>
-    <div style={{display:'flex',gap:8}}>{btn('Export JSON',()=>setJson(JSON.stringify({version:1,scope,presets:Object.values(all),defaultMessage:config?.normalDefaults?.[scope]},null,2)))}{btn('Import JSON',()=>{try{onAction({scope,action:'import',data:JSON.parse(json)});}catch{window.alert('Invalid JSON');}},!json.trim())}</div>
+    <div style={{display:'flex',gap:8}}>{btn('Export JSON',()=>setJson(JSON.stringify({version:1,scope,presets:Object.values(all),defaultMessage:config?.normalDefaults?.[scope]},null,2)))}{btn('Import JSON',()=>{try{setImportError('');onAction({scope,action:'import',data:JSON.parse(json)});}catch{setImportError('Invalid JSON');}},!json.trim())}</div>
+    {importError&&<div role="alert">{importError}</div>}
   </div>;
 }
 
