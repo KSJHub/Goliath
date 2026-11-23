@@ -139,7 +139,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
       const card=EmbedBuilder.from(embed);
       card.setColor(0xfefefe);
       card.setTitle('🧵 Verification • '+(username||userId).slice(0,48));
-      card.setDescription(`**Member:** <@${userId}>\\n**Status:** ${style.status||'Pending'}\\n**Activity:** ${threadId?`[Open member case](https://discord.com/channels/${g.id}/${threadId})`:'Creating member case…'}`);
+      card.setDescription(`**Member:** <@${userId}>\n**Status:** ${style.status||'Pending'}\n**Activity:** ${threadId?`[Open member case](https://discord.com/channels/${g.id}/${threadId})`:'Creating member case…'}`);
       card.setFields([]);
       return {embeds:[card],allowedMentions:{parse:[],users:[],roles:[]}};
     };
