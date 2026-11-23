@@ -1,0 +1,20 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const read = path => fs.readFileSync(path, 'utf8');
+const panel = read('src/modules/roleStudio/roleSelector/roleSelectorPanel.js');
+const routes = read('src/server/routes/modules/roleStudio/roleSelector.js');
+const dashboard = read('src/dashboard/js/pages/modules/RoleSelector.jsx');
+const templates = read('src/modules/messageStudio/embed/embedTemplates.js');
+
+assert.match(panel, /if \(action === 'templateBind' \|\| action === 'templateReset'\) await syncDeploymentState\(i\.guild, group\.id\)/);
+assert.match(panel, /const targets = changedGroupId \? list\.filter\(\(d\) => d\.groupIds\.includes\(changedGroupId\)\) : list/);
+assert.match(routes, /router\.post\('\/:guildId\/groups\/:groupId\/sync-template'/);
+assert.match(routes, /const group = roleSelector\.getGroup\(id, req\.params\.groupId\)/);
+assert.match(routes, /const sync = await panel\.syncDeploymentState\(g, group\.id\)/);
+assert.match(routes, /if \(failures\.length\) return res\.status\(409\)/);
+assert.match(dashboard, /await api\.bindEmbedTemplate\(guildId,'role_selector','member_group_'\+selectedGroup\.id,templateChoice\);await api\.request\(/);
+assert.match(dashboard, /await api\.unbindEmbedTemplate\(guildId,'role_selector','member_group_'\+selectedGroup\.id\);await api\.request\(/);
+assert.equal((dashboard.match(/\/sync-template\x60,\{method:'POST'\}/g)||[]).length, 2);
+assert.match(templates, /\[slotName\]: template\.templateId/);
+console.log('Role Selector template binding and deployment refresh contracts passed.');
