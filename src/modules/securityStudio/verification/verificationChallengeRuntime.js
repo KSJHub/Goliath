@@ -19,6 +19,21 @@ function sessionTimedOut(guildId, session) {
   return Number.isFinite(minutes) && minutes > 0 && Date.now() - started >= minutes * 60000;
 }
 
+function expireTimedOutSession(guildId, userId, session) {
+  if (!sessionTimedOut(guildId, session)) return false;
+  // Staff decisions already in flight must finish or enter recovery review.
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return false;
+  verificationStore.upsertSession(guildId, userId, {
+    state: 'timed_out', activeChallenge: null, activeSecurityMethod: null,
+  });
+  verificationStore.addSecurityHistory(guildId, userId, {
+    type: 'verification_session_timed_out',
+    sessionId: session.sessionId || null,
+    startedAt: session.startedAt,
+  });
+  return true;
+}
+
 function challengeConfig(settings = {}, method) {
   const security = settings.security || {};
   if (method === 'captcha') return { ...(security.captchaConfig || settings.captcha || {}) };
@@ -64,7 +79,7 @@ function markCompleted(guildId, userId, method) {
 function startStep(guildId, userId, method, settings = {}) {
   if (!INTERACTIVE_METHODS.has(method)) return { ok: false, reason: 'not_interactive', method };
   const session = verificationStore.getSession(guildId, userId) || {};
-  if (sessionTimedOut(guildId, session)) return { ok: false, reason: 'session_expired', complete: false };
+  if (sessionTimedOut(guildId, session) && expireTimedOutSession(guildId, userId, session)) return { ok: false, reason: 'session_expired', complete: false };
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress', method };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
@@ -98,7 +113,7 @@ function startStep(guildId, userId, method, settings = {}) {
 function submitAnswer(guildId, actingUserId, targetUserId, challengeId, suppliedAnswer) {
   if (clean(actingUserId) !== clean(targetUserId)) return { ok: false, reason: 'wrong_member' };
   const session = verificationStore.getSession(guildId, targetUserId) || {};
-  if (sessionTimedOut(guildId, session)) return { ok: false, reason: 'session_expired', complete: false };
+  if (sessionTimedOut(guildId, session) && expireTimedOutSession(guildId, targetUserId, session)) return { ok: false, reason: 'session_expired', complete: false };
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', state: session.state };
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed' };
@@ -112,7 +127,7 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
 
 function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, action) {
   const session = verificationStore.getSession(guildId, targetUserId) || {};
-  if (sessionTimedOut(guildId, session)) return { ok: false, reason: 'session_expired', complete: false };
+  if (sessionTimedOut(guildId, session) && expireTimedOutSession(guildId, targetUserId, session)) return { ok: false, reason: 'session_expired', complete: false };
   if (TERMINAL_STATES.has(session.state)) return { ok: false, complete: false, reason: 'terminal_session', state: session.state };
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, complete: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, complete: false, reason: 'security_configuration_changed' };
@@ -134,6 +149,9 @@ function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, act
 function recover(guildId, userId) {
   const before = verificationStore.getSession(guildId, userId);
   if (!before) return { ok: true, changed: false, reason: 'no_session', session: sessionState(guildId, userId) };
+  if (expireTimedOutSession(guildId, userId, before)) return {
+    ok: true, changed: true, reason: 'session_expired', session: sessionState(guildId, userId),
+  };
   const challenge = before.activeChallenge || null;
   let changed = false;
   let reason = 'healthy';
