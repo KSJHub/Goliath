@@ -415,25 +415,8 @@ async function checkGuildAccounts(client,guildId,options={}) {
       for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId);
 
       if(options.diagnosticOnly===true){
-        // Periodically enforce the approved TikTok LIVE card even between full
-      // refreshes. Another editor may replace the embed after delivery.
-      if(sameActiveBroadcast&&String(account.platform||'').toLowerCase()==='tiktok'){
-        // Audit on every monitor cycle: a different writer can revert the
-        // Discord embed immediately after the normal refresh.
-        {
-          state.lastTikTokLiveLayoutAuditAt=now();
-          try {
-            const tracked=await trackedMessage(client,guildId,{...previous,...state});
-            if(tracked){
-              const expected=buildEmbed(account,checked.event,templateFor(config,'live'),creatorFor(config,accountId),config.settings);
-              await verifyTikTokWideImage(tracked.message,account,checked.event,expected);
-            }
-          }catch(error){
-            console.warn('[Social Studio] TikTok LIVE persistence audit failed',accountId,error?.message||error);
-          }
-        }
-      }
-      monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()});
+        // Diagnostic checks must not edit or repair Discord notifications.
+        monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()});
         results.push({accountId,platform:account.platform,status:checked.status,isLive:checked.isLive,live:checked.event||null,delivered:[],diagnosticOnly:true});
         analyticsDelta.checks=Number(analyticsDelta.checks||0)+1;
         return;
