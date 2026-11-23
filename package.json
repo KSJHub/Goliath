@@ -41,7 +41,7 @@
     "audit:game-catalogue-identity": "node scripts/goliath.js game-catalogue-identity",
     "audit:casino-wallet": "node src/modules/communityStudio/casino/wallet.test.js",
     "audit:emojis": "node -e \"const fs=require('node:fs');const read=p=>fs.readFileSync(p,'utf8');const extract=(s)=>new Map([...s.matchAll(/\\\\b([A-Z][A-Z_0-9]+):\\\\s*'([^']+)'/g)].map(m=>[m[1],m[2]]));const core=extract(read('src/core/guild/goliathNavigation.js'));const dash=extract(read('src/dashboard/js/shared/PageShell.jsx'));const legacy={INACTIVE:['⚪','⚫'],REPAIR:['🩹','🔧'],BUILDER:['🛠️','🛠']};let bad=0;for(const [key,glyph] of dash){const server=core.get(key);if(server===glyph)continue;if(legacy[key]&&legacy[key][0]===server&&legacy[key][1]===glyph)continue;console.error('Emoji palette mismatch:',key,JSON.stringify(server),JSON.stringify(glyph));bad++}if(bad)process.exit(1);console.log('Emoji palette audit passed:',dash.size,'dashboard keys checked against',core.size,'core keys; 3 approved visual exceptions');\"",
-    "audit:role-selector-templates": "node scripts/role-selector-template-contract.test.js"
+    "audit:role-selector-templates": "node src/modules/roleStudio/roleSelector/roleSelectorTemplateContract.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
