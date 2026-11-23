@@ -1217,9 +1217,10 @@ async function verificationLifecycleAudit() {
     contains(verificationApi, 'sessionSummary: Object.values(section.sessions || {})', 'overview exposes aggregate session counts');
     contains(verificationStartup, 'if (result.recovered || result.expired || result.clearedMarkers)', 'background recovery logs interrupted staff actions');
     contains(lifecycle, "oldMember?.pending!==true||newMember.pending!==false", 'Discord screening clearance requires a confirmed pending transition');
-    contains(lifecycle, "discord_membership_screening_cleared", 'Discord screening clearance is recorded in member history');
-    contains(lifecycle, "Approving administrator: not provided by Discord.", 'Screening logs must not invent an approving administrator');
-    contains(lifecycle, "await manager.logEvent(newMember.guild,section,'attempt'", 'Discord screening clearance is written to the member activity thread');
+    contains(lifecycle, 'await manager.handleMemberUpdate(oldMember,newMember)', 'Discord screening clearance delegates to the single manager audit path');
+    contains(manager, "'discord_screening_completed'", 'Discord screening clearance is recorded in member history');
+    contains(manager, 'Approving administrator: not provided by Discord.', 'Screening logs do not invent an approver');
+    contains(manager, "await logEvent(m.guild,section,'attempt',", 'Screening clearance writes to the member activity thread');
 
     
     // Execute the case-thread delivery helper with isolated Discord/store doubles.
