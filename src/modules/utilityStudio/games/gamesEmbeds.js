@@ -1,11 +1,12 @@
 'use strict';
+const { EMOJIS } = require('../../../core/ui/emojis');
 const { STORES, TYPES, safeUrl } = require('./gamesProviders');
 const NEW_MS = 24 * 3600_000;
 const ENDING_MS = 48 * 3600_000;
 const SECTIONS = [
   { title: '🎁 Free Games', types: ['game'], color: 0xfbbf24 },
   { title: '🧩 Free DLC & Add-ons', types: ['dlc'], color: 0xa78bfa },
-  { title: '🎮 Loot, Betas & Other Offers', types: ['loot', 'beta', 'demo', 'weekend'], color: 0x38bdf8 },
+  { title: `${EMOJIS.GAMEPAD} Loot, Betas & Other Offers`, types: ['loot', 'beta', 'demo', 'weekend'], color: 0x38bdf8 },
 ];
 function escape(value) { return String(value).replace(/[\\`*_{}\[\]()<>~|]/g, '\\$&').replace(/@/g, '@\u200b').replace(/[\r\n]/g, ' '); }
 // Link labels need escaping for brackets and formatting, not literal parentheses.
@@ -33,7 +34,7 @@ function line(offer, newSince = {}, now = Date.now(), config = {}) {
   const fresh = config.showNew !== false && newSince[offer.id] && now >= newSince[offer.id] && now - newSince[offer.id] < NEW_MS;
   const selectedStores = offer.stores.filter((key) => config.stores?.includes(key));
   const platforms = config.showPlatforms !== false && selectedStores.length > 1 ? selectedStores.map((key) => STORES[key]).join(', ') : '';
-  return `› ${fresh ? '🆕 ' : ''}[${escapeOfferTitle(shortTitle(offer.title))}](${offer.url})${price(offer, config) ? `\n  ${price(offer, config).trim()}` : ''}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${platforms ? `\n  ${platforms}` : ''}`;
+  return `› ${fresh ? `${EMOJIS.GAME_NEW} ` : ''}[${escapeOfferTitle(shortTitle(offer.title))}](${offer.url})${price(offer, config) ? `\n  ${price(offer, config).trim()}` : ''}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${platforms ? `\n  ${platforms}` : ''}`;
 }
 function orderedOffers(offers, now) {
   return [...new Map(offers.map((offer) => [offer.id, offer])).values()].sort((a, b) => {
@@ -86,7 +87,7 @@ function featuredDescription(offer, config, platforms) {
   const platform = platforms[store];
   const summary = escape(String(offer.description || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 220));
   return '**Featured game**\n**[' + escapeOfferTitle(shortTitle(offer.title).slice(0, 100)) + '](' + offer.url + ')**\n' +
-    (platform?.emoji || PLATFORM_STYLE[store]?.emoji || '🎮') + ' **' + STORES[store] + '** · ' + price(offer, config).trim() + '\n**FREE**' +
+    (platform?.emoji || PLATFORM_STYLE[store]?.emoji || EMOJIS.GAMEPAD) + ' **' + STORES[store] + '** · ' + price(offer, config).trim() + '\n**FREE**' +
     (summary ? '\n' + summary : '') + '\n\n';
 }
 
