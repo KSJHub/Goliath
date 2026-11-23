@@ -1234,7 +1234,7 @@ async function verificationLifecycleAudit() {
       const summary={id:'summary',startThread:async()=>{created++;return thread;},edit:async()=>{edits++;}};
       const parent={id:'parent',type:0,threads:{},permissionsFor:member=>({has:()=>member===bot}),send:async()=>{summaries++;return summary;},messages:{fetch:async()=>summary}};
       const guild={id:'guild',roles:{everyone},members:{me:bot,fetch:async()=>subject},channels:{cache:new Map([['parent',parent]]),fetch:async id=>id==='thread'?thread:parent}};
-      const fakeEmbed={setTitle(){return this;},setDescription(){return this;},addFields(){return this;}};
+      const fakeEmbed={setColor(){return this;},setTitle(){return this;},setDescription(){return this;},addFields(){return this;},setFooter(){return this;},setTimestamp(){return this;}};
       const deliver=new Function('verificationStore','setSession','EmbedBuilder',manager.slice(start,end)+'\nreturn deliverVerificationThread;')({getSession:()=>session},(_g,_u,patch)=>{session={...session,...patch};},{from:()=>fakeEmbed});
       const settings={mode:'threaded',channelId:'parent',archiveMinutes:1440,archiveOnSuccess:true,lockOnSuccess:true,archiveOnFailure:true};
       assert.equal(await deliver(guild,'member','member',settings,'join',fakeEmbed,{}, {title:'Verification Pending'}),true);
