@@ -439,7 +439,7 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
     const names=new Set();
     for(const v of imported){const key=v.name.toLowerCase();if(names.has(key))throw new Error('Duplicate names in import.');names.add(key);}
     if(data.defaultMessage!==undefined&&(typeof data.defaultMessage!=='string'||!data.defaultMessage.trim()||data.defaultMessage.length>limit))throw new Error('Invalid default message.');
-    mutate(all=>{if(Object.values(all).some(v=>names.has(v.name.toLowerCase())))throw new Error('An imported preset name already exists. Rename it before importing.');for(const v of imported)all[require('node:crypto').randomUUID()]=v;return all;});
+    welcome.updateWelcomeSection(guildId,s=>{const all={...s.normalPresets?.[scope]};if(Object.values(all).some(v=>names.has(v.name.toLowerCase())))throw new Error('An imported preset name already exists. Rename it before importing.');for(const v of imported)all[require('node:crypto').randomUUID()]=v;return {...s,normalPresets:{...s.normalPresets,[scope]:all},normalDefaults:data.defaultMessage===undefined?s.normalDefaults:{...s.normalDefaults,[scope]:data.defaultMessage.trim()}};},{actorId:userId,action:'welcome_normal_preset_import'});
     return interaction.reply({...panel(),ephemeral:true});
   }
   if(action==='export'){const attachment=new AttachmentBuilder(Buffer.from(JSON.stringify({version:1,scope,presets:Object.values(presets),defaultMessage:config.normalDefaults?.[scope]||normalDefault(scope)},null,2)),{name:'welcome-'+scope+'-presets.json'});return interaction.reply({files:[attachment],ephemeral:true});}
