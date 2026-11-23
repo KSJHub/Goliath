@@ -76,8 +76,14 @@ router.post('/:guildId/normal-presets', async (req,res) => {
     if(action==='activateOriginal'){
       const original=scope==='scheduled'?"**👋 Welcome to our newest members!**\n\nLet's give a warm welcome to our newest arrivals.\n\nWe're delighted to have you here. Make yourself at home and enjoy the community! 🎉":scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.';
       if(scope==='scheduled'){
-        scheduledWelcome.updateScheduledConfig(guildId,{message:original,templateId:null},meta);
-        welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:original}}),meta);
+        // Commit the scheduled message and its default in the same module-section write.
+        // Preserve queue, checkpoints, schedule and all unrelated Welcome settings.
+        welcome.updateWelcomeSection(guildId,s=>({...s,
+          scheduled:{...s.scheduled,message:original,templateId:null,updatedAt:new Date().toISOString()},
+          normalDefaults:{...s.normalDefaults,[scope]:original}
+        }),meta);
+        const binding=embedTemplates.getBinding(guildId,'welcome','scheduled_welcome');
+        if(binding)embedTemplates.unbindTemplate(guildId,'welcome','scheduled_welcome');
       }else welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:original},normalMessages:{...s.normalMessages,[scope]:original},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),meta);
       return success(res,{config:canonicalConfig(guildId)});
     }
