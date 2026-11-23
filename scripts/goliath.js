@@ -929,6 +929,32 @@ async function verificationAnswerAudit() {
   assert.equal(runtime().recover(guild, user).reason, 'staff_approval_continuation_in_progress');
   assert.notEqual(store.getSession(guild, user).state, 'timed_out', 'In-flight staff approval must not be interrupted');
 
+  // Exercise all staff decisions against the real persisted challenge runtime.
+  for (const action of ['approve', 'reject', 'quarantine']) {
+    reset();
+    const pending = runtime().startStep(guild, user, 'staff_approval', {
+      security: { staffApprovalConfig: { timeoutMinutes: 10 } },
+    });
+    assert.equal(pending.ok, true, `Staff approval step must start for ${action}`);
+    const challengeId = pending.challenge.challengeId;
+    const decision = runtime().resolveStaffAction(guild, user, challengeId, 'staff-member', action);
+    assert.equal(decision.complete, true, `Staff ${action} must resolve the pending challenge`);
+    assert.equal(decision.action, action);
+    assert.equal(store.getSession(guild, user).activeChallenge.status, action === 'approve' ? 'passed' : 'failed');
+    assert.equal(runtime().resolveStaffAction(guild, user, challengeId, 'other-staff', action).reason, 'staff_action_in_progress', 'Duplicate staff decisions must be blocked');
+    assert.equal(runtime().submitAnswer(guild, user, user, challengeId, 'anything').reason, 'staff_action_in_progress', 'Member answer must not override staff decision');
+    if (action === 'approve') {
+      assert.equal(decision.resumeFlow, true);
+      assert.equal(store.getSession(guild, user).staffApprovalContinuationPending.challengeId, challengeId);
+      assert(store.getSession(guild, user).completedSecurity.includes('staff_approval'));
+    } else {
+      assert.equal(decision.resumeFlow, false);
+      assert.equal(store.getSession(guild, user).staffActionProcessingPending.action, action);
+      assert.equal(Boolean(decision.quarantine), action === 'quarantine');
+      assert.equal(Boolean(decision.recordFailure), action === 'reject');
+    }
+  }
+
   reset(); numbers = [42, 30, 0];
   const rotating = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { maxChallengeAttempts: 3, regenerateOnFailure: true } } }).challenge;
   numbers = [20, 10, 0];
