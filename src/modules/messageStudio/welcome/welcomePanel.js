@@ -81,7 +81,7 @@ function templatePageButtons(guild,userId,scope,activeTemplateId){
 
 function customTemplateId(scope){return scope==='dm'?'welcome_custom_dm':'welcome_custom_public';}
 function customTemplateName(scope){return scope==='dm'?'Custom DM Welcome':'Custom Public Welcome';}
-function normalDefault(scope){return scope==='scheduled'?"**Welcome to our newest members!**\n\nMake yourself at home and enjoy the community! 🎉":scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.';}
+function normalDefault(scope){return scope==='scheduled'?"**👋 Welcome to our newest members!**\n\nLet's give a warm welcome to our newest arrivals.\n\nWe're delighted to have you here. Make yourself at home and enjoy the community! 🎉":scope==='dm'?'Welcome to {guild}, {username}!':'Welcome {userMention} to **{guild}**! You are member #{memberCount}.';}
 function customEditorModal(guildId,scope){
   const config=welcome.getWelcomeSection(guildId);
   const saved=config.normalMessages?.[scope];
@@ -111,7 +111,7 @@ function normalPresetPanel(guild,userId,scope){
     row(menu),
     row(button(prefix+'load:'+scope,emojiLabel('MOD_CASE_OPEN','Load Message'),ButtonStyle.Primary,!has),button(prefix+'save:'+scope,emojiLabel('PRESETS','Update / Save'),ButtonStyle.Success,!has),button(prefix+'saveAs:'+scope,emojiLabel('ADD','Save As'),ButtonStyle.Success)),
     row(button(prefix+'rename:'+scope,emojiLabel('EDIT','Rename'),ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,emojiLabel('DOCUMENT','Duplicate'),ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,emojiLabel('DELETE','Delete'),ButtonStyle.Danger,!has)),
-    row(button(prefix+'default:'+scope,emojiLabel('USER_STARBOARD','Set Default'),ButtonStyle.Secondary,!has),button(prefix+'restore:'+scope,'Restore Original',ButtonStyle.Secondary),button(prefix+'export:'+scope,emojiLabel('WELCOME_EXPORT','Export'),ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,emojiLabel('VARIABLES','Variables'),ButtonStyle.Secondary)),
+    row(button(prefix+'default:'+scope,emojiLabel('USER_STARBOARD','Set Default'),ButtonStyle.Secondary,!has),button(prefix+'defaults:'+scope,'Manage Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,emojiLabel('WELCOME_EXPORT','Export'),ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,emojiLabel('VARIABLES','Variables'),ButtonStyle.Secondary)),
     row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='scheduled'?'scheduled':scope==='dm'?'dm':'instant'),emojiLabel('BACK','Back')))
   ]};
 }
@@ -367,6 +367,27 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
     return interaction.reply({...panel(),ephemeral:true});
   }
   if(action==='open')return updatePanel(interaction,panel());
+  if(action==='defaults')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle('Welcome · Default Message').setDescription('Edit the saved default independently of the active message, or explicitly load it.\n\n'+(config.normalDefaults?.[scope]||normalDefault(scope)))],components:[row(button('admin:welcome:normal:editDefault:'+scope,'Edit Default',ButtonStyle.Primary),button('admin:welcome:normal:loadDefault:'+scope,'Load Default',ButtonStyle.Success),button('admin:welcome:normal:restore:'+scope,'Restore Original',ButtonStyle.Danger)),row(button('admin:welcome:normal:open:'+scope,emojiLabel('BACK','Back')))]});
+  if(action==='editDefault'){
+    const field=new TextInputBuilder().setCustomId('content').setLabel('Default message').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(limit).setValue((config.normalDefaults?.[scope]||normalDefault(scope)).slice(0,limit));
+    return interaction.showModal(new ModalBuilder().setCustomId('admin:welcome:normal:saveDefault:'+scope).setTitle('Edit Default Message').addComponents(row(field)));
+  }
+  if(action==='saveDefault'&&interaction.isModalSubmit?.()){
+    const content=interaction.fields.getTextInputValue('content').trim();
+    if(!content||content.length>limit)throw new Error('Enter a valid default message.');
+    welcome.updateWelcomeSection(guildId,s=>({...s,normalDefaults:{...s.normalDefaults,[scope]:content}}),{actorId:userId,action:'welcome_normal_default_edit'});
+    return interaction.reply({...panel(),ephemeral:true});
+  }
+  if(action==='loadDefault')return updatePanel(interaction,{embeds:[new EmbedBuilder().setColor(0xfaa61a).setTitle('Activate saved default?').setDescription('This changes the active message source to a normal message. Linked Embed Studio templates are not deleted.')],components:[row(button('admin:welcome:normal:confirmLoadDefault:'+scope,'Activate Default',ButtonStyle.Success),button('admin:welcome:normal:defaults:'+scope,'Cancel'))]});
+  if(action==='confirmLoadDefault'){
+    const content=config.normalDefaults?.[scope]||normalDefault(scope);
+    if(!content.trim()||content.length>limit)throw new Error('Saved default is invalid.');
+    if(scope==='scheduled')scheduledWelcome.updateScheduledConfig(guildId,{message:content,templateId:null},{actorId:userId});
+    else welcome.updateWelcomeSection(guildId,s=>({...s,normalMessages:{...s.normalMessages,[scope]:content},...(scope==='dm'?{dmMessageSource:'custom',dmTemplateId:s.dmTemplateId||'dm_welcome_default'}:{messageSource:'custom'})}),{actorId:userId,action:'welcome_normal_default_load'});
+    clearSelection(guildId,userId,scope);
+    return updatePanel(interaction,panel());
+  }
+
   if(action==='variables'){
     const variables=require('../../../core/guild/guildVariables').variablesForModule('welcome');
     const list=Array.isArray(variables)?variables.map(v=>typeof v==='string'?v:v?.key).filter(Boolean):Object.keys(variables||{});
