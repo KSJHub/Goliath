@@ -1144,6 +1144,17 @@ async function verificationLifecycleAudit() {
     const memberIntelligence = read('./src/events/members/memberIntelligence.js');
     const challengeRuntime = read('./src/modules/securityStudio/verification/verificationChallengeRuntime.js');
     const challengeInteractions = read('./src/modules/securityStudio/verification/verificationChallengeInteractions.js');
+    const verificationApi = read('./src/server/routes/modules/securityStudio/verification.js');
+    const verificationStartup = read('./src/modules/securityStudio/verification/verification.js');
+    // Recovery and dashboard contracts: guard against silent regressions in
+    // session restart, expired modal submissions, and operational visibility.
+    contains(store, 'staffApprovalContinuationPending:null,staffActionProcessingPending:null', 'restart clears stale staff processing locks');
+    contains(store, 'activeChallenge:null,activeSecurityMethod:null', 'restart clears stale security challenge markers');
+    contains(challengeInteractions, 'runtime.recover(interaction.guildId, parsed.userId);', 'answer modal reconciles session state before processing');
+    contains(challengeInteractions, "current.state === 'timed_out'", 'expired answer modal explains timeout');
+    contains(challengeInteractions, "current.state === 'review'", 'staff-review answer modal explains blocked submission');
+    contains(verificationApi, 'sessionSummary: Object.values(section.sessions || {})', 'overview exposes aggregate session counts');
+    contains(verificationStartup, 'if (result.recovered || result.expired || result.clearedMarkers)', 'background recovery logs interrupted staff actions');
     
     // Execute the case-thread delivery helper with isolated Discord/store doubles.
     {
@@ -1233,6 +1244,8 @@ async function verificationLifecycleAudit() {
     contains(panel, 'admin:verification:panelDefaultConfirm', 'confirm before restoring default design');
     contains(panel, 'admin:verification:panelSave', 'Discord panel editor uses shared deployment');
     const dashboard = read('./src/dashboard/js/pages/modules/VerificationEnhanced.jsx');
+    contains(dashboard, 'data?.sessionSummary?.timed_out', 'dashboard displays timed-out session count');
+    contains(dashboard, 'data?.sessionSummary?.review', 'dashboard displays staff review session count');
     contains(dashboard, 'panelDraftDirty.current', 'preserve unsaved dashboard panel drafts');
     contains(dashboard, 'window.setInterval', 'refresh dashboard configuration periodically');
 
