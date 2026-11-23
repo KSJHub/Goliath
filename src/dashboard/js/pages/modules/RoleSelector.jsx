@@ -116,12 +116,14 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
     if (!selectedGroup || selectedGroup.id === 'colours') return;
     if (optionLineCount(editDraft.optionsText) > 25) { setError('A selector supports at most 25 options. Remove excess lines before saving.'); return; }
     if (editDraft.controlMode === 'buttons' && optionLineCount(editDraft.optionsText) > 15) { setError('Button selectors support at most 15 options.'); return; }
+    if (editDraft.selectionMode === 'multiple' && Number(editDraft.minSelections) > parseOptions(editDraft.optionsText, selectedGroup.options).filter(option => option.enabled !== false).length) { setError('Minimum selections cannot exceed the number of enabled options.'); return; }
     if (editDraft.selectionMode === 'multiple' && (Number(editDraft.minSelections) < 0 || Number(editDraft.maxSelections) < 1 || Number(editDraft.minSelections) > Number(editDraft.maxSelections))) { setError('Minimum and maximum selections are invalid.'); return; }
     const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...selectedGroup, ...editDraft, maxSelections: editDraft.selectionMode === 'single' ? 1 : editDraft.maxSelections, options: parseOptions(editDraft.optionsText, selectedGroup.options) }) }), 'Selector group saved.');
     const saved = result?.groups?.find((group) => group.id === selectedGroup.id) || result?.group;
     if (saved) chooseGroup(saved);
   }
   async function createGroup() {
+    if (newDraft.selectionMode === 'multiple' && Number(newDraft.minSelections) > parseOptions(newDraft.optionsText).length) { setError('Minimum selections cannot exceed the number of options.'); return; }
     if (optionLineCount(newDraft.optionsText) > 25 || (newDraft.controlMode === 'buttons' && optionLineCount(newDraft.optionsText) > 15)) { setError('The selector exceeds the supported option limit.'); return; }
     const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...newDraft, options: parseOptions(newDraft.optionsText, []) }) }), 'Custom selector created.');
     const group = result?.group;
