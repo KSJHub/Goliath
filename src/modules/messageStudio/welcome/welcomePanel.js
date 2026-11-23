@@ -343,6 +343,8 @@ function getPreviewTemplate(guildId,userId,scope){
     return preset;
   }
   if(scope==='dm'&&source==='inherit'&&state.source){
+    // Inherited plain messages must render as text, not force the linked public embed.
+    if(config.messageSource==='custom'&&config.normalMessages?.public?.trim())return null;
     return welcome.getAssignedTemplate(guildId,'welcome',config);
   }
   return null;
