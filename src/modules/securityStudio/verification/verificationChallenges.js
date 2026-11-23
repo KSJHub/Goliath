@@ -235,6 +235,7 @@ function nextMinigameRound(guildId, userId, challenge) {
   const game = makeGame(challenge.gameConfig || {});
   const updated = {
     ...challenge,
+    challengeId: `challenge_${token(8)}`,
     prompt: game.prompt,
     gameType: game.gameType,
     round: nextRound,
