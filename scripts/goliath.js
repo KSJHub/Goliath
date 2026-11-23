@@ -1219,6 +1219,7 @@ async function verificationLifecycleAudit() {
     contains(lifecycle, "oldMember?.pending!==true||newMember.pending!==false", 'Discord screening clearance requires a confirmed pending transition');
     contains(lifecycle, 'await manager.handleMemberUpdate(oldMember,newMember)', 'Discord screening clearance delegates to the single manager audit path');
     contains(manager, "'discord_screening_completed'", 'Discord screening clearance is recorded in member history');
+    contains(manager, 'if(!observedTransition)return {handled:false};', 'A non-pending join cannot be mistaken for observed Discord screening clearance');
     contains(manager, 'Approving administrator: not provided by Discord.', 'Screening logs do not invent an approver');
     contains(manager, "await logEvent(m.guild,section,'attempt',", 'Screening clearance writes to the member activity thread');
 
