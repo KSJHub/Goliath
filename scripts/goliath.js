@@ -3064,6 +3064,12 @@ function welcomeEmbedDeliveryAudit() {
     assert(restoration.includes("normalMessages:{...s.normalMessages,[scope]:original}"), 'Instant and DM original restoration must activate their plain messages.');
     assert(dashboard.includes("action:'activateOriginal'"), 'Dashboard must use the consolidated restoration action.');
     assert(!dashboard.includes("action:'editDefault',content:factory"), 'Dashboard must not restore the original default through a separate save.');
+    // Both preset import surfaces must restore the exported default as well as the presets.
+    assert(route.includes("defaults={...defaults,[scope]:validate(data.defaultMessage,limit,'default message')}"), 'Dashboard preset import must restore the validated exported default.');
+    assert(panel.includes("normalDefaults:data.defaultMessage===undefined?s.normalDefaults:{...s.normalDefaults,[scope]:data.defaultMessage.trim()}"), 'Discord preset import must restore the exported default in the same configuration update.');
+    assert(panel.includes("action:'welcome_normal_preset_import'"), 'Discord preset import must identify the mutation for auditing.');
+    assert(dashboard.includes("action:'import'"), 'Dashboard must expose preset JSON import.');
+
 
     
     assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must maintain a per-guild active-run guard.');
