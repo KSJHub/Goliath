@@ -2324,6 +2324,15 @@ function socialLivePresentationAudit() {
     );
     
     const compactCore = core.replace(/\s+/g, '');
+    // The legacy parity wrapper must never replace canonical TikTok LIVE/PAUSED cards.
+    const parityStart = monitor.indexOf('async function applyOne(');
+    const parityEnd = monitor.indexOf('async function applyLiveMessageParity(', parityStart);
+    assert(parityStart >= 0 && parityEnd > parityStart, 'Legacy parity boundary missing');
+    const parityBody = monitor.slice(parityStart, parityEnd).replace(/\s+/g, '');
+    const ownershipGuard = "if(String(account?.platform||'').toLowerCase()==='tiktok'&&liveStatus!=='OFFLINE')returnfalse;";
+    assert(parityBody.includes(ownershipGuard), 'TikTok LIVE/PAUSED must bypass legacy parity');
+    assert(parityBody.indexOf(ownershipGuard) < parityBody.indexOf('awaitfetchMessage('), 'TikTok ownership guard must precede legacy message access');
+
     
     /*
      * LIVE presentation contract.
