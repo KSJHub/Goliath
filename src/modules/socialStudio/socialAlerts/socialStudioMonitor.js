@@ -85,6 +85,12 @@ async function repairLiveRollovers(client, guildId, beforeConfig, result) {
   for (const item of result.results || []) {
     if (item?.isLive !== true || !item.accountId) continue;
     const beforeAccount = beforeSocial.accounts?.[item.accountId]; const currentAccount = latestSocial.accounts?.[item.accountId]; const previous = beforeAccount?.state || {}; const current = currentAccount?.state || {};
+    // TikTok room IDs can change mid-broadcast. Core owns tracked-session recovery.
+    // Never reset a tracked TikTok session or delete its notification on ID churn.
+    if (String(currentAccount?.platform || beforeAccount?.platform || '').toLowerCase() === 'tiktok' &&
+        previous.isLive === true &&
+        (previous.lastLiveMessageId || previous.lastAlertMessageId) &&
+        (previous.lastLiveMessageChannelId || previous.lastAlertChannelId)) continue;
     const previousEventId = previous.liveEventId ? String(previous.liveEventId) : ''; const currentEventId = current.liveEventId ? String(current.liveEventId) : '';
     if (previous.isLive !== true || !previousEventId || !currentEventId || previousEventId === currentEventId || String(current.lastAlertKey || '') === `live:${currentEventId}`) continue;
     const incident = rolloverIncident(guild || { id: guildId }, currentAccount || beforeAccount);
