@@ -1315,6 +1315,9 @@ async function verificationLifecycleAudit() {
       assert(completion.indexOf(integration) > verifiedTransition,
         `Verification must not release ${integration} before confirmed completion`);
     }
+    contains(manager, "'discord_screening_initial_state'", 'Verification records screening state before the Verify button');
+    contains(manager, "'pending_roles_confirmed'", 'Verification records confirmed Pending role assignment');
+    contains(manager, 'Goliath security challenges: not started.', 'Verification timeline distinguishes join checks from challenge completion');
     // Verification audit embeds must retain the agreed member identity, event timing,
     // and colour semantics across pending, success, and failure events.
     for (const [event, color] of [['join', '0xfefefe'], ['success', '0x2ecc71'], ['failure', '0xe74c3c']]) {
