@@ -38,7 +38,9 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const [editDraft, setEditDraft] = useState(blankGroup());
   const [newDraft, setNewDraft] = useState(blankGroup());
   const [wizardStep, setWizardStep] = useState(0);
-  useEffect(() => { setWizardStep(0); setNewDraft(blankGroup()); }, [guildId]);
+  const [wizardPreviewChoices, setWizardPreviewChoices] = useState([]);
+  useEffect(() => { setWizardStep(0); setNewDraft(blankGroup()); setWizardPreviewChoices([]); }, [guildId]);
+  useEffect(() => { setWizardPreviewChoices([]); }, [newDraft.optionsText, newDraft.selectionMode]);
   const [previewChoices, setPreviewChoices] = useState([]);
   useEffect(() => { setPreviewChoices([]); }, [guildId, selectedGroupId, editDraft.optionsText, editDraft.selectionMode]);
   const [panelDraft, setPanelDraft] = useState({id:null,channelId:'',groupIds:[],optionIdsByGroup:{}});
@@ -233,7 +235,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
 
     <section style={{ ...card, display: 'grid', gap: 9 }}>
       <h2 style={{ margin: 0 }}>{E.ADD} New Custom Group</h2>
-      <strong>Step {wizardStep + 1} of 4 — {['Configuration','Options','Appearance','Review'][wizardStep]}</strong>
+      <strong>Step {wizardStep + 1} of 5 — {['Configuration','Options','Appearance','Interactive Preview','Review'][wizardStep]}</strong>
       {wizardStep === 0 && <>
         <Input theme={theme} value={newDraft.name} onChange={e=>setNewDraft({...newDraft,name:e.target.value})} placeholder="Selector name" />
         <Input theme={theme} value={newDraft.emoji} onChange={e=>setNewDraft({...newDraft,emoji:e.target.value})} placeholder="Emoji" />
@@ -243,15 +245,17 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       {wizardStep === 1 && <>
         <textarea value={newDraft.optionsText} onChange={e=>setNewDraft({...newDraft,optionsText:e.target.value})} rows={7} placeholder="emoji | label | description | optional existing role ID" />
         <label><input type="checkbox" checked={newDraft.allowRemove} onChange={e=>setNewDraft({...newDraft,allowRemove:e.target.checked})}/> Allow clearing selections</label>
+        {newDraft.selectionMode === 'multiple' && <><label>Minimum selections <Input theme={theme} type="number" min="0" max="25" value={newDraft.minSelections ?? 0} onChange={e=>setNewDraft({...newDraft,minSelections:Number(e.target.value)})}/></label><label>Maximum selections <Input theme={theme} type="number" min="1" max="25" value={newDraft.maxSelections ?? 25} onChange={e=>setNewDraft({...newDraft,maxSelections:Number(e.target.value)})}/></label></>}
       </>}
       {wizardStep === 2 && <>
         <ThemedSelect theme={theme} value={newDraft.controlMode || 'dropdown'} onChange={e=>setNewDraft({...newDraft,controlMode:e.target.value})}><option value="dropdown">Dropdown</option><option value="buttons">Buttons</option></ThemedSelect>
         {['title','description','color','footer','image','thumbnail'].map(key=><label key={key}>Embed {key}<Input theme={theme} value={newDraft.appearance?.[key] || ''} onChange={e=>setNewDraft({...newDraft,appearance:{...newDraft.appearance,[key]:e.target.value}})}/></label>)}
       </>}
-      {wizardStep === 3 && <div style={card}><h3>{newDraft.appearance?.title || newDraft.name}</h3><p>{newDraft.appearance?.description || newDraft.description}</p>{parseOptions(newDraft.optionsText).map((o,index)=><div key={index}>{o.emoji} {o.label}</div>)}<p>Create this selector, then select it in Panel Publishing to publish it.</p></div>}
+      {wizardStep === 3 && <div style={card}><h3>{newDraft.appearance?.title || newDraft.name}</h3><p>{newDraft.appearance?.description || newDraft.description}</p><strong>Interactive simulation — no Discord roles assigned</strong><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{parseOptions(newDraft.optionsText).map((o,index)=>{const key=String(index);return <button type="button" key={key} style={btn(theme,wizardPreviewChoices.includes(key)?'primary':'default')} onClick={()=>setWizardPreviewChoices(old=>{const next=newDraft.selectionMode==='single'?[key]:old.includes(key)?old.filter(x=>x!==key):[...old,key];const min=Number(newDraft.minSelections)||0;const max=newDraft.selectionMode==='single'?1:Number(newDraft.maxSelections)||25;return next.length<=max&&(next.length>=min||next.length>=old.length)&&(next.length||newDraft.allowRemove)?next:old;})}>{o.emoji} {o.label}</button>;})}</div><p>Selected: {wizardPreviewChoices.length} · Maximum: {newDraft.selectionMode==='single'?1:newDraft.maxSelections||25}</p>{newDraft.allowRemove && !Number(newDraft.minSelections) && <button type="button" style={btn(theme)} onClick={()=>setWizardPreviewChoices([])}>Clear preview</button>}</div>}
+      {wizardStep === 4 && <div style={card}><h3>{newDraft.appearance?.title || newDraft.name}</h3><p>{newDraft.appearance?.description || newDraft.description}</p>{parseOptions(newDraft.optionsText).map((o,index)=><div key={index}>{o.emoji} {o.label}</div>)}<p>Create this selector, then select it in Panel Publishing to publish it.</p></div>}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button disabled={wizardStep===0 || busy} style={btn(theme)} onClick={()=>setWizardStep(s=>s-1)}>Previous Step</button>
-        {wizardStep < 3 ? <button disabled={busy || !newDraft.name.trim() || (wizardStep===1 && !parseOptions(newDraft.optionsText).length) || (wizardStep===2 && newDraft.controlMode==='buttons' && parseOptions(newDraft.optionsText).length>15)} style={btn(theme,'primary')} onClick={()=>setWizardStep(s=>s+1)}>Next Step</button> : <button disabled={busy || !newDraft.name.trim()} style={btn(theme,'primary')} onClick={createGroup}>Create Selector</button>}
+        {wizardStep < 4 ? <button disabled={busy || !newDraft.name.trim() || (wizardStep===1 && (!parseOptions(newDraft.optionsText).length || parseOptions(newDraft.optionsText).length>25 || (newDraft.selectionMode==='multiple' && (Number(newDraft.minSelections)<0 || Number(newDraft.maxSelections)<1 || Number(newDraft.minSelections)>Number(newDraft.maxSelections))))) || (wizardStep===2 && newDraft.controlMode==='buttons' && parseOptions(newDraft.optionsText).length>15)} style={btn(theme,'primary')} onClick={()=>setWizardStep(s=>s+1)}>Next Step</button> : <button disabled={busy || !newDraft.name.trim()} style={btn(theme,'primary')} onClick={createGroup}>Create Selector</button>}
       </div>
     </section>
 
