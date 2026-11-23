@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../core/ui/emojis');
 
 const crypto = require('crypto');
 const { AuditLogEvent, Events } = require('discord.js');
@@ -160,7 +161,7 @@ function pruneOperations(guildId, now = Date.now()) {
 function operationSummarySuffix(op, role) {
   if (!op?.operationId) return '';
   const roleLabel = role === 'trigger' ? 'trigger' : role === 'output' ? 'output' : 'confirmed result';
-  return `\n\n🤖 **Goliath Operation:** \`${op.operationId}\` • **${op.system || 'Goliath Core'}** • ${roleLabel}`;
+  return `\n\n${EMOJIS.BOT} **Goliath Operation:** \`${op.operationId}\` • **${op.system || 'Goliath Core'}** • ${roleLabel}`;
 }
 
 function registerOperation(event) {
@@ -305,7 +306,7 @@ function ensureGoliathOutputCapture(client) {
         category: 'goliath',
         action: 'send',
         title: 'Goliath Output Sent',
-        icon: '📤',
+        icon: EMOJIS.LEAVE,
         guild: message.guild,
         channel: message.channel || null,
         actor: actorMemberSnapshot(message.guild, message.member, client.user),
@@ -367,7 +368,7 @@ function normalize(input = {}) {
     category: input.category || 'system',
     action: input.action || 'observe',
     title: input.title || input.type || 'Audit Event',
-    icon: input.icon || '🧾',
+    icon: input.icon || EMOJIS.CASE,
     summary: input.summary || null,
     source: input.source || 'Discord Gateway',
     result: input.result || 'Observed',
