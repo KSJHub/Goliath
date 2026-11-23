@@ -940,7 +940,8 @@ async function verificationAnswerAudit() {
     const decision = runtime().resolveStaffAction(guild, user, challengeId, 'staff-member', action);
     assert.equal(decision.complete, true, `Staff ${action} must resolve the pending challenge`);
     assert.equal(decision.action, action);
-    assert.equal(store.getSession(guild, user).activeChallenge.status, action === 'approve' ? 'passed' : 'failed');
+    if (action === 'approve') assert.equal(store.getSession(guild, user).activeChallenge, null, 'Approved challenge must be cleared after marking staff approval complete');
+    else assert.equal(store.getSession(guild, user).activeChallenge?.status, 'failed', 'Rejected or quarantined staff challenge must be resolved');
     assert.equal(runtime().resolveStaffAction(guild, user, challengeId, 'other-staff', action).reason, 'staff_action_in_progress', 'Duplicate staff decisions must be blocked');
     assert.equal(runtime().submitAnswer(guild, user, user, challengeId, 'anything').reason, 'staff_action_in_progress', 'Member answer must not override staff decision');
     if (action === 'approve') {
