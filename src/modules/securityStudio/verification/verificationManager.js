@@ -46,7 +46,7 @@ function roleIds(s,key){return cleanIds(s.roles?.[key]||[]);}
 function enabledSecurity(s){const sec=s.security||{},map={simple:'simple',captcha:'captcha',minigame:'minigame',account_age:'accountAge',discord_screening:'discordScreening',bot_protection:'botProtection',staff_approval:'staffApproval',one_time_challenge:'oneTimeChallenge',risk_based:'riskBased',rejoin_history:'rejoinHistory'};const ordered=Array.isArray(s.flow?.orderedSecurity)?s.flow.orderedSecurity:[];return unique([...ordered.filter(k=>map[k]&&sec[map[k]]===true),...Object.keys(map).filter(k=>sec[map[k]]===true)]);}
 function hasAnyRole(m,ids){return cleanIds(ids).some(id=>m.roles.cache.has(id));}
 function isBypass(m,s){return hasAnyRole(m,roleIds(s,'bypass'))||(s.allowStaffBypass&&canManageVerification(m));}
-async function logEvent(g,section,type,content){
+async function logEvent(g,section,type,content,subjectUserId=null){
   if(!content)return false;
   const configured=section.settings?.logs?.[`${type}ChannelId`]||section.settings?.logChannelId;
   const c=configured?(g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null)):null;
@@ -71,7 +71,7 @@ async function logEvent(g,section,type,content){
   if(type==='attempt'&&raw.includes('completed Discord Membership Screening'))style={...style,title:'Membership Screening Complete',status:'Screening passed',emoji:'✅'};
   if(type==='failure'&&raw.includes('Challenge remains active.'))style={...style,title:'Incorrect '+(methodLabel||'Security')+' Answer',status:'Retry available'};
   const mention=raw.match(/<@!?(\d{15,25})>/);
-  const userId=mention?.[1]||null;
+  const userId=mention?.[1]||(/^[0-9]{15,25}$/.test(String(subjectUserId||''))?String(subjectUserId):null);
   const member=userId?(g.members?.cache?.get(userId)||await g.members?.fetch?.(userId).catch(()=>null)):null;
   const username=member?.user?.username||null;
   let details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
