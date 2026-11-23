@@ -902,7 +902,15 @@ async function verificationAnswerAudit() {
   const timedSettings = { security: { sessionTimeoutMinutes: 1, captchaConfig: { maxChallengeAttempts: 3 } } };
   store.updateSettings(guild, { security: { ...store.getVerificationSection(guild).settings.security, sessionTimeoutMinutes: 1 } });
   assert.equal(runtime().startStep(guild, user, 'captcha', timedSettings).reason, 'session_expired');
+  assert.equal(store.getSession(guild, user).state, 'timed_out');
+  assert.equal(store.getSession(guild, user).activeChallenge, null);
+  assert.equal(runtime().submitAnswer(guild, user, user, 'expired-id', '72').reason, 'terminal_session');
+  assert.equal(runtime().resolveStaffAction(guild, user, 'expired-id', 'staff', 'approve').reason, 'terminal_session');
+  reset();
+  store.upsertSession(guild, user, { startedAt: new Date(Date.now() - 3600000).toISOString() });
   assert.equal(runtime().submitAnswer(guild, user, user, 'expired-id', '72').reason, 'session_expired');
+  reset();
+  store.upsertSession(guild, user, { startedAt: new Date(Date.now() - 3600000).toISOString() });
   assert.equal(runtime().resolveStaffAction(guild, user, 'expired-id', 'staff', 'approve').reason, 'session_expired');
 
   reset(); numbers = [42, 30, 0];
