@@ -3234,6 +3234,13 @@ function welcomeEmbedDeliveryAudit() {
     assert(panel.includes("normalDefaults:data.defaultMessage===undefined?s.normalDefaults:{...s.normalDefaults,[scope]:data.defaultMessage.trim()}"), 'Discord preset import must restore the exported default in the same configuration update.');
     assert(panel.includes("action:'welcome_normal_preset_import'"), 'Discord preset import must identify the mutation for auditing.');
     assert(dashboard.includes("action:'import'"), 'Dashboard must expose preset JSON import.');
+    assert(route.includes("const imported=data.presets.map(v=>"), 'Dashboard preset import must validate the full payload before mutation.');
+    assert(route.includes("if(names.has(key))throw new Error('Preset name already exists or is duplicated in import.')"), 'Dashboard preset import must reject duplicate names within the same export.');
+    assert(dashboard.includes("defaultMessage:savedDefault"), 'Dashboard preset export must include the effective default even when not customized.');
+    assert(dashboard.includes("name:copyName()"), 'Dashboard preset duplication must propose a distinct name.');
+    assert(panel.includes("action==='confirmRestore'"), 'Discord Welcome must retain original-message restoration.');
+    assert(panel.includes("scheduled:{...s.scheduled,message:content,templateId:null"), 'Discord Scheduled Welcome restoration must update the scheduled message atomically.');
+
 
 
     
