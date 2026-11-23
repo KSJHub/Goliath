@@ -246,8 +246,10 @@ router.post('/:guildId/groups/:groupId/sync-template', async (req, res) => {
     if (!g) throw new Error('Guild is unavailable.');
     const group = roleSelector.getGroup(id, req.params.groupId);
     if (!group) throw new Error('Selector not found.');
-    await panel.syncDeploymentState(g, group.id);
-    return success(res, { groupId: group.id, synced: true });
+    const sync = await panel.syncDeploymentState(g, group.id);
+    const failures = sync.results.filter(result => !result.updated && !['retired'].includes(result.reason));
+    if (failures.length) return res.status(409).json({ success: false, error: 'One or more published selector panels could not be refreshed.', groupId: group.id, sync });
+    return success(res, { groupId: group.id, synced: true, sync });
   } catch (error) { return failure(res, error); }
 });
 
