@@ -1316,6 +1316,9 @@ async function verificationLifecycleAudit() {
         `Verification must not release ${integration} before confirmed completion`);
     }
     contains(manager, "'discord_screening_initial_state'", 'Verification records screening state before the Verify button');
+    contains(manager, 'Discord application approval actor/event not available to Goliath', 'Join audit does not fabricate Discord application approval attribution');
+    contains(manager, "title:'Discord Entry State Observed',status:'Unverified'", 'Pre-challenge entry events do not falsely claim verification in progress');
+    contains(manager, "'pending_roles_not_configured'", 'Missing optional Pending role configuration is explicitly recorded');
     contains(manager, "'pending_roles_confirmed'", 'Verification records confirmed Pending role assignment');
     contains(manager, 'Goliath security challenges: not started.', 'Verification timeline distinguishes join checks from challenge completion');
     // Verification audit embeds must retain the agreed member identity, event timing,
