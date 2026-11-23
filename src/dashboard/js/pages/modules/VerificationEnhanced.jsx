@@ -447,6 +447,9 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <Stat theme={theme} label="Panels" value={panels.length} />
         <Stat theme={theme} label="Verified" value={analytics.verified || 0} />
         <Stat theme={theme} label="Failed" value={analytics.failed || 0} />
+        <Stat theme={theme} label="Awaiting verification" value={(data?.sessionSummary?.pending || 0) + (data?.sessionSummary?.verifying || 0)} hint="Pending or actively verifying" />
+        <Stat theme={theme} label="Staff review" value={data?.sessionSummary?.review || 0} />
+        <Stat theme={theme} label="Timed out" value={data?.sessionSummary?.timed_out || 0} />
         <Stat theme={theme} label="Health" value={health?.warnings?.length ? 'Needs attention' : 'Healthy'} hint={`${health?.warnings?.length || 0} warning(s)`} />
       </section>
 
