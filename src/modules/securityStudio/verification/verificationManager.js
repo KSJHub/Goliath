@@ -138,7 +138,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     const caseSummaryOptions=threadId=>{
       const card=EmbedBuilder.from(embed);
       card.setTitle(`💎 Verification Case • ${style.title}`);
-      card.setDescription('**Goliath Verification Studio**\\nIndividual member security activity and review.');
+      card.setDescription('**Goliath Verification Studio**\nIndividual member security activity and review.');
       card.addFields({name:'🧵 Activity Thread',value:threadId?`[Open verification activity](https://discord.com/channels/${g.id}/${threadId})`:'Creating secure activity thread…',inline:false});
       return {embeds:[card],allowedMentions:{parse:[],users:[],roles:[]}};
     };
