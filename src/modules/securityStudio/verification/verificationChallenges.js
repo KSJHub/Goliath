@@ -20,6 +20,7 @@ function getSession(guildId, userId) {
 function ensureSession(guildId, userId) {
   const session = getSession(guildId, userId);
   if (!session) throw new Error('No active Verification session exists for this member.');
+  if (session.state === 'rejected') throw new Error('Verification was rejected by staff.');
   if (session.state === 'verified') throw new Error('This member is already verified.');
   if (session.state === 'quarantined') throw new Error('This member is quarantined and cannot start another challenge.');
   if (session.state === 'review') throw new Error('This member is awaiting staff review and cannot start another challenge.');
@@ -27,7 +28,7 @@ function ensureSession(guildId, userId) {
 }
 
 function expiresIn(seconds) {
-  return new Date(Date.now() + Math.max(15, Number(seconds || 60)) * 1000).toISOString();
+  return new Date(Date.now() + Math.max(1, Number(seconds || 60)) * 1000).toISOString();
 }
 
 function isExpired(challenge) {
@@ -259,6 +260,7 @@ function answer(guildId, userId, challengeId, suppliedAnswer) {
   if (challenge.method === 'staff_approval') return { ok: false, reason: 'staff_action_required' };
   if (challenge.status !== 'pending') return { ok: false, reason: 'challenge_closed' };
   if (isExpired(challenge)) return expire(guildId, userId, challengeId);
+  if (Number(challenge.attempts || 0) >= Number(challenge.maxAttempts || 1)) return { ok: false, reason: 'challenge_closed', complete: true };
   if (!hasAnswerVerifier(challenge)) return { ok: false, reason: 'challenge_unavailable', complete: false };
   const attempts = Number(challenge.attempts || 0) + 1;
   const correct = hash(`${challenge.answerSalt}:${normalizeAnswer(suppliedAnswer)}`) === challenge.answerHash;
