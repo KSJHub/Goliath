@@ -105,12 +105,16 @@ async function publishResumedChallenge(interaction, userId, resumed) {
 
 async function handleMemberAction(interaction, parsed) {
   if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge belongs to another member.'), flags: MessageFlags.Ephemeral }); return true; }
+  const recovery = runtime.recover(interaction.guildId, parsed.userId);
+  if (recovery?.reason === 'session_expired' || runtime.sessionState(interaction.guildId, parsed.userId).state === 'timed_out') {
+    await interaction.reply({ content: emojiLabel('ERROR', 'Your Verification session has timed out. Contact server staff to restart Verification.'), flags: MessageFlags.Ephemeral });
+    return true;
+  }
   const state = runtime.sessionState(interaction.guildId, parsed.userId); const challenge = state.activeChallenge;
   const session = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
   const config = verificationStore.getVerificationSection(interaction.guildId);
   if (Number(session.securityConfigRevision || 0) !== Number(config.configRevision || 1)) { await interaction.reply({ content: emojiLabel('ERROR', 'Verification settings changed. Start Verification again for the updated checks.'), flags: MessageFlags.Ephemeral }); return true; }
   if (!challenge || challenge.challengeId !== parsed.challengeId || challenge.status !== 'pending' || ['verified','quarantined','review','rejected','failed','timed_out'].includes(state.state)) { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.'), flags: MessageFlags.Ephemeral }); return true; }
-  const recovery = runtime.recover(interaction.guildId, parsed.userId);
   if (recovery?.changed && runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge?.status !== 'pending') { await interaction.reply({ content: emojiLabel('ERROR', 'This Verification challenge has expired. Start Verification again.'), flags: MessageFlags.Ephemeral }); return true; }
   await interaction.showModal(buildAnswerModal(parsed.userId, challenge));
   return true;
