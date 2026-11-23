@@ -318,6 +318,14 @@ async function releaseDeferredJoinRoles(member) {
   const assigned = await applyAutoRoles(member, { reason: 'Goliath verified member Auto Roles' });
   const required = cleanRoleIds(pending.roleIds).filter(id => getAutoRolesSection(guildId).joinRoles.includes(id));
   const remaining = required.filter(id => !member.roles.cache.has(id) && !assigned.some(role => role.id === id));
+  if (remaining.length && guildManager.isModuleEnabled(guildId, 'verification')) {
+    try {
+      require('../../securityStudio/verification/verificationStore').addSecurityHistory(guildId, member.id, {
+        type: 'verification_deferred_release_incomplete', integration: 'auto_roles',
+        failedRoleIds: remaining.slice(0, 50)
+      });
+    } catch (error) { console.error('[Auto Roles] Failed to record deferred verification role release:', error); }
+  }
   updateAutoRolesSection(guildId, (section) => {
     const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
     const current = deferredJoinRoles[member.id];
