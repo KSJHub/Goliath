@@ -43,17 +43,11 @@ async function resumeAfterScreening(oldMember,newMember){
   const guildId=newMember.guild.id,settings=settingsFor(guildId);
   const session=verificationStore.getSession(guildId,newMember.id);
   if(!session)return;
-  verificationStore.addSecurityHistory(guildId,newMember.id,{
-    type:'discord_membership_screening_cleared',source:'discord_member_pending_transition',
-    actor:'unknown',previousPending:true,currentPending:false
-  });
-  verificationStore.incrementAnalytics(guildId,{screeningCompleted:1,lastScreeningCompletedAt:new Date().toISOString()});
+  // Centralize the screening event in the manager so the member-update
+  // listener and the verification flow cannot emit duplicate clearance logs.
   try{
     const manager=require('../../modules/securityStudio/verification/verificationManager');
-    const section=verificationStore.getVerificationSection(guildId);
-    await manager.logEvent(newMember.guild,section,'attempt',
-      `<@${newMember.id}> completed Discord Membership Screening. Discord confirmed that membership is no longer pending. Approving administrator: not provided by Discord.`,
-      newMember.id);
+    await manager.handleMemberUpdate(oldMember,newMember);
   }catch(error){console.error('[Verification] Screening transition log failed:',error?.message||error);}
   if(settings.security?.discordScreening!==true||session.state!=='verifying'||(session.completedSecurity||[]).includes('discord_screening'))return;
   const result=await verificationFlow.resumeVerification({guild:newMember.guild,member:newMember,user:newMember.user});
