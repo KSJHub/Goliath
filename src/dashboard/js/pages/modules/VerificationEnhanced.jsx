@@ -645,10 +645,10 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           <Field theme={theme} label="Image URL" value={draft.imageUrl} onChange={(value) => setEditedPanelDraft((current) => ({ ...current, imageUrl: value }))} />
           <Field theme={theme} label="Thumbnail URL" value={draft.thumbnailUrl} onChange={(value) => setEditedPanelDraft((current) => ({ ...current, thumbnailUrl: value }))} />
         </div>
-        <Field theme={theme} label="Description" value={draft.description} onChange={(value) => setDraft((current) => ({ ...current, description: value }))} multiline />
+        <Field theme={theme} label="Description" value={draft.description} onChange={(value) => setEditedPanelDraft((current) => ({ ...current, description: value }))} multiline />
         <label style={{ display: 'grid', gap: 8, maxWidth: 320 }}>
           <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>BUTTON STYLE</span>
-          <ThemedSelect theme={theme} value={draft.buttonStyle} onChange={(event) => setDraft((current) => ({ ...current, buttonStyle: event.target.value }))} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
+          <ThemedSelect theme={theme} value={draft.buttonStyle} onChange={(event) => setEditedPanelDraft((current) => ({ ...current, buttonStyle: event.target.value }))} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
             <option value="success">Success</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="danger">Danger</option>
           </ThemedSelect>
         </label>
