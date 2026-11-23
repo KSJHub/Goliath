@@ -217,19 +217,30 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
   const pendingTemplate=state.templateId?embedTemplateManager.getTemplate(guild.id,state.templateId):null;
   const hasUnsavedSelection=Boolean(state.source&&(state.source!==config.messageSource||(state.source==='embedStudio'&&state.templateId&&state.templateId!==config.templateId)));
   const components=[
-    row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:channel').setPlaceholder(emojiLabel('WELCOME_CHANNEL','Select Welcome Channel')).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-    row(sourceMenu(config,userId,guild.id,'public'))
+    row(sourceMenu(config,userId,guild.id,'public')),
+    row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:channel').setPlaceholder(emojiLabel('WELCOME_CHANNEL','Choose destination')).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1))
   ];
   if(source==='embedStudio')components.push(row(templateMenu(guild,template?.templateId||config.templateId,userId,'public')));
-  components.push(row(button('admin:welcome:applySource',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId))),button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,(source==='custom'&&hasUnsavedSelection)||(source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId)))),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
-  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings')),...(source!=='embedStudio'?[button('admin:welcome:normal:open:public','Presets',ButtonStyle.Primary)]:[]),...(source==='embedStudio'?templatePageButtons(guild,userId,'public',template?.templateId||config.templateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardPublic','Discard Selection',ButtonStyle.Secondary)]:[])));
+  const canApply=source!=='embedStudio'||Boolean(state.templateId||(config.messageSource==='embedStudio'&&config.templateId));
+  components.push(row(
+    button('admin:welcome:applySource',source==='custom'?emojiLabel('BUILDER','Edit Message'):emojiLabel('PRESETS','Apply Source'),ButtonStyle.Primary,!canApply),
+    button('admin:welcome:normal:open:public',emojiLabel('PRESETS','Preset Manager'),ButtonStyle.Secondary),
+    button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,!canApply||(source==='custom'&&hasUnsavedSelection)),
+    button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)
+  ));
+  components.push(row(
+    button('admin:welcome',emojiLabel('BACK','Back')),
+    button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings')),
+    ...(source==='embedStudio'?templatePageButtons(guild,userId,'public',template?.templateId||config.templateId):[]),
+    ...(hasUnsavedSelection?[button('admin:welcome:discardPublic','Discard',ButtonStyle.Secondary)]:[])
+  ));
   const issues=health.warnings||[];
-  const next=hasUnsavedSelection&&source==='custom'?emojiLabel('PRESETS','Choose Save Message to edit and save your custom Welcome before previewing.'):hasUnsavedSelection?emojiLabel('WELCOME_PREVIEW','Preview your selection, then Save Message to make it live.'):!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
+  const next=hasUnsavedSelection&&source==='custom'?emojiLabel('PRESETS','Choose Edit Message to edit and save your custom Welcome before previewing.'):hasUnsavedSelection?emojiLabel('WELCOME_PREVIEW','Preview your selection, then Apply Source to make it live.'):!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
-    .setTitle(emojiLabel('WELCOME_INSTANT','Welcome · Instant'))
+    .setTitle(emojiLabel('BUILDER','Public Message Builder'))
     .setDescription(['Configure the public greeting. Preview checks your selection; Send Test delivers the saved message.','',
-      '### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Destination**　${config.channelId?`<#${config.channelId}>`:emojiLabel('INACTIVE','Choose below')}`,`**Source**　${sourceLabel(config.messageSource)}`,`**Saved message**　${template?.name||'Not selected'}`,
-      ...(hasUnsavedSelection?[`**Pending selection**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, source==='custom'?'**Not live yet** — Save Message opens the custom editor. Save your message before previewing. Send Test uses the saved live message.':'**Not live yet** — Preview shows this selection. Send Test uses the saved live message until you choose Save Message.']:[]),'',
+      '### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Destination**　${config.channelId?`<#${config.channelId}>`:emojiLabel('INACTIVE','Choose below')}`,`**Source**　${sourceLabel(config.messageSource)}`,`**Saved message**　${health.templateName||template?.name||'Not selected'}`,'','### '+emojiLabel('PRESETS','Message Library'),`**Presets**　${Object.keys(config.normalPresets?.public||{}).length} saved`,...(config.messageSource==='custom'&&config.normalMessages?.public?['**Message content**',config.normalMessages.public.slice(0,900)]:[]),
+      ...(hasUnsavedSelection?[`**Pending selection**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, source==='custom'?'**Not live yet** — Edit Message opens the custom editor. Save your message before previewing. Send Test uses the saved live message.':'**Not live yet** — Preview shows this selection. Send Test uses the saved live message until you choose Apply Source.']:[]),'',
       '### ' + emojiLabel('DELIVERY', 'Delivery'),`**Member pings**　${config.allowUserPing?emojiLabel('ACTIVE','On'):emojiLabel('INACTIVE', 'Off')}　•　**Role pings**　${config.allowRolePings?emojiLabel('ACTIVE','On'):emojiLabel('INACTIVE', 'Off')}`,`**Bots**　${config.ignoreBots?'Excluded':'Included'}　•　**DM**　${config.dmEnabled?'On':'Off'}`,`**Sent**　${config.analytics?.publicSent||0}　•　**Failed**　${config.analytics?.publicFailed||0}`,'',
       '### ' + emojiLabel('STATUS', 'Status'),`**Readiness**　${enabled&&config.channelId?emojiLabel('ACTIVE', 'Configured'):emojiLabel('SETUP_REQUIRED', 'Setup required')}`,`**Health**　${health.healthy?emojiLabel('HEALTHY', 'Healthy'):emojiLabel('WARNING', 'Needs attention')}`,`**Pending delivery**　${health.deferredWaiting ?? 'Unknown'}　•　**Partial delivery**　${health.deferredPartial ?? 'Unknown'}`,'',
       '### ' + emojiLabel('NEXT_STEP', 'Next Step'),next].join('\n').slice(0,4096))
@@ -245,17 +256,28 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const hasUnsavedSelection=Boolean(state.source&&(state.source!==config.dmMessageSource||(state.source==='embedStudio'&&state.templateId&&state.templateId!==config.dmTemplateId)));
   const components=[row(sourceMenu(config,userId,guild.id,'dm'))];
   if(source==='embedStudio')components.push(row(templateMenu(guild,dmTemplate?.templateId||config.dmTemplateId,userId,'dm')));
-  components.push(row(button('admin:welcome:dmApply',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId))),button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,(source==='custom'&&hasUnsavedSelection)||(source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId)))),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
-  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings')),...(source!=='embedStudio'?[button('admin:welcome:normal:open:dm','Presets',ButtonStyle.Primary)]:[]),...(source==='embedStudio'?templatePageButtons(guild,userId,'dm',dmTemplate?.templateId||config.dmTemplateId):[]),...(hasUnsavedSelection?[button('admin:welcome:discardDm','Discard Selection',ButtonStyle.Secondary)]:[])));
-  const message=config.dmMessageSource==='inherit'?publicTemplate?.name||'Same as Public':dmTemplate?.name||'Not selected';
+  const canApply=source!=='embedStudio'||Boolean(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId));
+  components.push(row(
+    button('admin:welcome:dmApply',source==='custom'?emojiLabel('BUILDER','Edit Message'):emojiLabel('PRESETS','Apply Source'),ButtonStyle.Primary,!canApply),
+    button('admin:welcome:normal:open:dm',emojiLabel('PRESETS','Preset Manager'),ButtonStyle.Secondary),
+    button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary,!canApply||(source==='custom'&&hasUnsavedSelection)),
+    button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)
+  ));
+  components.push(row(
+    button('admin:welcome',emojiLabel('BACK','Back')),
+    button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings')),
+    ...(source==='embedStudio'?templatePageButtons(guild,userId,'dm',dmTemplate?.templateId||config.dmTemplateId):[]),
+    ...(hasUnsavedSelection?[button('admin:welcome:discardDm','Discard',ButtonStyle.Secondary)]:[])
+  ));
+  const message=config.dmMessageSource==='inherit'?'Same as Public':config.dmMessageSource==='custom'&&config.normalMessages?.dm?'Normal message':dmTemplate?.name||'Not selected';
   return {embeds:[new EmbedBuilder().setColor(config.dmEnabled?0x57f287:0x747f8d)
-    .setTitle(emojiLabel('WELCOME_DM','Welcome · Direct Message'))
+    .setTitle(emojiLabel('BUILDER','DM Message Builder'))
     .setDescription(['Configure private greetings. Preview checks your selection; Send Test delivers the saved DM message.','',
-      '### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Source**　${sourceLabel(config.dmMessageSource)}`,`**Message**　${message}`,
+      '### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Source**　${sourceLabel(config.dmMessageSource)}`,`**Message**　${message}`,'','### '+emojiLabel('PRESETS','Message Library'),`**Presets**　${Object.keys(config.normalPresets?.dm||{}).length} saved`,...(config.dmMessageSource==='custom'&&config.normalMessages?.dm?['**Message content**',config.normalMessages.dm.slice(0,900)]:[]),
       ...(hasUnsavedSelection?[`**Pending selection**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, source==='custom'?'**Not live yet** — Save Message opens the custom editor. Save your message before previewing. Send Test uses the saved live message.':'**Not live yet** — Preview shows this selection. Send Test uses the saved live message until you choose Save Message.']:[]),'',
       '### ' + emojiLabel('DELIVERY', 'Delivery'),`**Direct messages**　${config.dmEnabled?emojiLabel('ACTIVE', 'Enabled'):emojiLabel('INACTIVE','Disabled')}`,`**Sent**　${config.analytics?.dmSent||0}　•　**Failed**　${config.analytics?.dmFailed||0}`,'',
       '### ' + emojiLabel('STATUS', 'Status'),`**Readiness**　${config.dmEnabled?emojiLabel('ACTIVE','Active'):emojiLabel('INACTIVE','Paused')}`,`**Message sync**　${config.dmMessageSource==='inherit'?'Follows Public Welcome':'Independent template'}`,'',
-      '### ' + emojiLabel('NEXT_STEP', 'Next Step'),hasUnsavedSelection&&source==='custom'?emojiLabel('PRESETS','Choose Save Message to edit and save your custom DM before previewing.'):hasUnsavedSelection?emojiLabel('WELCOME_PREVIEW','Preview your selection, then Save Message to make it live.'):!config.dmEnabled?emojiLabel('SETTINGS','Open Settings to enable DM delivery.'):source==='custom'?emojiLabel('PRESETS','Save Message to edit your custom DM.'):emojiLabel('WELCOME_PREVIEW','Preview or send yourself a test DM.')].join('\n'))
+      '### ' + emojiLabel('NEXT_STEP', 'Next Step'),hasUnsavedSelection&&source==='custom'?emojiLabel('PRESETS','Choose Save Message to edit and save your custom DM before previewing.'):hasUnsavedSelection?emojiLabel('WELCOME_PREVIEW','Preview your selection, then Save Message to make it live.'):!config.dmEnabled?emojiLabel('SETTINGS','Open Settings to enable DM delivery.'):source==='custom'?emojiLabel('PRESETS','Edit Message to edit your custom DM.'):emojiLabel('WELCOME_PREVIEW','Preview or send yourself a test DM.')].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components};
 }
 
