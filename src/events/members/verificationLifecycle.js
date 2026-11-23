@@ -35,7 +35,30 @@ async function applyRaidPressure(member){
   verificationStore.incrementAnalytics(member.guild.id,{raidEscalations:1,lastRaidEscalationAt:new Date().toISOString()});
 }
 async function notifyContinuation(member,result){if(!member?.user||!result)return;if(result.challenge&&typeof challengeInteractions.memberChallengePayload==='function'){const payload=challengeInteractions.memberChallengePayload(member.id,result.challenge);await member.user.send({content:result.message||'Continue Verification.',...payload}).catch(()=>null);return;}if(result.complete)await member.user.send({content:result.message||'Verification complete.'}).catch(()=>null);}
-async function resumeAfterScreening(oldMember,newMember){if(!newMember?.guild||newMember.user?.bot||!verificationEnabled(newMember.guild.id))return;if(oldMember?.pending!==true||newMember.pending===true)return;const guildId=newMember.guild.id,settings=settingsFor(guildId);if(settings.security?.discordScreening!==true)return;const session=verificationStore.getSession(guildId,newMember.id);if(!session||session.state!=='verifying'||(session.completedSecurity||[]).includes('discord_screening'))return;verificationStore.addSecurityHistory(guildId,newMember.id,{type:'discord_screening_completed',automaticResume:true});verificationStore.incrementAnalytics(guildId,{screeningCompleted:1,lastScreeningCompletedAt:new Date().toISOString()});const result=await verificationFlow.resumeVerification({guild:newMember.guild,member:newMember,user:newMember.user});await notifyContinuation(newMember,result);}
+async function resumeAfterScreening(oldMember,newMember){
+  if(!newMember?.guild||newMember.user?.bot||!verificationEnabled(newMember.guild.id))return;
+  // Discord exposes the pending -> cleared transition, but not reliably the
+  // identity of the moderator who approved a native membership application.
+  if(oldMember?.pending!==true||newMember.pending!==false)return;
+  const guildId=newMember.guild.id,settings=settingsFor(guildId);
+  const session=verificationStore.getSession(guildId,newMember.id);
+  if(!session)return;
+  verificationStore.addSecurityHistory(guildId,newMember.id,{
+    type:'discord_membership_screening_cleared',source:'discord_member_pending_transition',
+    actor:'unknown',previousPending:true,currentPending:false
+  });
+  verificationStore.incrementAnalytics(guildId,{screeningCompleted:1,lastScreeningCompletedAt:new Date().toISOString()});
+  try{
+    const manager=require('../../modules/securityStudio/verification/verificationManager');
+    const section=verificationStore.getVerificationSection(guildId);
+    await manager.logEvent(newMember.guild,section,'attempt',
+      `<@${newMember.id}> completed Discord Membership Screening. Discord confirmed that membership is no longer pending. Approving administrator: not provided by Discord.`,
+      newMember.id);
+  }catch(error){console.error('[Verification] Screening transition log failed:',error?.message||error);}
+  if(settings.security?.discordScreening!==true||session.state!=='verifying'||(session.completedSecurity||[]).includes('discord_screening'))return;
+  const result=await verificationFlow.resumeVerification({guild:newMember.guild,member:newMember,user:newMember.user});
+  await notifyContinuation(newMember,result);
+}
 async function ensureQuarantineFromRoleChange(oldMember,newMember){if(!newMember?.guild||newMember.user?.bot||!verificationEnabled(newMember.guild.id))return;const settings=settingsFor(newMember.guild.id);if(settings.quarantine?.enabled===false)return;const ids=Array.isArray(settings.roles?.quarantine)?settings.roles.quarantine.map(String):[];if(!ids.length)return;const added=ids.some(id=>!oldMember?.roles?.cache?.has?.(id)&&newMember.roles?.cache?.has?.(id));if(!added)return;const session=verificationStore.getSession(newMember.guild.id,newMember.id);if(!session||session.state!=='quarantined')return;await verificationQuarantine.ensureQuarantineCase(newMember.guild,newMember,'Verification quarantine threshold or staff action');}
 async function resetJourneyOnLeave(member){if(!member?.guild||member.user?.bot||!verificationEnabled(member.guild.id))return;const guildId=member.guild.id,settings=settingsFor(guildId);if(settings.flow?.resetActiveSessionOnLeave===false)return;const session=verificationStore.getSession(guildId,member.id);if(!session)return;verificationStore.addSecurityHistory(guildId,member.id,{type:'member_left',previousState:session.state,completedSecurity:Array.isArray(session.completedSecurity)?session.completedSecurity:[]});if(session.quarantineChannelId)await verificationQuarantine.closeQuarantineCase(member.guild,member.id,'Verification member left the server').catch(error=>console.error('[Verification] Quarantine case cleanup failed:',error?.message||error));verificationStore.upsertSession(guildId,member.id,{state:'new',requiredSecurity:[],completedSecurity:[],failedAttempts:0,activeSecurityMethod:null,activeChallenge:null,startedAt:null,verifiedAt:null,quarantinedAt:null,quarantineChannelId:null,raidPressure:false,raidPressureAt:null,raidJoinCount:0,leftAt:new Date().toISOString()});verificationStore.clearAttempts(guildId,member.id);}
 module.exports=[{name:'guildMemberAdd',async execute(member){try{await applyRaidPressure(member);}catch(error){console.error('[Verification] Raid pressure evaluation failed:',error?.stack||error?.message||error);} }},{name:'guildMemberUpdate',async execute(oldMember,newMember){try{await resumeAfterScreening(oldMember,newMember);await ensureQuarantineFromRoleChange(oldMember,newMember);}catch(error){console.error('[Verification] Member lifecycle continuation failed:',error?.stack||error?.message||error);} }},{name:'guildMemberRemove',async execute(member){try{await resetJourneyOnLeave(member);}catch(error){console.error('[Verification] Leave reset failed:',error?.stack||error?.message||error);} }}];
