@@ -1311,6 +1311,10 @@ async function verificationLifecycleAudit() {
       contains(source, 'verification_deferred_release_incomplete', 'Verification records partial deferred invite role failures');
       contains(source, 'inviteRelease.failed.length', 'Verification inspects failed invite role grants');
     }
+    const welcomeIntegration = read('./src/modules/messageStudio/welcome/welcomeCore.js');
+    contains(welcomeIntegration, "integration: 'welcome'", 'Welcome records incomplete deferred verification deliveries');
+    contains(welcomeIntegration, "failedDestinations:", 'Welcome records undelivered public or DM destinations');
+    contains(welcomeIntegration, "latest.joinedAt === pending.joinedAt", 'Welcome audits only the current membership checkpoint');
     const autoRolesIntegration = read('./src/modules/roleStudio/autoRoles/autoRoles.js');
     contains(autoRolesIntegration, "integration: 'auto_roles'", 'Auto Roles records incomplete deferred verification grants');
     contains(autoRolesIntegration, 'failedRoleIds: remaining.slice(0, 50)', 'Auto Roles preserves outstanding role IDs in security history');
