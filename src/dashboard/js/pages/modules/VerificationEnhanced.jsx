@@ -429,9 +429,14 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
 
   async function resetModule() {
     if (advancedDirty.current) { setError('Save or discard advanced settings before resetting the module.'); return; }
+    if (panelDraftDirty.current && !await goliathDialog.confirm('Resetting Verification will discard your unsaved panel design. Continue?', { title: 'Unsaved Verification Panel Changes', danger: true })) return;
     if (!await goliathDialog.confirm('Reset all Verification settings, analytics and panel records?', { title: 'Reset Verification?', danger: true, confirmLabel: 'Reset Verification' })) return;
-    await act('reset', () => api.resetVerification(guildId, data?.configRevision), 'Verification reset to defaults.');
-    setSelectedPanelId('');
+    await act('reset', async () => {
+      await api.resetVerification(guildId, data?.configRevision);
+      explicitNewPanel.current = false;
+      panelDraftDirty.current = false;
+      setSelectedPanelId('');
+    }, 'Verification reset to defaults.');
   }
 
   if (!guildId) return <EmptyState theme={theme} icon={E.SUCCESS} title="Select a server" description="Select a server to manage Verification." />;
