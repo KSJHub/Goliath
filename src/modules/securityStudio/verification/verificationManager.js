@@ -133,13 +133,14 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
     if(thread?.locked)return false;
     let summaryId=thread?session.logSummaryId:null;
-    // The parent channel receives one branded, editable case card. Its thread
-    // contains the detailed event timeline; subsequent events update the card.
+    // Threaded/hybrid mode: keep the parent as a compact case index.
+    // The detailed identity, event history and evidence stay inside the thread.
     const caseSummaryOptions=threadId=>{
       const card=EmbedBuilder.from(embed);
-      card.setTitle(`💎 Verification Case • ${style.title}`);
-      card.setDescription('**Goliath Verification Studio**\nIndividual member security activity and review.');
-      card.addFields({name:'🧵 Activity Thread',value:threadId?`[Open verification activity](https://discord.com/channels/${g.id}/${threadId})`:'Creating secure activity thread…',inline:false});
+      card.setColor(0xfefefe);
+      card.setTitle('🧵 Verification • '+(username||userId).slice(0,48));
+      card.setDescription(`**Member:** <@${userId}>\\n**Status:** ${style.status||'Pending'}\\n**Activity:** ${threadId?`[Open member case](https://discord.com/channels/${g.id}/${threadId})`:'Creating member case…'}`);
+      card.setFields([]);
       return {embeds:[card],allowedMentions:{parse:[],users:[],roles:[]}};
     };
     if(!thread){
