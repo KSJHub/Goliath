@@ -207,7 +207,7 @@ async function reconcileDiscordScreening(m,section,source,observedTransition=fal
   setSession(gid,uid,{screeningLoggedSessionId:sessionId});
   history(gid,uid,'discord_screening_completed',{source});
   verificationStore.incrementAnalytics(gid,{screeningCompleted:1,lastScreeningCompletedAt:now()});
-  await logEvent(m.guild,section,'attempt',renderMessage(section.messages.screeningCompletedLog,m));
+  await logEvent(m.guild,section,'attempt',`<@${uid}> completed Discord Membership Screening. Discord confirmed the pending flag was cleared. Approving administrator: not provided by Discord.`,uid);
   await logVerificationPending(m,section);
   return {handled:true,screeningCompleted:true};
 }
