@@ -125,7 +125,10 @@ async function handleAnswerModal(interaction, parsed, manager) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
-  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.editReply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.') }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
+  // The modal may have been open while the session expired or staff intervened.
+  // Reconcile persisted state before accepting an answer from the stale modal.
+  runtime.recover(interaction.guildId, parsed.userId);
+  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','review','rejected','failed','timed_out'].includes(current.state)) { await interaction.editReply({ content: emojiLabel('ERROR', 'This Verification challenge is no longer active.') }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
     if (result.reason === 'incorrect' && !result.complete) {
       const section = verificationStore.getVerificationSection(interaction.guildId);
