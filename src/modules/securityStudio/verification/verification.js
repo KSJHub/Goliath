@@ -4,6 +4,28 @@ const guildManager = require('../../../core/guild/guildManager');
 const verificationHealth = require('./verificationHealth');
 
 const MODULE = 'verification';
+const RECOVERY_INTERVAL_MS = 60000;
+const recoveryTimers = new WeakMap();
+
+function startVerificationRecovery(client) {
+  if (recoveryTimers.has(client)) return;
+  const timer = setInterval(() => {
+    for (const guild of client.guilds?.cache?.values?.() || []) {
+      try {
+        if (!guildManager.isModuleEnabled(guild.id, MODULE)) continue;
+        const result = verificationHealth.repairChallengeSessions(guild.id);
+        if (result.timedOut || result.expired || result.clearedMarkers) {
+          console.log(`[Verification] ${guild.id}: timed out ${result.timedOut} session(s), expired ${result.expired} challenge(s), cleared ${result.clearedMarkers} marker(s).`);
+        }
+      } catch (error) {
+        console.error(`[Verification] Background recovery failed for ${guild.id}:`, error);
+      }
+    }
+  }, RECOVERY_INTERVAL_MS);
+  timer.unref?.();
+  recoveryTimers.set(client, timer);
+}
+
 
 function buildSkippedResult(guild) {
   return {
@@ -141,6 +163,7 @@ async function startupVerification(client) {
   const { enabledResults, summary } = summarizeResults(results);
 
   logSummary(summary, enabledResults);
+  startVerificationRecovery(client);
   return summary;
 }
 
