@@ -14,8 +14,8 @@ function startVerificationRecovery(client) {
       try {
         if (!guildManager.isModuleEnabled(guild.id, MODULE)) continue;
         const result = verificationHealth.repairChallengeSessions(guild.id);
-        if (result.timedOut || result.expired || result.clearedMarkers) {
-          console.log(`[Verification] ${guild.id}: timed out ${result.timedOut} session(s), expired ${result.expired} challenge(s), cleared ${result.clearedMarkers} marker(s).`);
+        if (result.recovered || result.expired || result.clearedMarkers) {
+          console.log(`[Verification] ${guild.id}: recovered ${result.recovered} session(s) (${result.timedOut} timed out), expired ${result.expired} challenge(s), cleared ${result.clearedMarkers} marker(s).`);
         }
       } catch (error) {
         console.error(`[Verification] Background recovery failed for ${guild.id}:`, error);
