@@ -299,21 +299,24 @@ async function buildScheduledPanel(guild,memberDisplayName='Unknown User'){const
 async function buildWelcomeDeliverySettingsPanel(guild,scope,memberDisplayName='Unknown User'){
   const config=welcome.getWelcomeSection(guild.id),scheduled=scheduledWelcome.getScheduledConfig(guild.id);
   const instant=scope==='instant',dm=scope==='dm';
+  const messageScope=instant?'public':dm?'dm':'scheduled';
+  const defaultsButton=()=>button('admin:welcome:normal:defaults:'+messageScope,emojiLabel('PRESETS','Default Message'));
+  const libraryButton=()=>button('admin:welcome:normal:open:'+messageScope,emojiLabel('PRESETS','Preset Manager'));
   const controls=instant?[
     row(button('admin:welcome:mentions',emojiLabel('WELCOME_MENTIONS','Mention Settings')),button('admin:welcome:toggleBots',config.ignoreBots?emojiLabel('AUTOMOD','Exclude Bots: On'):emojiLabel('AUTOMOD','Exclude Bots: Off'),config.ignoreBots?ButtonStyle.Success:ButtonStyle.Secondary),button('admin:welcome:repairInstant',emojiLabel('WELCOME_DIAGNOSTICS','Diagnostics'))),
-    row(button('admin:welcome:instant',emojiLabel('BACK', 'Back')))
+    row(defaultsButton(),libraryButton(),button('admin:welcome:instant',emojiLabel('BACK', 'Back')))
   ]:dm?[
     row(button('admin:welcome:toggleDm',config.dmEnabled?emojiLabel('PAUSE_PLAIN', 'Disable DM'):emojiLabel('WELCOME_RUN', 'Enable DM'),config.dmEnabled?ButtonStyle.Secondary:ButtonStyle.Success)),
-    row(button('admin:welcome:dm',emojiLabel('BACK','DM Welcome')))
+    row(defaultsButton(),libraryButton(),button('admin:welcome:dm',emojiLabel('BACK','Back')))
   ]:[
     row(button('admin:welcome:scheduled:togglePing',scheduled.pingMembers?emojiLabel('WELCOME_MENTIONS','Pings: On'):emojiLabel('WELCOME_MUTED','Pings: Off'),scheduled.pingMembers?ButtonStyle.Success:ButtonStyle.Secondary),button('admin:welcome:scheduled:toggleRemove',scheduled.removeQueueRole?emojiLabel('WELCOME_CLEANUP','Cleanup: On'):emojiLabel('WELCOME_CLEANUP','Cleanup: Off'),scheduled.removeQueueRole?ButtonStyle.Success:ButtonStyle.Secondary),button('admin:welcome:scheduled:toggleBots',scheduled.ignoreBots?emojiLabel('AUTOMOD','Exclude Bots: On'):emojiLabel('AUTOMOD','Exclude Bots: Off'),scheduled.ignoreBots?ButtonStyle.Success:ButtonStyle.Secondary)),
     row(button(scheduled.enabled?'admin:welcome:scheduled:disable':'admin:welcome:scheduled:enable',scheduled.enabled?emojiLabel('PAUSE_PLAIN', 'Disable Scheduled'):emojiLabel('WELCOME_RUN', 'Enable Scheduled'),scheduled.enabled?ButtonStyle.Secondary:ButtonStyle.Success),button('admin:welcome:scheduled:repair',emojiLabel('WELCOME_DIAGNOSTICS','Diagnostics'))),
-    row(button('admin:welcome:scheduled',emojiLabel('BACK','Scheduled Welcome')))
+    row(defaultsButton(),libraryButton(),button('admin:welcome:scheduled',emojiLabel('BACK','Back')))
   ];
   return {embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle(emojiLabel('SETTINGS', `Welcome · ${instant?'Instant':dm?'DM':'Scheduled'} Settings`))
     .setDescription(['### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Area**　${instant?'Public Welcome':dm?'Direct Message':'Scheduled Queue'}`,'',
       '### ' + emojiLabel('DELIVERY', 'Delivery'),instant?'Configure bot exclusions, mentions and public delivery health.':dm?'Enable or disable private welcome messages.':'Configure member pings, queue cleanup, bot exclusions and schedule availability.','',
-      '### ' + emojiLabel('NEXT_STEP', 'Next Step'),'Change the settings below, then return to your Welcome workspace.'].join('\n'))
+      '### '+emojiLabel('PRESETS','Message Library'),`**Default**　${config.normalDefaults?.[messageScope]?'Customised':'Original'}`,`**Saved presets**　${Object.keys(config.normalPresets?.[messageScope]||{}).length}`,'','### ' + emojiLabel('NEXT_STEP', 'Next Step'),'Change the settings below, then return to your Welcome workspace.'].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components:controls};
 }
 
