@@ -1166,7 +1166,7 @@ async function verificationLifecycleAudit() {
         failedAttempts: 3,
       };
       let persisted = { ...previous };
-      const restart = new Function('upsertSession', 'createId', store.slice(start, end) + '\\nreturn resetActiveSession;')(
+      const restart = new Function('upsertSession', 'createId', store.slice(start, end) + '\nreturn resetActiveSession;')(
         (_guildId, _userId, patch) => { persisted = { ...persisted, ...patch }; return persisted; },
         () => 'fresh-session'
       );
