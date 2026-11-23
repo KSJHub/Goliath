@@ -3021,6 +3021,16 @@ function welcomeEmbedDeliveryAudit() {
     assert(dashboard.includes('scheduledHealth?.stuckMemberIds?.length'), 'Dashboard must expose pending role cleanup.');
     assert(dashboard.includes('Members per batch'), 'Dashboard must expose the scheduled batch-size control.');
     assert(route.includes("router.post('/:guildId/custom-message'"), 'Dashboard custom Welcome editor must save through the canonical API.');
+    // Normal-message preset restoration must not regress into multiple dashboard writes.
+    assert(route.includes("if(action==='activateOriginal')"), 'Welcome API must expose original-message activation.');
+    const restoration=route.slice(route.indexOf("if(action==='activateOriginal')"),route.indexOf("if(action==='activateOriginal')")+1800);
+    assert(restoration.includes("scheduled:{...s.scheduled,message:original,templateId:null"), 'Scheduled original restoration must update the existing schedule in the same module write.');
+    assert(restoration.includes("normalDefaults:{...s.normalDefaults,[scope]:original}"), 'Scheduled original restoration must persist its default in the same module write.');
+    assert(!restoration.includes('scheduledWelcome.updateScheduledConfig('), 'Scheduled original restoration must not split configuration writes.');
+    assert(restoration.includes("normalMessages:{...s.normalMessages,[scope]:original}"), 'Instant and DM original restoration must activate their plain messages.');
+    assert(dashboard.includes("action:'activateOriginal'"), 'Dashboard must use the consolidated restoration action.');
+    assert(!dashboard.includes("action:'editDefault',content:factory"), 'Dashboard must not restore the original default through a separate save.');
+
     
     assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must maintain a per-guild active-run guard.');
     assert(scheduled.includes("reason: 'already_running'"), 'Overlapping Scheduled Welcome runs must return an explicit skip reason.');
