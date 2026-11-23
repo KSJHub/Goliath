@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../core/ui/emojis');
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { buildAuditEmbed, buildUserIntelligenceEmbed, buildUserIntelligenceControls, buildCommandCenterHome } = require('./auditEmbeds');
@@ -154,13 +155,13 @@ async function ensureReportFeedHeader(channel, sourceGuild, routeKey, label) {
   const pinned = await channel.messages.fetchPinned().catch(() => null);
   let message = pinned?.find((item) => item.author?.bot && String(item.content || '').includes(marker)) || null;
   const content = [
-    `${delivery.healthy ? '🟢' : '🟠'} **Goliath Audit Feed ${delivery.healthy ? 'Live' : 'Needs Attention'} — ${label}**`,
+    `${delivery.healthy ? EMOJIS.ACTIVE : EMOJIS.SETUP_REQUIRED} **Goliath Audit Feed ${delivery.healthy ? 'Live' : 'Needs Attention'} — ${label}**`,
     '',
     `**Source Guild:** ${sourceGuild.name || 'Unknown Guild'}`,
     `**Guild ID:** \`${sourceGuild.id}\``,
     `**Feed:** ${label}`,
     `**Status:** ${delivery.healthy ? 'Active — monitored events are delivered here automatically.' : 'Permission issue detected — check the feed health below.'}`,
-    `**Goliath Permissions:** View ${delivery.view ? '🟢' : '🔴'} • Send ${delivery.send ? '🟢' : '🔴'} • History ${delivery.history ? '🟢' : '🔴'}`,
+    `**Goliath Permissions:** View ${delivery.view ? EMOJIS.ACTIVE : EMOJIS.DISABLED} • Send ${delivery.send ? EMOJIS.ACTIVE : EMOJIS.DISABLED} • History ${delivery.history ? EMOJIS.ACTIVE : EMOJIS.DISABLED}`,
     '',
     'Manage this feed from **Goliath Command Center → Routing**. Renaming or moving this channel is safe; Goliath tracks managed feeds by internal markers.',
     '',
