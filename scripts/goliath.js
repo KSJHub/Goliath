@@ -5091,7 +5091,7 @@ async function freeGamesAudit() {
     };
     const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/gamesEmbeds.js', 'utf8');
     vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(
-      name => name === './gamesProviders' ? providers : emojiService, moduleFixture, moduleFixture.exports);
+      name => name === './gamesProviders' ? providers : name === '../../../core/ui/emojis' ? require('../src/core/ui/emojis') : emojiService, moduleFixture, moduleFixture.exports);
     const coldClient = { application: { emojis: { fetch: async () => { throw Error('Use the shared module'); }, cache: new Map() } } };
     const resolved = await moduleFixture.exports.loadPlatformPresentation(coldClient, 'fixture');
     assert.equal(loads, 1); assert.equal(resolved.steam.emoji, '<:goliath_steam:' + emojiId + '>');
