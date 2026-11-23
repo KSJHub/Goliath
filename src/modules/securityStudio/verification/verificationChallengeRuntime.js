@@ -11,6 +11,14 @@ const TERMINAL_STATES = new Set(['verified', 'quarantined', 'review', 'rejected'
 const clean = value => String(value ?? '').trim();
 const isOutdatedSecuritySession = (guildId, session) => Number(session.securityConfigRevision || 0) !== Number(verificationStore.getVerificationSection(guildId).configRevision || 1);
 
+function sessionTimedOut(guildId, session) {
+  if (!session?.startedAt || session.state !== 'verifying') return false;
+  const started = Date.parse(session.startedAt);
+  if (!Number.isFinite(started)) return false;
+  const minutes = Number(verificationStore.getVerificationSection(guildId).settings?.security?.sessionTimeoutMinutes);
+  return Number.isFinite(minutes) && minutes > 0 && Date.now() - started >= minutes * 60000;
+}
+
 function challengeConfig(settings = {}, method) {
   const security = settings.security || {};
   if (method === 'captcha') return { ...(security.captchaConfig || settings.captcha || {}) };
@@ -56,6 +64,7 @@ function markCompleted(guildId, userId, method) {
 function startStep(guildId, userId, method, settings = {}) {
   if (!INTERACTIVE_METHODS.has(method)) return { ok: false, reason: 'not_interactive', method };
   const session = verificationStore.getSession(guildId, userId) || {};
+  if (sessionTimedOut(guildId, session)) return { ok: false, reason: 'session_expired', complete: false };
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress', method };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
@@ -89,6 +98,7 @@ function startStep(guildId, userId, method, settings = {}) {
 function submitAnswer(guildId, actingUserId, targetUserId, challengeId, suppliedAnswer) {
   if (clean(actingUserId) !== clean(targetUserId)) return { ok: false, reason: 'wrong_member' };
   const session = verificationStore.getSession(guildId, targetUserId) || {};
+  if (sessionTimedOut(guildId, session)) return { ok: false, reason: 'session_expired', complete: false };
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', state: session.state };
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed' };
@@ -102,6 +112,7 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
 
 function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, action) {
   const session = verificationStore.getSession(guildId, targetUserId) || {};
+  if (sessionTimedOut(guildId, session)) return { ok: false, reason: 'session_expired', complete: false };
   if (TERMINAL_STATES.has(session.state)) return { ok: false, complete: false, reason: 'terminal_session', state: session.state };
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, complete: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, complete: false, reason: 'security_configuration_changed' };
