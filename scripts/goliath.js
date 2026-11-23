@@ -2324,6 +2324,14 @@ function socialLivePresentationAudit() {
     );
     
     const compactCore = core.replace(/\s+/g, '');
+    const rolloverStart = monitor.indexOf('async function repairLiveRollovers(');
+    const rolloverEnd = monitor.indexOf('function livePlatformField(', rolloverStart);
+    assert(rolloverStart >= 0 && rolloverEnd > rolloverStart, 'Legacy rollover boundary missing');
+    const rollover = monitor.slice(rolloverStart, rolloverEnd).replace(/\s+/g, '');
+    const trackedTikTokGuard = "if(String(currentAccount?.platform||beforeAccount?.platform||'').toLowerCase()==='tiktok'&&previous.isLive===true&&(previous.lastLiveMessageId||previous.lastAlertMessageId)&&(previous.lastLiveMessageChannelId||previous.lastAlertChannelId))continue;";
+    assert(rollover.includes(trackedTikTokGuard), 'Tracked TikTok broadcast must bypass legacy rollover reset');
+    assert(rollover.indexOf(trackedTikTokGuard) < rollover.indexOf('constpreviousEventId='), 'TikTok guard must precede rollover processing');
+
     // The legacy parity wrapper must never replace canonical TikTok LIVE/PAUSED cards.
     const parityStart = monitor.indexOf('async function applyOne(');
     const parityEnd = monitor.indexOf('async function applyLiveMessageParity(', parityStart);
