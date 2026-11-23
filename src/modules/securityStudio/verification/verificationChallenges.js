@@ -162,7 +162,7 @@ function makeGame(config = {}, forcedType = null) {
   const available = enabled.length ? enabled : [...GAME_TYPES];
   const gameType = forcedType && GAME_TYPES.has(forcedType)
     ? forcedType
-    : config.random === false && GAME_TYPES.has(config.gameType) ? config.gameType : pick(available);
+    : config.random === false ? (available.includes(config.gameType) ? config.gameType : available[0]) : pick(available);
   if (gameType === 'sequence') return sequenceGame(config);
   if (gameType === 'order') return orderGame(config);
   if (gameType === 'odd_one_out') return oddOneOutGame(config);
