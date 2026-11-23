@@ -1362,7 +1362,7 @@ async function verificationLifecycleAudit() {
     const resumeStart=flow.indexOf('async function resumeVerification(');
     const resumeCut=flow.indexOf('const c=section(g.id)',resumeStart);
     assert(resumeStart>=0&&resumeCut>resumeStart,'Verification resume guard extraction failed');
-    const resumePrefix=flow.slice(resumeStart,resumeCut)+'return{ok:true,reachedConfiguration:true};}';
+    const resumePrefix=flow.slice(resumeStart,resumeCut).replace('challengeRuntime.recover(g.id,m.id);','')+'return{ok:true,reachedConfiguration:true};}';
     const lockTest = `
       const assert=require('node:assert/strict');
       ${lockSource}
