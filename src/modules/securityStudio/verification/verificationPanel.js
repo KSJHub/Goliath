@@ -157,9 +157,8 @@ function logsPage(g,user,st){
  return {embeds:[embed],components:[
  row(toggle('admin:verification:logMode:standard','Channel Logs',!threaded),toggle('admin:verification:logMode:threaded','Thread Logs',threaded)),
  row(menu),
- row(toggle('admin:verification:logCategoryToggle:'+type,title(type)+' logs',enabled.includes(type)),button('admin:verification:logDefault','Default Channel',ButtonStyle.Secondary,!(!threaded))),
  row(channel),
- row(button('admin:verification:logPingSettings','🔔 Role Notifications')),
+ row(toggle('admin:verification:logCategoryToggle:'+type,title(type)+' logs',enabled.includes(type)),button('admin:verification:logPingSettings','🔔 Role Notifications')),
  finalNav('home',button('admin:verification:clearEveryLog',emojiLabel('CLOSE_X','Clear All'),ButtonStyle.Danger))]};
 }
 function logPingPage(g,user){
