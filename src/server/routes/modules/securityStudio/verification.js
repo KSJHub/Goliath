@@ -244,6 +244,11 @@ router.get('/:guildId/overview', async (req, res) => {
       defaultPanelTemplate: verificationStore.defaultPanelTemplate(),
       panels: Object.values(section.panels || {}),
       analytics: section.analytics || {},
+      sessionSummary: Object.values(section.sessions || {}).reduce((counts, session) => {
+        const state = String(session?.state || 'new');
+        if (Object.prototype.hasOwnProperty.call(counts, state)) counts[state] += 1;
+        return counts;
+      }, { new: 0, pending: 0, verifying: 0, verified: 0, quarantined: 0, review: 0, failed: 0, timed_out: 0, rejected: 0 }),
       health,
     });
   } catch (error) {
