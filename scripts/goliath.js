@@ -5492,7 +5492,7 @@ async function gameUpdatesAudit() {
       if (id.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
       if (id === 'discord.js') return { PermissionFlagsBits: permissions };
       if (id.includes('security/protection/core')) return { isBotOwner: () => false };
-      if (id.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
+      if (id === '../../../core/ui/emojis') return require('../src/core/ui/emojis');
       return require(id);
     };
     new Function('require', 'module', 'exports', fs.readFileSync(directory + name + '.js', 'utf8'))(localRequire, module, module.exports);
