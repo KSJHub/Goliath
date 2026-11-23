@@ -1453,6 +1453,10 @@ async function verificationLifecycleAudit() {
       assert.deepEqual(missingPendingRemoval.removed, ['verified'], 'Failed confirmation must revoke newly granted Verified role');
       assert.equal(missingPendingRemoval.state, 'review');
       assert.deepEqual(missingPendingRemoval.history[0].rollbackFailedRoleIds, []);
+      const staleCache = await run({ confirmedRoles: ['pending'] });
+      assert.equal(staleCache.result.review, true);
+      assert.deepEqual(staleCache.removed, ['verified'], 'Rollback must attempt revocation even when the fetched member cache omits a newly granted role');
+      assert.deepEqual(staleCache.history[0].rollbackFailedRoleIds, []);
       const denied = await run({ confirmedRoles: ['verified', 'pending'], removalFails: true });
       assert.equal(denied.result.review, true);
       assert.deepEqual(denied.history[0].rollbackFailedRoleIds, ['verified'], 'Rollback permission failure must be audited');
