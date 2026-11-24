@@ -178,6 +178,29 @@ function buildMembershipRecordPanel(guild, id, canEdit = false) {
   };
 }
 
+function buildRuleCelebrationPanel(guild, ruleId) {
+  const rule = timedRoles.getRule(guild.id, ruleId);
+  if (!rule) throw new Error('Milestone not found.');
+  const own = rule.celebration || {};
+  const s = { ...timedRoles.getSection(guild.id).settings, ...own };
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Celebration · ' + rule.name).setDescription([
+      'Channel: ' + (s.announcementChannelId ? '<#' + s.announcementChannelId + '>' : 'Not selected') + (own.announcementChannelId ? '' : ' (inherited)'),
+      'Format: ' + (s.celebrationEmbed === false ? 'Message' : 'Embed'),
+      'Status: ' + (s.announcePromotions ? 'Enabled' : 'Disabled')
+    ].join('\n'))],
+    components: [
+      row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':ruleCelebrationChannel:' + ruleId).setPlaceholder('Choose channel or clear to inherit').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
+      row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':ruleCelebrationFormat:' + ruleId).setPlaceholder('Message format').addOptions([
+        {label:'Inherit global format',value:'inherit',default:own.celebrationEmbed === undefined},
+        {label:'Embed',value:'embed',default:own.celebrationEmbed === true},
+        {label:'Message',value:'message',default:own.celebrationEmbed === false}
+      ])),
+      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,'Edit Template')),
+      row(button(PREFIX + ':editBack:' + ruleId,emojiLabel('BACK','Back')))
+    ]
+  };
+}
 function buildRulePanel(guild, ruleId, rolePage = 0) {
   const rule = timedRoles.getRule(guild.id, ruleId);
   if (!rule) throw new Error('Timed role milestone not found.');
@@ -489,12 +512,28 @@ async function handleTimedRolesInteraction(interaction) {
       if (Object.keys(patch).length) timedRoles.updateSettings(interaction.guild.id, patch, { actorId: interaction.user.id });
       return refresh(interaction, buildCelebrationPanel(interaction.guild.id));
     }
-    if (customId.startsWith(PREFIX + ':ruleCelebration:') || customId.startsWith(PREFIX + ':ruleCelebrationSubmit:')) {
+    if (/^admin:timedRoles:ruleCelebration(?:Edit|Submit|Channel|Format)?:/.test(customId) || customId.startsWith(PREFIX + ':editBack:')) {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
       const ruleId = customId.split(':').pop();
       const rule = timedRoles.getRule(interaction.guild.id, ruleId);
       if (!rule) throw new Error('Milestone not found.');
-      if (customId.startsWith(PREFIX + ':ruleCelebration:')) {
+      if (customId.startsWith(PREFIX + ':editBack:')) return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
+      if (customId.startsWith(PREFIX + ':ruleCelebration:')) return refresh(interaction, buildRuleCelebrationPanel(interaction.guild, ruleId));
+      if (customId.startsWith(PREFIX + ':ruleCelebrationChannel:') || customId.startsWith(PREFIX + ':ruleCelebrationFormat:')) {
+        const celebration = { ...rule.celebration };
+        if (customId.startsWith(PREFIX + ':ruleCelebrationChannel:')) {
+          if (interaction.values[0]) celebration.announcementChannelId = interaction.values[0];
+          else delete celebration.announcementChannelId;
+        } else {
+          const value = interaction.values[0];
+          if (!['inherit','embed','message'].includes(value)) throw new Error('Invalid format.');
+          if (value === 'inherit') delete celebration.celebrationEmbed;
+          else celebration.celebrationEmbed = value === 'embed';
+        }
+        timedRoles.saveRule(interaction.guild.id, { ...rule, celebration }, { actorId: interaction.user.id });
+        return refresh(interaction, buildRuleCelebrationPanel(interaction.guild, ruleId));
+      }
+      if (customId.startsWith(PREFIX + ':ruleCelebrationEdit:')) {
         const field = (id,label,value,max) => {
           const input = new TextInputBuilder().setCustomId(id).setLabel(label).setRequired(false).setMaxLength(max).setStyle(TextInputStyle.Short);
           if (value) input.setValue(String(value));
@@ -514,14 +553,15 @@ async function handleTimedRolesInteraction(interaction) {
       if (mode && !['enabled','disabled','inherit'].includes(mode)) throw new Error('Choose enabled, disabled or inherit.');
       if (color && !/^#?[0-9a-f]{6}$/i.test(color)) throw new Error('Enter a six-digit hex colour.');
       if (gif && new URL(gif).protocol !== 'https:') throw new Error('Use an HTTPS GIF URL.');
-      const celebration = {};
+      const celebration = { ...rule.celebration };
+      for (const key of ['announcePromotions','celebrationTitle','announcementMessage','celebrationGif','celebrationColor']) delete celebration[key];
       if (mode === 'enabled' || mode === 'disabled') celebration.announcePromotions = mode === 'enabled';
       if (read('title')) celebration.celebrationTitle = read('title');
       if (read('message')) celebration.announcementMessage = read('message');
       if (gif) celebration.celebrationGif = gif;
       if (color) celebration.celebrationColor = parseInt(color.replace('#',''),16);
       timedRoles.saveRule(interaction.guild.id, { ...rule, celebration }, { actorId: interaction.user.id });
-      return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
+      return refresh(interaction, buildRuleCelebrationPanel(interaction.guild, ruleId));
     }
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
