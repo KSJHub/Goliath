@@ -232,7 +232,7 @@ function buildSettingsPanel(guildId) {
         `**Announcement channel:** ${section.settings.announcementChannelId ? `<#${section.settings.announcementChannelId}>` : 'Not selected'}`,
         '',
         '**Message placeholders**',
-        '`{member}` • `{role}` • `{duration}`',
+        '`{member}` • `{username}` • `{milestone}` • `{role}` • `{duration}` • `{server}` • `{joined}` • `{achieved}` • `{nextMilestone}` • `{nextDue}`',
         variablesForModule('timedRoles').map((entry) => `\`${entry.token}\``).join(' • ').slice(0, 900),
         '',
         `**Current message**\n${section.settings.announcementMessage}`,
@@ -261,7 +261,7 @@ function buildSettingsPanel(guildId) {
 
 function buildCelebrationPanel(guildId) {
   const s = timedRoles.getSection(guildId).settings;
-  const embed = new EmbedBuilder().setColor(0x57F287).setTitle(s.celebrationTitle || 'Milestone achieved!').setDescription((s.announcementMessage || '').slice(0, 4096));
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle(s.celebrationTitle || '{milestone} — Achievement Unlocked!').setDescription((s.announcementMessage || '').slice(0, 4096));
   if (s.celebrationGif && /^https:\/\//i.test(s.celebrationGif)) embed.setImage(s.celebrationGif);
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Celebration Settings').setDescription([
