@@ -169,7 +169,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
   }
 
   async function saveRule() {
-    if (!draft.roleId || !draft.name || !draft.value || !draft.unit) return;
+    if (!draft.roleId || !draft.name.trim() || !Number.isInteger(draft.value) || draft.value < 1 || draft.value > 1000000 || !draft.unit || (draft.startMode === 'custom' && !draft.customStartAt)) { setError('Enter a milestone name, reward role, valid duration and starting date.'); return; }
     const path = editingRuleId
       ? `/api/timed-roles/${guildId}/rules/${editingRuleId}`
       : `/api/timed-roles/${guildId}/rules`;
@@ -256,11 +256,19 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         ) : null}
       </section>
 
+      <section style={{ ...cardStyle, padding:22, display:'grid', gap:12 }}>
+        <h2 style={{margin:0}}>Celebration Settings</h2>
+        <label><input type="checkbox" disabled={!!saving} checked={settings.celebrationEmbed !== false} onChange={e=>saveSettings({celebrationEmbed:e.target.checked})}/> Use achievement embed</label>
+        <label><input type="checkbox" disabled={!!saving} checked={settings.celebrateRetroactive === true} onChange={e=>saveSettings({celebrateRetroactive:e.target.checked})}/> Celebrate historical awards (may send many messages)</label>
+        <label>Title<input key={'title-'+guildId} defaultValue={settings.celebrationTitle || ''} onBlur={e=>{if(e.target.value !== (settings.celebrationTitle || '')) saveSettings({celebrationTitle:e.target.value});}} maxLength={256} style={fieldStyle(theme)} /></label>
+        <label>GIF or image HTTPS URL<input key={'gif-'+guildId} type="url" defaultValue={settings.celebrationGif || ''} onBlur={e=>{const value=e.target.value.trim();if(value && !/^https:\/\//i.test(value)){setError('Use an HTTPS image URL.');return;}if(value !== (settings.celebrationGif || '')) saveSettings({celebrationGif:value});}} style={fieldStyle(theme)} /></label>
+        <p style={{color:theme.mutedText}}>Variables: {'{member}'} · {'{milestone}'} · {'{role}'} · {'{duration}'} · {'{server}'} · {'{joined}'} · {'{achieved}'} · {'{nextMilestone}'} · {'{nextDue}'}</p>
+      </section>
       <section style={{ ...cardStyle, padding: 22, display: 'grid', gap: 16 }}>
         <div><h2 style={{ margin: 0 }}>{editingRuleId ? 'Edit Milestone' : 'Create Milestone'}</h2><p style={{ margin: '6px 0 0', color: theme.mutedText }}>Use a real server role, a calendar-aware duration and optional cleanup roles.</p></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Name<input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} style={fieldStyle(theme)} /></label>
-          <RoleSelect theme={theme} resources={roles} value={draft.roleId} onChange={(roleId) => setDraft((current) => ({ ...current, roleId, removeRoleIds: current.removeRoleIds.filter((id) => id !== roleId) }))} label="Award Role" disabled={roles.length === 0} />
+          <RoleSelect theme={theme} resources={roles.filter(role=>String(role.id)!==guildId && !role.managed && !rules.some(rule=>rule.ruleId!==editingRuleId && String(rule.roleId)===String(role.id)))} value={draft.roleId} onChange={(roleId) => setDraft((current) => ({ ...current, roleId, removeRoleIds: current.removeRoleIds.filter((id) => id !== roleId) }))} label="Award Role" disabled={roles.length === 0} />
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Duration<input type="number" min="1" value={draft.value} onChange={(event) => setDraft((current) => ({ ...current, value: Number(event.target.value) }))} style={fieldStyle(theme)} /></label>
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Unit<ThemedSelect theme={theme} value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} style={fieldStyle(theme)}>{['minutes', 'hours', 'days', 'weeks', 'months', 'years'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</ThemedSelect></label>
         </div>
