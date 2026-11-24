@@ -164,14 +164,37 @@ function canManageRole(guild, role) {
 }
 async function resolveRole(guild, roleId) { return guild.roles.cache.get(roleId) || guild.roles.fetch(roleId).catch(() => null); }
 
+function setMemberMilestoneOverride(guildId, memberId, ruleId, input, meta = {}) {
+  const id = cleanId(memberId);
+  if (!id || !getRule(guildId, ruleId)) throw new Error('Invalid member or milestone.');
+  const override = {};
+  for (const key of ['startAt', 'dueAt']) {
+    if (!input[key]) continue;
+    const date = new Date(input[key]);
+    if (!Number.isFinite(date.getTime())) throw new Error('Invalid milestone date.');
+    override[key] = date.toISOString();
+  }
+  return updateSection(guildId, section => {
+    const all = { ...section.memberOverrides };
+    const member = { ...all[id] };
+    if (Object.keys(override).length) member[ruleId] = { ...override, updatedAt: now(), updatedBy: cleanId(meta.actorId) };
+    else delete member[ruleId];
+    if (Object.keys(member).length) all[id] = member;
+    else delete all[id];
+    return { ...section, memberOverrides: all };
+  }, meta);
+}
+
 function getMemberProgression(member, rules = listRules(member.guild.id)) {
   const record = guildManager.getGuildSection(member.guild.id, 'membershipRecords', {}).members?.[member.id];
   const joinedAt = record?.firstJoinedAt || member.joinedAt;
   const timestamp = Date.now();
+  const overrides = getSection(member.guild.id).memberOverrides?.[member.id] || {};
   const entries = rules.filter(rule => rule.enabled).map(rule => {
     const start = rule.startMode === 'custom' ? rule.customStartAt
       : rule.startMode === 'continuous' ? member.joinedAt : joinedAt;
-    return { rule, date: eligibleAt(start, rule) };
+    const override = overrides[rule.ruleId];
+    return { rule, date: override?.dueAt ? new Date(override.dueAt) : eligibleAt(override?.startAt || start, rule) };
   }).filter(entry => entry.date && Number.isFinite(entry.date.getTime()))
     .sort((a, b) => a.date - b.date || durationRank(a.rule) - durationRank(b.rule));
   const due = entries.filter(entry => entry.date.getTime() <= timestamp).map(entry => entry.rule);
@@ -420,6 +443,7 @@ module.exports = {
   durationRank,
   formatDuration,
   getMemberProgression,
+  setMemberMilestoneOverride,
   applyRuleToMember,
   applyProgressionToMember,
   shouldScanGuild,
