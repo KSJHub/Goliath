@@ -482,6 +482,35 @@ function observeMembership(member, present = true) {
   return record;
 }
 
+// Import current guild membership in one canonical JSON write, without awarding roles.
+function importMembershipRecords(guild, members) {
+  const section = getGuildSection(guild.id, 'membershipRecords', { schemaVersion: 1, members: {} });
+  const records = { ...section.members };
+  let imported = 0;
+  for (const member of members.values()) {
+    const id = normalizeDiscordId(member.id);
+    const joined = member.joinedTimestamp ?? member.joinedAt?.getTime?.();
+    if (!id || !Number.isFinite(joined) || joined <= 0 || joined > Date.now()) continue;
+    const at = new Date(joined).toISOString();
+    const previous = records[id];
+    if (previous?.lastJoinedAt > at || (previous?.lastJoinedAt === at && previous.active)) continue;
+    const history = Array.isArray(previous?.history) ? [...previous.history] : [];
+    if (!history.some(event => event.type === 'join' && event.at === at)) history.push({ type: 'join', at, source: 'discord_import' });
+    records[id] = {
+      ...previous,
+      firstJoinedAt: previous?.firstJoinedAt && previous.firstJoinedAt < at ? previous.firstJoinedAt : at,
+      lastJoinedAt: at,
+      lastLeftAt: previous?.lastLeftAt || null,
+      active: true,
+      joinCount: history.filter(event => event.type === 'join').length,
+      history,
+    };
+    imported++;
+  }
+  if (imported) updateGuildSection(guild.id, 'membershipRecords', current => ({ ...current, schemaVersion: 1, members: records }));
+  return imported;
+}
+
 function normalizeLogType(type = 'general') {
   const key = String(type || '').trim();
   return LOG_CHANNEL_ALIASES[key] || key || 'general';
@@ -756,6 +785,7 @@ module.exports = {
 
   getGuildFilePath,
   observeMembership,
+  importMembershipRecords,
 
   getGuildConfig,
   saveGuildConfig,
