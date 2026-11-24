@@ -142,7 +142,13 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
           return { ...current, achievementHistory: history };
         });
         if (!awarded.includes(role.id) || !section.settings.announcePromotions) continue;
-        if (!section.settings.celebrateRetroactive) continue;
+        const dueAt = Date.parse(state.progression.dueAtByRule?.[rule.ruleId]);
+        const baseline = Date.parse(section.analytics?.celebrationBaselineAt);
+        const lastScan = Date.parse(section.analytics?.lastScanAt);
+        const configuredAt = Date.parse(rule.createdAt);
+        const cutoff = Math.max(baseline, lastScan, configuredAt);
+        const newlyDue = Number.isFinite(dueAt) && Number.isFinite(cutoff) && dueAt > cutoff && dueAt <= Date.now();
+        if (!newlyDue && !section.settings.celebrateRetroactive) continue;
         let status = 'failed';
         try { if (await announcePromotion(live, rule, role, section.settings)) { announced += 1; status = 'sent'; } } catch (error) { console.warn('[TimedRoles] Celebration failed:', error.message); }
         base.updateSection(guild.id, current => {
@@ -226,7 +232,8 @@ async function scanGuild(guild, meta = {}) {
     const scannedAt = now();
     for (const rule of rules) {
       const stat = stats.get(rule.ruleId);
-      base.saveRule(guild.id, { ...rule, lastRunAt: scannedAt, lastAwarded: stat.awarded, lastError: stat.error }, meta);
+      const latest = base.getRule(guild.id, rule.ruleId);
+      if (latest) base.saveRule(guild.id, { ...latest, lastRunAt: scannedAt, lastAwarded: stat.awarded, lastError: stat.error }, meta);
     }
     base.updateSection(guild.id, (current) => ({
       ...current,
@@ -240,6 +247,7 @@ async function scanGuild(guild, meta = {}) {
         skipped: Number(current.analytics?.skipped || 0) + result.skipped,
         failed: Number(current.analytics?.failed || 0) + result.failed,
         lastScanAt: scannedAt,
+        celebrationBaselineAt: current.analytics?.celebrationBaselineAt || scannedAt,
       },
     }), { ...meta, action: meta.action || 'timed_roles_scan' });
     return result;
