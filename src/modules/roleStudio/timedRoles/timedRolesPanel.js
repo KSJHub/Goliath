@@ -106,17 +106,49 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
       row(
         button(`${PREFIX}:scan`, emojiLabel('INVESTIGATE', 'Scan Now'), ButtonStyle.Success),
         button(`${PREFIX}:simulate`, emojiLabel('TEST_SEND', 'Simulate'), ButtonStyle.Primary),
-        button(`${PREFIX}:settings`, emojiLabel('SETTINGS', 'Settings')),
+        button(`${PREFIX}:records`, 'Membership Records'),
         button(`${PREFIX}:repair`, emojiLabel('WELCOME_DIAGNOSTICS', 'Repair')),
       ),
       row(
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
         button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button(`${PREFIX}:export`, emojiLabel('MOD_EXPORT', 'Export')),
-        button('admin:reactionRoles', emojiLabel('BACK', 'Role Studio')),
+        button('admin:reactionRoles', emojiLabel('BACK', 'Back')),
+        button(`${PREFIX}:settings`, emojiLabel('SETTINGS', 'Settings')),
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
       ),
     ],
+  };
+}
+
+function buildMembershipRecordsPanel(guild) {
+  const records = Object.values(guildManager.getGuildSection(guild.id, 'membershipRecords', {}).members || {});
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Membership Records').setDescription([
+      'Guild membership history is retained independently of Timed Roles.',
+      '**Tracked members:** ' + records.length,
+      '**Active:** ' + records.filter(record => record.active === true).length,
+      '**Inactive:** ' + records.filter(record => record.active === false).length,
+      '**Unknown status:** ' + records.filter(record => record.active == null).length,
+      'Select a current member to inspect their recorded dates.',
+    ].join('\n'))],
+    components: [
+      row(new UserSelectMenuBuilder().setCustomId(PREFIX + ':recordMember').setPlaceholder('Choose member').setMinValues(1).setMaxValues(1)),
+      row(button(PREFIX, emojiLabel('BACK', 'Back')), button(PREFIX + ':settings', emojiLabel('SETTINGS', 'Settings'))),
+    ],
+  };
+}
+function buildMembershipRecordPanel(guild, id) {
+  const record = guildManager.getGuildSection(guild.id, 'membershipRecords', {}).members?.[id];
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Membership Record').setDescription(record ? [
+      '**Member:** <@' + id + '>',
+      '**Original known join:** ' + formatTimestamp(record.firstJoinedAt, 'F'),
+      '**Latest join:** ' + formatTimestamp(record.lastJoinedAt, 'F'),
+      '**Last recorded departure:** ' + formatTimestamp(record.lastLeftAt, 'F'),
+      '**Observed joins:** ' + (record.joinCount ?? 'Unknown'),
+      '**Status:** ' + (record.active == null ? 'Unknown' : record.active ? 'Active' : 'Inactive'),
+    ].join('\n') : 'No membership record found.')],
+    components: [row(button(PREFIX + ':records', emojiLabel('BACK', 'Back')))],
   };
 }
 
@@ -291,6 +323,10 @@ async function handleTimedRolesInteraction(interaction) {
   if (!customId.startsWith(PREFIX)) return false;
   try {
     if (customId === PREFIX) return refresh(interaction);
+    if (customId === PREFIX + ':records' || customId === PREFIX + ':recordMember') {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Only the guild owner or administrators may view membership records.');
+      return refresh(interaction, customId.endsWith(':recordMember') ? buildMembershipRecordPanel(interaction.guild, interaction.values[0]) : buildMembershipRecordsPanel(interaction.guild));
+    }
 
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
