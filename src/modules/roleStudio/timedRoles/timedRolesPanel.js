@@ -207,7 +207,8 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       ...(!guild.roles.cache.has(rule.roleId) ? [row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:replaceReward:${rule.ruleId}`).setPlaceholder('Select existing replacement role').setMinValues(1).setMaxValues(1))] : []),
       row(
         button(`${PREFIX}:edit:${rule.ruleId}`, emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary),
-        !guild.roles.cache.has(rule.roleId) ? button(`${PREFIX}:recoverRole:${rule.ruleId}`, 'Create Reward Role', ButtonStyle.Primary) : null,
+        ...(guild.roles.cache.has(rule.roleId) ? [] : [button(`${PREFIX}:recoverRole:${rule.ruleId}`, 'Create Reward Role', ButtonStyle.Primary)]),
+        button(`${PREFIX}:ruleCelebration:${rule.ruleId}`, 'Celebration'),
         button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:delete:${rule.ruleId}`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger),
       ),
@@ -487,6 +488,40 @@ async function handleTimedRolesInteraction(interaction) {
       }
       if (Object.keys(patch).length) timedRoles.updateSettings(interaction.guild.id, patch, { actorId: interaction.user.id });
       return refresh(interaction, buildCelebrationPanel(interaction.guild.id));
+    }
+    if (customId.startsWith(PREFIX + ':ruleCelebration:') || customId.startsWith(PREFIX + ':ruleCelebrationSubmit:')) {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
+      const ruleId = customId.split(':').pop();
+      const rule = timedRoles.getRule(interaction.guild.id, ruleId);
+      if (!rule) throw new Error('Milestone not found.');
+      if (customId.startsWith(PREFIX + ':ruleCelebration:')) {
+        const field = (id,label,value,max) => {
+          const input = new TextInputBuilder().setCustomId(id).setLabel(label).setRequired(false).setMaxLength(max).setStyle(TextInputStyle.Short);
+          if (value) input.setValue(String(value));
+          return row(input);
+        };
+        const s = rule.celebration || {};
+        return interaction.showModal(new ModalBuilder().setCustomId(PREFIX + ':ruleCelebrationSubmit:' + ruleId).setTitle('Milestone Celebration').addComponents(
+          field('mode','Enabled / disabled / inherit',s.announcePromotions === undefined ? '' : s.announcePromotions ? 'enabled' : 'disabled',8),
+          field('title','Title (blank inherits)',s.celebrationTitle,256),
+          field('message','Message (blank inherits)',s.announcementMessage,1000),
+          field('gif','HTTPS GIF URL (blank inherits)',s.celebrationGif,1000),
+          field('color','Hex colour (blank inherits)',Number.isInteger(s.celebrationColor) ? s.celebrationColor.toString(16).padStart(6,'0') : '',7)
+        ));
+      }
+      const read = id => interaction.fields.getTextInputValue(id).trim();
+      const mode = read('mode').toLowerCase(), color = read('color'), gif = read('gif');
+      if (mode && !['enabled','disabled','inherit'].includes(mode)) throw new Error('Choose enabled, disabled or inherit.');
+      if (color && !/^#?[0-9a-f]{6}$/i.test(color)) throw new Error('Enter a six-digit hex colour.');
+      if (gif && new URL(gif).protocol !== 'https:') throw new Error('Use an HTTPS GIF URL.');
+      const celebration = {};
+      if (mode === 'enabled' || mode === 'disabled') celebration.announcePromotions = mode === 'enabled';
+      if (read('title')) celebration.celebrationTitle = read('title');
+      if (read('message')) celebration.announcementMessage = read('message');
+      if (gif) celebration.celebrationGif = gif;
+      if (color) celebration.celebrationColor = parseInt(color.replace('#',''),16);
+      timedRoles.saveRule(interaction.guild.id, { ...rule, celebration }, { actorId: interaction.user.id });
+      return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
     }
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
