@@ -507,7 +507,22 @@ function importMembershipRecords(guild, members) {
     };
     imported++;
   }
-  if (imported) updateGuildSection(guild.id, 'membershipRecords', current => ({ ...current, schemaVersion: 1, members: records }));
+  // Only infer absence from a complete guild member fetch, never a partial cache.
+  let reconciled = 0;
+  if (guild.available && members.size === guild.memberCount) {
+    const observedAt = now();
+    for (const [id, record] of Object.entries(records)) {
+      if (!record.active || members.has(id)) continue;
+      records[id] = {
+        ...record,
+        active: false,
+        departureObservedAt: observedAt,
+        history: [...(record.history || []), { type: 'absence_observed', at: observedAt, source: 'discord_reconciliation' }],
+      };
+      reconciled++;
+    }
+  }
+  if (imported || reconciled) updateGuildSection(guild.id, 'membershipRecords', current => ({ ...current, schemaVersion: 1, members: records }));
   return imported;
 }
 
