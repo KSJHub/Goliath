@@ -70,7 +70,7 @@ function desiredState(member, section, rules) {
   return { progression, targetRules, targetRoleIds, milestoneRoleIds, cleanupRoleIds };
 }
 
-async function announcePromotion(member, rule, role, settings) {
+async function announcePromotion(member, rule, role, settings, progression) {
   if (!settings.announcePromotions || !settings.announcementChannelId) return false;
   const channel = member.guild.channels.cache.get(settings.announcementChannelId)
     || await member.guild.channels.fetch(settings.announcementChannelId).catch(() => null);
@@ -85,15 +85,29 @@ async function announcePromotion(member, rule, role, settings) {
     channel,
     channelId: channel.id,
   };
-  const message = replaceVars(settings.announcementMessage, interaction, true, {
-    '{member}': `<@${member.id}>`,
-    '{role}': `<@&${role.id}>`,
+  const record = guildManager.getGuildSection(member.guild.id, 'membershipRecords', { members: {} }).members?.[member.id];
+  const timestamp = value => {
+    const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+    return Number.isFinite(ms) ? '<t:' + Math.floor(ms / 1000) + ':D>' : 'Not available';
+  };
+  const variables = {
+    '{member}': '<@' + member.id + '>',
+    '{username}': member.user.username,
+    '{milestone}': rule.name,
+    '{role}': '<@&' + role.id + '>',
     '{duration}': base.formatDuration(rule),
-  });
+    '{server}': member.guild.name,
+    '{joined}': timestamp(record?.firstJoinedAt || member.joinedAt),
+    '{achieved}': timestamp(progression?.dueAtByRule?.[rule.ruleId] || now()),
+    '{nextMilestone}': progression?.next?.name || 'No further milestone',
+    '{nextDue}': timestamp(progression?.nextAt),
+  };
+  const render = template => replaceVars(String(template || ''), interaction, true, variables);
+  const message = render(settings.announcementMessage || 'Congratulations {member}! You have achieved {milestone} after {duration} in {server}.');
   const allowedMentions = { parse: [], users: [member.id], roles: [], repliedUser: false };
   if (settings.celebrationEmbed !== false) {
     if (!permissions?.has(PermissionFlagsBits.EmbedLinks)) throw new Error('Goliath requires Embed Links for celebrations.');
-    const embed = new EmbedBuilder().setTitle(String(settings.celebrationTitle || 'Milestone achieved!').slice(0,256)).setDescription(message.slice(0,4096)).setColor(Number.isInteger(settings.celebrationColor) && settings.celebrationColor >= 0 && settings.celebrationColor <= 0xffffff ? settings.celebrationColor : 0x57F287).setTimestamp();
+    const embed = new EmbedBuilder().setTitle(render(settings.celebrationTitle || '{milestone} — Achievement Unlocked!').slice(0,256)).setDescription(message.slice(0,4096)).setColor(Number.isInteger(settings.celebrationColor) && settings.celebrationColor >= 0 && settings.celebrationColor <= 0xffffff ? settings.celebrationColor : 0x57F287).setTimestamp();
     if (settings.celebrationGif && /^https:\/\//i.test(settings.celebrationGif)) embed.setImage(settings.celebrationGif);
     await channel.send({ content: '<@' + member.id + '>', embeds: [embed], allowedMentions });
   } else await channel.send({ content: message.slice(0,2000), allowedMentions });
@@ -151,7 +165,7 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
         const newlyDue = Number.isFinite(dueAt) && Number.isFinite(cutoff) && dueAt > cutoff && dueAt <= Date.now();
         if (!newlyDue && !section.settings.celebrateRetroactive) continue;
         let status = 'failed';
-        try { if (await announcePromotion(live, rule, role, celebrationSettings)) { announced += 1; status = 'sent'; } } catch (error) { console.warn('[TimedRoles] Celebration failed:', error.message); }
+        try { if (await announcePromotion(live, rule, role, celebrationSettings, state.progression)) { announced += 1; status = 'sent'; } } catch (error) { console.warn('[TimedRoles] Celebration failed:', error.message); }
         base.updateSection(guild.id, current => {
           const history = { ...current.achievementHistory };
           const entries = { ...history[member.id] };
