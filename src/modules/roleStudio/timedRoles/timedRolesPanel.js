@@ -193,7 +193,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       .setColor(rule.enabled ? 0x5865F2 : 0x747F8D)
       .setTitle(`⏳ ${rule.name}`)
       .setDescription([
-        `**Award role:** <@&${rule.roleId}>`,
+        `**Award role:** ${guild.roles.cache.has(rule.roleId) ? `<@&${rule.roleId}>` : 'Missing — create a replacement role below.'}`,
         `**Required tenure:** ${formatDuration(rule)}`,
         `**Status:** ${rule.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.USER_PAUSE}`}`,
         `**Additional roles removed:** ${rule.removeRoleIds.length ? rule.removeRoleIds.map((id) => `<@&${id}>`).join(', ') : '`None`'}`,
@@ -205,7 +205,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       ...cleanupPicker.rows,
       row(
         button(`${PREFIX}:edit:${rule.ruleId}`, emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary),
-        button(`${PREFIX}:duplicate:${rule.ruleId}`, emojiLabel('INCIDENT_AUDIT', 'Duplicate')),
+        !guild.roles.cache.has(rule.roleId) ? button(`${PREFIX}:recoverRole:${rule.ruleId}`, 'Create Reward Role', ButtonStyle.Primary) : null,
         button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:delete:${rule.ruleId}`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger),
         button(PREFIX, emojiLabel('BACK', 'Back')),
@@ -383,6 +383,22 @@ async function handleTimedRolesInteraction(interaction) {
       }
       timedRoles.setMemberMilestoneOverride(interaction.guild.id, memberId, ruleId, dates, { actorId: interaction.user.id });
       return refresh(interaction, buildMembershipRecordPanel(interaction.guild, memberId, true));
+    }
+    if (customId.startsWith(PREFIX + ':recoverRole:')) {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
+      const ruleId = customId.split(':').pop();
+      await interaction.deferUpdate();
+      const service = require('./timedRolesService');
+      await service.withTimedRolesLock(interaction.guild.id, async () => {
+        const rule = timedRoles.getRule(interaction.guild.id, ruleId);
+        if (!rule) throw new Error('Milestone no longer exists.');
+        const roles = await interaction.guild.roles.fetch();
+        if (roles.has(rule.roleId)) throw new Error('The reward role already exists.');
+        if (!interaction.guild.members.me?.permissions.has('ManageRoles')) throw new Error('Goliath requires Manage Roles.');
+        const role = await interaction.guild.roles.create({ name: rule.name.slice(0,100), permissions: [], mentionable: false, reason: 'Timed Roles reward recovery requested by ' + interaction.user.id });
+        timedRoles.saveRule(interaction.guild.id, { ...rule, roleId: role.id }, { actorId: interaction.user.id });
+      });
+      return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
     }
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
