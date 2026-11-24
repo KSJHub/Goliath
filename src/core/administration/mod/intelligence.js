@@ -251,6 +251,24 @@ function mapProfile(row) {
     boostingSince: row.boosting_since, screeningPending: Boolean(row.screening_pending),
   };
 }
+// Export only verified guild joining dates, never cross-guild intelligence.
+function getGuildMembershipEvidence(guildId) {
+  ensureSchema();
+  const dates = new Map();
+  const rows = db.prepare('SELECT user_id,before_value,after_value FROM member_intelligence_events WHERE guild_id = ?').iterate(String(guildId));
+  for (const row of rows) {
+    for (const value of [row.before_value, row.after_value]) {
+      const snapshot = json(value, null);
+      if (!snapshot || String(snapshot.guildId) !== String(guildId) || String(snapshot.userId) !== String(row.user_id)) continue;
+      const timestamp = Date.parse(snapshot.joinedAt);
+      if (!Number.isFinite(timestamp) || timestamp <= 0 || timestamp > Date.now()) continue;
+      const at = new Date(timestamp).toISOString();
+      if (!dates.has(row.user_id) || at < dates.get(row.user_id)) dates.set(row.user_id, at);
+    }
+  }
+  return dates;
+}
+
 function getGuildHistory(userId) {
   return db.prepare('SELECT * FROM member_intelligence_profiles WHERE user_id = ? ORDER BY last_seen_at DESC').all(String(userId)).map(mapProfile);
 }
@@ -879,6 +897,7 @@ module.exports = {
   observeUserUpdate,
   observeScan,
   getGuildHistory,
+  getGuildMembershipEvidence,
   getIdentityHistory,
   getWatchlist,
   setWatchlist,
