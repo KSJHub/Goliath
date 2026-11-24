@@ -66,6 +66,7 @@ function normalizeRule(rule = {}) {
     value,
     unit,
     removeRoleIds,
+    celebration: rule.celebration && typeof rule.celebration === 'object' ? Object.fromEntries(Object.entries(rule.celebration).filter(([key,value]) => ['announcePromotions','announcementChannelId','announcementMessage','celebrationTitle','celebrationGif','celebrationEmbed','celebrationColor'].includes(key) && (typeof value === 'string' || typeof value === 'boolean' || value === null || Number.isInteger(value)))) : {},
     startMode: ['original', 'continuous', 'custom'].includes(rule.startMode) ? rule.startMode : 'original',
     customStartAt: typeof rule.customStartAt === 'string' && Number.isFinite(Date.parse(rule.customStartAt)) ? new Date(rule.customStartAt).toISOString() : null,
     createdBy: cleanId(rule.createdBy),
