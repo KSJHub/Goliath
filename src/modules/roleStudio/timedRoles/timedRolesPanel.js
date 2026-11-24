@@ -196,7 +196,7 @@ function buildRuleCelebrationPanel(guild, ruleId) {
         {label:'Embed',value:'embed',default:own.celebrationEmbed === true},
         {label:'Message',value:'message',default:own.celebrationEmbed === false}
       ])),
-      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,'Edit Template')),
+      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,'Edit Template'), button(PREFIX + ':ruleCelebrationPreview:' + ruleId,'Preview')),
       row(button(PREFIX + ':editBack:' + ruleId,emojiLabel('BACK','Back')))
     ]
   };
@@ -512,11 +512,24 @@ async function handleTimedRolesInteraction(interaction) {
       if (Object.keys(patch).length) timedRoles.updateSettings(interaction.guild.id, patch, { actorId: interaction.user.id });
       return refresh(interaction, buildCelebrationPanel(interaction.guild.id));
     }
-    if (/^admin:timedRoles:ruleCelebration(?:Edit|Submit|Channel|Format)?:/.test(customId) || customId.startsWith(PREFIX + ':editBack:')) {
+    if (/^admin:timedRoles:ruleCelebration(?:Edit|Submit|Channel|Format|Preview)?:/.test(customId) || customId.startsWith(PREFIX + ':editBack:')) {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
       const ruleId = customId.split(':').pop();
       const rule = timedRoles.getRule(interaction.guild.id, ruleId);
       if (!rule) throw new Error('Milestone not found.');
+      if (customId.startsWith(PREFIX + ':ruleCelebrationPreview:')) {
+        const service = require('./timedRolesService');
+        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const settings = { ...timedRoles.getSection(interaction.guild.id).settings, ...rule.celebration };
+        const progression = timedRoles.getMemberProgression(member, timedRoles.listRules(interaction.guild.id));
+        const channel = interaction.guild.channels.cache.get(settings.announcementChannelId) || interaction.channel;
+        const { title, message } = service.renderCelebration(member, rule, interaction.guild.roles.cache.get(rule.roleId), settings, progression, channel);
+        const allowedMentions = { parse: [], users: [], roles: [], repliedUser: false };
+        if (settings.celebrationEmbed === false) return interaction.reply({ content: message.slice(0,2000), ephemeral: true, allowedMentions });
+        const embed = new EmbedBuilder().setTitle(title.slice(0,256)).setDescription(message.slice(0,4096)).setColor(Number.isInteger(settings.celebrationColor) && settings.celebrationColor >= 0 && settings.celebrationColor <= 0xffffff ? settings.celebrationColor : 0x57F287).setTimestamp();
+        if (settings.celebrationGif && /^https:\/\//i.test(settings.celebrationGif)) embed.setImage(settings.celebrationGif);
+        return interaction.reply({ content: 'Private celebration preview — no achievement recorded.', embeds: [embed], ephemeral: true, allowedMentions });
+      }
       if (customId.startsWith(PREFIX + ':editBack:')) return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
       if (customId.startsWith(PREFIX + ':ruleCelebration:')) return refresh(interaction, buildRuleCelebrationPanel(interaction.guild, ruleId));
       if (customId.startsWith(PREFIX + ':ruleCelebrationChannel:') || customId.startsWith(PREFIX + ':ruleCelebrationFormat:')) {
