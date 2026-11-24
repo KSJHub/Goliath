@@ -76,6 +76,18 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
   const [recordId, setRecordId] = useState('');
   const [recordError, setRecordError] = useState('');
   const [recordBusy, setRecordBusy] = useState(false);
+  const [audit,setAudit]=useState(null);
+  const [auditError,setAuditError]=useState('');
+  const [auditBusy,setAuditBusy]=useState(false);
+  const activeGuild=React.useRef(guildId);
+  activeGuild.current=guildId;
+  async function loadAudit(page=0) {
+    const requestedGuild=guildId;
+    setAuditBusy(true);setAuditError('');setAudit(null);
+    try {const result=await api.request('/api/timed-roles/'+requestedGuild+'/audit?page='+page);if(activeGuild.current===requestedGuild)setAudit(result);}
+    catch(error){if(activeGuild.current===requestedGuild)setAuditError(error.message || 'Audit access unavailable.');}
+    finally{if(activeGuild.current===requestedGuild)setAuditBusy(false);}
+  }
 
   const rules = Object.values(config?.rules || {}).sort((a, b) => Number(a.value || 0) - Number(b.value || 0));
   const analytics = overview.analytics || config?.analytics || {};
@@ -131,7 +143,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     }
   }
 
-  useEffect(() => { setRecords(null); setRecord(null); setRecordId(''); setRecordError(''); load(); }, [guildId]);
+  useEffect(() => { setAudit(null);setAuditError('');setAuditBusy(false);setRecords(null); setRecord(null); setRecordId(''); setRecordError(''); load(); }, [guildId]);
 
   async function loadRecords(page = 0, id = '') {
     setRecordBusy(true); setRecordError(''); setRecord(null);
@@ -324,6 +336,13 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         {recordError && <p role="alert">{recordError}</p>}
         {records && <div><p>{records.total} records · Page {records.page+1}</p>{records.records.map(item=><div key={item.id} style={{padding:8}}><button style={buttonStyle(theme)} disabled={recordBusy} onClick={()=>loadRecords(0,item.id)}>{item.id}</button> {item.active===true?'Active':item.active===false?'Departed':'Unknown'} · {item.firstJoinedAt || 'Unknown join'}</div>)}<button style={buttonStyle(theme)} disabled={recordBusy || records.page===0} onClick={()=>loadRecords(records.page-1)}>Previous</button> <button style={buttonStyle(theme)} disabled={recordBusy || (records.page+1)*25>=records.total} onClick={()=>loadRecords(records.page+1)}>Next</button></div>}
         {record && <div><h3>Member details</h3><p>Original join: {record.record.firstJoinedAt || 'Unknown'}</p><p>Latest join: {record.record.lastJoinedAt || 'Unknown'}</p><p>Last departure: {record.record.lastLeftAt || 'Unknown'}</p><h3>Achievements</h3>{Object.entries(record.achievements || {}).map(([id,item])=><p key={id}>{item.milestoneName || config?.rules?.[id]?.name || id} · {item.achievedAt} · {item.celebration}</p>)}<h3>Individual schedules</h3>{Object.entries(record.overrides || {}).map(([id,item])=><p key={id}>{config?.rules?.[id]?.name || id} · {item.startAt || 'Default start'} · {item.dueAt || 'Calculated due date'}</p>)}</div>}
+      </section>
+      <section style={{...cardStyle,padding:22,display:'grid',gap:12}}>
+        <h2 style={{margin:0}}>Audit History</h2>
+        <p>Restricted permanent operational records, newest first.</p>
+        <div><button type="button" disabled={auditBusy} style={buttonStyle(theme)} onClick={()=>loadAudit()}>Load audit history</button></div>
+        {auditError && <p role="alert">{auditError}</p>}
+        {audit && <div><p>{audit.total} events · Page {audit.page+1}</p>{audit.events.map((event,index)=><details key={event.id || index} style={{padding:10,borderBottom:'1px solid '+theme.cardBorder}}><summary>{String(event.type || 'Event').replace(/_/g,' ')} · {event.at || 'Unknown time'}</summary><p>Actor: {event.actorId || 'System / unknown'}</p><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(event.details || {},null,2)}</pre></details>)}<button disabled={auditBusy || audit.page===0} style={buttonStyle(theme)} onClick={()=>loadAudit(audit.page-1)}>Previous</button> <button disabled={auditBusy || (audit.page+1)*25>=audit.total} style={buttonStyle(theme)} onClick={()=>loadAudit(audit.page+1)}>Next</button></div>}
       </section>
       <section style={{ ...cardStyle, padding: 22, display: 'grid', gap: 14 }}>
         <h2 style={{ margin: 0 }}>Milestones</h2>
