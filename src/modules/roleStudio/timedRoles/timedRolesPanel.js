@@ -109,6 +109,7 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
         button(`${PREFIX}:simulate`, emojiLabel('TEST_SEND', 'Simulate'), ButtonStyle.Primary),
         button(`${PREFIX}:records`, 'Membership Records'),
         button(`${PREFIX}:repair`, emojiLabel('WELCOME_DIAGNOSTICS', 'Repair')),
+        button(`${PREFIX}:newReward`, 'Create New Role', ButtonStyle.Primary),
       ),
       row(
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
@@ -203,13 +204,14 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       ].filter(Boolean).join('\n'))],
     components: [
       ...cleanupPicker.rows,
+      ...(!guild.roles.cache.has(rule.roleId) ? [row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:replaceReward:${rule.ruleId}`).setPlaceholder('Select existing replacement role').setMinValues(1).setMaxValues(1))] : []),
       row(
         button(`${PREFIX}:edit:${rule.ruleId}`, emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary),
         !guild.roles.cache.has(rule.roleId) ? button(`${PREFIX}:recoverRole:${rule.ruleId}`, 'Create Reward Role', ButtonStyle.Primary) : null,
         button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:delete:${rule.ruleId}`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger),
-        button(PREFIX, emojiLabel('BACK', 'Back')),
       ),
+      row(button(PREFIX, emojiLabel('BACK', 'Back'))),
     ],
   };
 }
@@ -383,6 +385,41 @@ async function handleTimedRolesInteraction(interaction) {
       }
       timedRoles.setMemberMilestoneOverride(interaction.guild.id, memberId, ruleId, dates, { actorId: interaction.user.id });
       return refresh(interaction, buildMembershipRecordPanel(interaction.guild, memberId, true));
+    }
+    if (customId === PREFIX + ':newReward' || customId === PREFIX + ':newRewardSubmit' || customId.startsWith(PREFIX + ':replaceReward:')) {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
+      if (customId === PREFIX + ':newReward') return interaction.showModal(buildRuleModal(PREFIX + ':newRewardSubmit', 'Create Milestone and Role'));
+      const service = require('./timedRolesService');
+      await interaction.deferUpdate();
+      await service.withTimedRolesLock(interaction.guild.id, async () => {
+        const guild = interaction.guild;
+        if (!guild.members.me?.permissions.has('ManageRoles')) throw new Error('Goliath requires Manage Roles.');
+        if (customId.startsWith(PREFIX + ':replaceReward:')) {
+          const rule = timedRoles.getRule(guild.id, customId.split(':').pop());
+          if (!rule) throw new Error('Milestone no longer exists.');
+          const roles = await guild.roles.fetch();
+          if (roles.has(rule.roleId)) throw new Error('The original reward role still exists.');
+          const role = roles.get(interaction.values[0]);
+          if (!role || role.id === guild.id || role.managed || role.position >= guild.members.me.roles.highest.position) throw new Error('Choose a manageable reward role.');
+          if (timedRoles.listRules(guild.id).some(other => other.ruleId !== rule.ruleId && other.roleId === role.id)) throw new Error('This role is already assigned to a milestone.');
+          timedRoles.saveRule(guild.id, { ...rule, roleId: role.id }, { actorId: interaction.user.id });
+          return;
+        }
+        const name = interaction.fields.getTextInputValue('name').trim();
+        const value = Number(interaction.fields.getTextInputValue('value'));
+        const unit = interaction.fields.getStringSelectValues('unit')[0];
+        const startingPoint = readStartingPoint(interaction);
+        if (!name || !Number.isInteger(value) || value < 1 || value > 1000000 || !timedRoles.UNITS.includes(unit)) throw new Error('Enter a valid name and whole-number duration.');
+        const roles = await guild.roles.fetch();
+        if (roles.some(role => role.name.toLowerCase() === name.toLowerCase())) throw new Error('A role with this name exists. Select it from the existing role picker.');
+        const role = await guild.roles.create({ name, permissions: [], mentionable: false, reason: 'Timed Roles milestone requested by ' + interaction.user.id });
+        try {
+          timedRoles.saveRule(guild.id, { name, value, unit, ...startingPoint, roleId: role.id, createdBy: interaction.user.id }, { actorId: interaction.user.id });
+        } catch (error) {
+          throw new Error('Role created (' + role.id + ') but milestone save failed. Select the existing role to retry: ' + error.message);
+        }
+      });
+      return refresh(interaction);
     }
     if (customId.startsWith(PREFIX + ':recoverRole:')) {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
