@@ -57,7 +57,7 @@ function StatCard({ theme, label, value, hint }) {
   );
 }
 
-const emptyDraft = { name: 'Veteran', roleId: '', value: 1, unit: 'years', removeRoleIds: [], enabled: true };
+const emptyDraft = { name: '', roleId: '', value: 1, unit: 'years', startMode: 'original', customStartAt: '', removeRoleIds: [], enabled: true };
 
 export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
@@ -71,6 +71,11 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [records, setRecords] = useState(null);
+  const [record, setRecord] = useState(null);
+  const [recordId, setRecordId] = useState('');
+  const [recordError, setRecordError] = useState('');
+  const [recordBusy, setRecordBusy] = useState(false);
 
   const rules = Object.values(config?.rules || {}).sort((a, b) => Number(a.value || 0) - Number(b.value || 0));
   const analytics = overview.analytics || config?.analytics || {};
@@ -126,7 +131,16 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     }
   }
 
-  useEffect(() => { load(); }, [guildId]);
+  useEffect(() => { setRecords(null); setRecord(null); setRecordId(''); setRecordError(''); load(); }, [guildId]);
+
+  async function loadRecords(page = 0, id = '') {
+    setRecordBusy(true); setRecordError(''); setRecord(null);
+    try {
+      const result = await api.request('/api/timed-roles/' + guildId + '/records' + (id ? '/' + encodeURIComponent(id) : '?page=' + page));
+      if (id) setRecord(result); else setRecords(result);
+    } catch (error) { setRecords(null); setRecordError(error.message || 'Record access unavailable.'); }
+    finally { setRecordBusy(false); }
+  }
 
   async function runAction(name, fn, message) {
     setSaving(name);
@@ -174,6 +188,8 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
       roleId: rule.roleId,
       value: rule.value,
       unit: rule.unit,
+      startMode: rule.startMode || 'original',
+      customStartAt: rule.customStartAt?.slice(0,10) || '',
       removeRoleIds: rule.removeRoleIds || [],
       enabled: rule.enabled !== false,
     });
@@ -248,6 +264,8 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Duration<input type="number" min="1" value={draft.value} onChange={(event) => setDraft((current) => ({ ...current, value: Number(event.target.value) }))} style={fieldStyle(theme)} /></label>
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Unit<ThemedSelect theme={theme} value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} style={fieldStyle(theme)}>{['minutes', 'hours', 'days', 'weeks', 'months', 'years'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</ThemedSelect></label>
         </div>
+        <label>Starting point <ThemedSelect theme={theme} value={draft.startMode} onChange={event=>setDraft(current=>({...current,startMode:event.target.value}))} style={fieldStyle(theme)}><option value="original">Original known guild join</option><option value="continuous">Latest guild join</option><option value="custom">Custom date</option></ThemedSelect></label>
+        {draft.startMode === 'custom' && <label>Custom start date<input type="date" value={draft.customStartAt} onChange={event=>setDraft(current=>({...current,customStartAt:event.target.value}))} style={fieldStyle(theme)} /></label>}
         <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Cleanup roles (optional)
           <ThemedSelect theme={theme} multiple size={Math.min(6, Math.max(3, cleanupRoles.length))} value={draft.removeRoleIds} onChange={(event) => setDraft((current) => ({ ...current, removeRoleIds: Array.from(event.target.selectedOptions, (option) => option.value) }))} style={fieldStyle(theme)}>
             {cleanupRoles.map((role) => <option key={role.id} value={role.id}>{role.name || role.id}</option>)}
@@ -260,9 +278,21 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         </div>
       </section>
 
+      <section style={{ ...cardStyle, padding:22, display:'grid', gap:12 }}>
+        <h2>Membership Records</h2>
+        <p>Restricted historical guild membership and achievements.</p>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button disabled={recordBusy} style={buttonStyle(theme)} onClick={()=>loadRecords()}>Browse records</button>
+          <input aria-label="Discord user ID" placeholder="Discord user ID" value={recordId} onChange={event=>setRecordId(event.target.value)} style={{...fieldStyle(theme),width:'auto'}} />
+          <button disabled={recordBusy || !/^\d{15,25}$/.test(recordId.trim())} style={buttonStyle(theme)} onClick={()=>loadRecords(0,recordId.trim())}>Find member</button>
+        </div>
+        {recordError && <p role="alert">{recordError}</p>}
+        {records && <div><p>{records.total} records · Page {records.page+1}</p>{records.records.map(item=><div key={item.id} style={{padding:8}}><button style={buttonStyle(theme)} disabled={recordBusy} onClick={()=>loadRecords(0,item.id)}>{item.id}</button> {item.active===true?'Active':item.active===false?'Departed':'Unknown'} · {item.firstJoinedAt || 'Unknown join'}</div>)}<button style={buttonStyle(theme)} disabled={recordBusy || records.page===0} onClick={()=>loadRecords(records.page-1)}>Previous</button> <button style={buttonStyle(theme)} disabled={recordBusy || (records.page+1)*25>=records.total} onClick={()=>loadRecords(records.page+1)}>Next</button></div>}
+        {record && <div><h3>Member details</h3><p>Original join: {record.record.firstJoinedAt || 'Unknown'}</p><p>Latest join: {record.record.lastJoinedAt || 'Unknown'}</p><p>Last departure: {record.record.lastLeftAt || 'Unknown'}</p><h3>Achievements</h3>{Object.entries(record.achievements || {}).map(([id,item])=><p key={id}>{item.milestoneName || config?.rules?.[id]?.name || id} · {item.achievedAt} · {item.celebration}</p>)}<h3>Individual schedules</h3>{Object.entries(record.overrides || {}).map(([id,item])=><p key={id}>{config?.rules?.[id]?.name || id} · {item.startAt || 'Default start'} · {item.dueAt || 'Calculated due date'}</p>)}</div>}
+      </section>
       <section style={{ ...cardStyle, padding: 22, display: 'grid', gap: 14 }}>
         <h2 style={{ margin: 0 }}>Milestones</h2>
-        {rules.length === 0 ? <EmptyState theme={theme} icon={E.TIMER} title="No milestones configured" description="Create a milestone such as Veteran after one year." /> : rules.map((rule) => (
+        {rules.length === 0 ? <EmptyState theme={theme} icon={E.TIMER} title="No milestones configured" description="Create your first custom membership milestone." /> : rules.map((rule) => (
           <div key={rule.ruleId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontWeight: 950 }}>{rule.enabled ? E.SUCCESS : E.PAUSE} {rule.name}</div>
