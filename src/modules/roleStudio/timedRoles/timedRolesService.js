@@ -93,7 +93,7 @@ async function announcePromotion(member, rule, role, settings) {
   const allowedMentions = { parse: [], users: [member.id], roles: [], repliedUser: false };
   if (settings.celebrationEmbed !== false) {
     if (!permissions?.has(PermissionFlagsBits.EmbedLinks)) throw new Error('Goliath requires Embed Links for celebrations.');
-    const embed = new EmbedBuilder().setTitle(String(settings.celebrationTitle || 'Milestone achieved!').slice(0,256)).setDescription(message.slice(0,4096)).setColor(0x57F287).setTimestamp();
+    const embed = new EmbedBuilder().setTitle(String(settings.celebrationTitle || 'Milestone achieved!').slice(0,256)).setDescription(message.slice(0,4096)).setColor(Number.isInteger(settings.celebrationColor) && settings.celebrationColor >= 0 && settings.celebrationColor <= 0xffffff ? settings.celebrationColor : 0x57F287).setTimestamp();
     if (settings.celebrationGif && /^https:\/\//i.test(settings.celebrationGif)) embed.setImage(settings.celebrationGif);
     await channel.send({ content: '<@' + member.id + '>', embeds: [embed], allowedMentions });
   } else await channel.send({ content: message.slice(0,2000), allowedMentions });
@@ -141,7 +141,8 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
           history[member.id] = { ...history[member.id], [rule.ruleId]: { achievedAt: now(), roleId: role.id, celebration: 'suppressed' } };
           return { ...current, achievementHistory: history };
         });
-        if (!awarded.includes(role.id) || !section.settings.announcePromotions) continue;
+        const celebrationSettings = { ...section.settings, ...rule.celebration };
+        if (!awarded.includes(role.id) || !celebrationSettings.announcePromotions) continue;
         const dueAt = Date.parse(state.progression.dueAtByRule?.[rule.ruleId]);
         const baseline = Date.parse(section.analytics?.celebrationBaselineAt);
         const lastScan = Date.parse(section.analytics?.lastScanAt);
@@ -150,7 +151,7 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
         const newlyDue = Number.isFinite(dueAt) && Number.isFinite(cutoff) && dueAt > cutoff && dueAt <= Date.now();
         if (!newlyDue && !section.settings.celebrateRetroactive) continue;
         let status = 'failed';
-        try { if (await announcePromotion(live, rule, role, section.settings)) { announced += 1; status = 'sent'; } } catch (error) { console.warn('[TimedRoles] Celebration failed:', error.message); }
+        try { if (await announcePromotion(live, rule, role, celebrationSettings)) { announced += 1; status = 'sent'; } } catch (error) { console.warn('[TimedRoles] Celebration failed:', error.message); }
         base.updateSection(guild.id, current => {
           const history = { ...current.achievementHistory };
           const entries = { ...history[member.id] };
