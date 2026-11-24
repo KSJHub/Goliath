@@ -158,7 +158,8 @@ function buildMembershipRecordsPanel(guild) {
     ],
   };
 }
-function buildMembershipRecordPanel(guild, id) {
+function buildMembershipRecordPanel(guild, id, canEdit = false) {
+  const rules = timedRoles.listRules(guild.id).slice(0, 25);
   const record = guildManager.getGuildSection(guild.id, 'membershipRecords', {}).members?.[id];
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Membership Record').setDescription(record ? [
@@ -169,7 +170,10 @@ function buildMembershipRecordPanel(guild, id) {
       '**Observed joins:** ' + (record.joinCount ?? 'Unknown'),
       '**Status:** ' + (record.active == null ? 'Unknown' : record.active ? 'Active' : 'Inactive'),
     ].join('\n') : 'No membership record found.')],
-    components: [row(button(PREFIX + ':records', emojiLabel('BACK', 'Back')))],
+    components: [
+      ...(record && canEdit && rules.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':override:' + id).setPlaceholder('Edit individual milestone schedule').addOptions(rules.map(rule => ({ label: rule.name.slice(0,100), value: rule.ruleId }))))] : []),
+      row(button(PREFIX + ':records', emojiLabel('BACK', 'Back'))),
+    ],
   };
 }
 
@@ -347,7 +351,7 @@ async function handleTimedRolesInteraction(interaction) {
     if (customId === PREFIX) return refresh(interaction);
     if (customId === PREFIX + ':records' || customId === PREFIX + ':recordMember') {
       if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
-      return refresh(interaction, customId.endsWith(':recordMember') ? buildMembershipRecordPanel(interaction.guild, interaction.values[0]) : buildMembershipRecordsPanel(interaction.guild));
+      return refresh(interaction, customId.endsWith(':recordMember') ? buildMembershipRecordPanel(interaction.guild, interaction.values[0], interaction.user.id === interaction.guild.ownerId || interaction.memberPermissions?.has('Administrator')) : buildMembershipRecordsPanel(interaction.guild));
     }
 
     if ([PREFIX + ':recordsAccess', PREFIX + ':recordsAccessRoles', PREFIX + ':recordsAccessToggle'].includes(customId)) {
@@ -356,6 +360,29 @@ async function handleTimedRolesInteraction(interaction) {
       if (customId.endsWith('Roles')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, roleIds: (interaction.values || []).filter(id => id !== interaction.guild.id && interaction.guild.roles.cache.has(id)) } });
       if (customId.endsWith('Toggle')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, allowAdministrators: access.allowAdministrators === false } });
       return refresh(interaction, buildRecordsAccessPanel(interaction.guild));
+    }
+    if (customId.startsWith(PREFIX + ':override:') || customId.startsWith(PREFIX + ':overrideSubmit:')) {
+      if (!canViewMembershipRecords(interaction) || !(interaction.user.id === interaction.guild.ownerId || interaction.memberPermissions?.has('Administrator'))) throw new Error('Membership schedule editing requires administrator access.');
+      const [, , action, memberId, submittedRule] = customId.split(':');
+      const ruleId = action === 'override' ? interaction.values[0] : submittedRule;
+      if (!timedRoles.getRule(interaction.guild.id, ruleId) || !guildManager.getGuildSection(interaction.guild.id, 'membershipRecords', {}).members?.[memberId]) throw new Error('Member record or milestone no longer exists.');
+      if (action === 'override') {
+        const current = timedRoles.getSection(interaction.guild.id).memberOverrides?.[memberId]?.[ruleId] || {};
+        const dateField = (id, label) => {
+          const input = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10);
+          if (current[id]) input.setValue(current[id].slice(0,10));
+          return row(input);
+        };
+        return interaction.showModal(new ModalBuilder().setCustomId(PREFIX + ':overrideSubmit:' + memberId + ':' + ruleId).setTitle('Individual milestone schedule').addComponents(dateField('startAt','Start date (YYYY-MM-DD)'),dateField('dueAt','Due date (YYYY-MM-DD)')));
+      }
+      const dates = {};
+      for (const key of ['startAt','dueAt']) {
+        const value = interaction.fields.getTextInputValue(key).trim();
+        if (value && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10) !== value)) throw new Error('Enter valid dates in YYYY-MM-DD format.');
+        dates[key] = value || null;
+      }
+      timedRoles.setMemberMilestoneOverride(interaction.guild.id, memberId, ruleId, dates, { actorId: interaction.user.id });
+      return refresh(interaction, buildMembershipRecordPanel(interaction.guild, memberId, true));
     }
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
