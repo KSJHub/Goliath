@@ -297,6 +297,22 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         </div>
       </section>
 
+      <section style={{...cardStyle,padding:22,display:'grid',gap:12}}>
+        <h2 style={{margin:0}}>Logging</h2>
+        <p>Permanent audit records are retained independently of Discord notifications. Choose a restricted channel for member information.</p>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {['channel','thread'].map(mode=><button key={mode} type="button" disabled={!!saving} style={buttonStyle(theme,settings.logging?.mode===mode?'success':'default')} onClick={()=>saveSettings({logging:{...settings.logging,mode:settings.logging?.mode===mode?'off':mode}})}>{mode==='channel'?'Channel Logs':'Thread Logs'}: {settings.logging?.mode===mode?'ON':'OFF'}</button>)}
+        </div>
+        <ChannelSelect theme={theme} resources={channels} value={settings.logging?.channelId || ''} onChange={channelId=>saveSettings({logging:{...settings.logging,channelId:channelId || null}})} label="Log destination" disabled={!!saving}/>
+        <label>Events<ThemedSelect theme={theme} multiple size={6} disabled={!!saving} value={settings.logging?.events || []} onChange={e=>saveSettings({logging:{...settings.logging,events:Array.from(e.target.selectedOptions,o=>o.value)}})} style={fieldStyle(theme)}>{['milestone_created','milestone_updated','milestone_deleted','settings_updated','member_dates_updated','member_roles_changed','celebration_sent','celebration_failed','member_progression_failed'].map(event=><option key={event} value={event}>{event.replace(/_/g,' ')}</option>)}</ThemedSelect></label>
+        <label>Notification roles (maximum 10)<ThemedSelect theme={theme} multiple size={5} disabled={!!saving} value={settings.logging?.roleIds || []} onChange={e=>{const roleIds=Array.from(e.target.selectedOptions,o=>o.value);if(roleIds.length>10){setError('Choose at most ten roles.');return;}saveSettings({logging:{...settings.logging,roleIds}});}} style={fieldStyle(theme)}>{roles.filter(role=>String(role.id)!==guildId).map(role=><option key={role.id} value={role.id}>{role.name}</option>)}</ThemedSelect></label>
+      </section>
+      <section style={{...cardStyle,padding:22,display:'grid',gap:12}}>
+        <h2 style={{margin:0}}>Membership Record Access</h2>
+        <p>Only the guild owner can change these settings. The owner always retains access.</p>
+        <label><input type="checkbox" disabled={!!saving} checked={settings.recordsAccess?.allowAdministrators!==false} onChange={e=>saveSettings({recordsAccess:{...settings.recordsAccess,allowAdministrators:e.target.checked}})}/> Allow administrators</label>
+        <label>Additional authorised roles (maximum 10)<ThemedSelect theme={theme} multiple size={5} disabled={!!saving} value={settings.recordsAccess?.roleIds || []} onChange={e=>{const roleIds=Array.from(e.target.selectedOptions,o=>o.value);if(roleIds.length>10){setError('Choose at most ten roles.');return;}saveSettings({recordsAccess:{...settings.recordsAccess,roleIds}});}} style={fieldStyle(theme)}>{roles.filter(role=>String(role.id)!==guildId).map(role=><option key={role.id} value={role.id}>{role.name}</option>)}</ThemedSelect></label>
+      </section>
       <section style={{ ...cardStyle, padding:22, display:'grid', gap:12 }}>
         <h2>Membership Records</h2>
         <p>Restricted historical guild membership and achievements.</p>
