@@ -13,6 +13,13 @@ module.exports = {
     for (const guild of client.guilds.cache.values()) {
       if (!guild.available) continue;
       try {
+        const intelligence = require('../../core/administration/mod/intelligence');
+        const recovered = guildManager.mergeMembershipEvidence(guild.id, intelligence.getGuildMembershipEvidence(guild.id));
+        if (recovered) console.info('[Membership Records] Recovered', recovered, 'historical dates for', guild.id);
+      } catch (error) {
+        console.warn('[Membership Records] Historical recovery failed for', guild.id, error?.message || error);
+      }
+      try {
         const members = await guild.members.fetch({ time: 120000 });
         const imported = guildManager.importMembershipRecords(guild, members);
         if (imported) console.info('[Membership Records] Imported', imported, 'members for', guild.id);
