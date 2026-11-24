@@ -1,6 +1,6 @@
 'use strict';
 
-const { PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
 const { replaceVars } = require('../../../core/guild/guildVariables');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
@@ -90,7 +90,13 @@ async function announcePromotion(member, rule, role, settings) {
     '{role}': `<@&${role.id}>`,
     '{duration}': base.formatDuration(rule),
   });
-  await channel.send({ content: message, allowedMentions: { users: [member.id], roles: [role.id] } });
+  const allowedMentions = { parse: [], users: [member.id], roles: [], repliedUser: false };
+  if (settings.celebrationEmbed !== false) {
+    if (!permissions?.has(PermissionFlagsBits.EmbedLinks)) throw new Error('Goliath requires Embed Links for celebrations.');
+    const embed = new EmbedBuilder().setTitle(String(settings.celebrationTitle || 'Milestone achieved!').slice(0,256)).setDescription(message.slice(0,4096)).setColor(0x57F287).setTimestamp();
+    if (settings.celebrationGif && /^https:\/\//i.test(settings.celebrationGif)) embed.setImage(settings.celebrationGif);
+    await channel.send({ content: '<@' + member.id + '>', embeds: [embed], allowedMentions });
+  } else await channel.send({ content: message.slice(0,2000), allowedMentions });
   return true;
 }
 
@@ -127,8 +133,25 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
       const removed = cleanupRoles.map((role) => role.id).filter((roleId) => initiallyHeld.has(roleId));
       let announced = 0;
       for (const { rule, role } of targetRoles) {
-        if (!awarded.includes(role.id)) continue;
-        if (await announcePromotion(live, rule, role, section.settings).catch(() => false)) announced += 1;
+        const existing = base.getSection(guild.id).achievementHistory?.[member.id]?.[rule.ruleId];
+        if (existing) continue;
+        // Persist before sending to avoid repeated celebrations after restart or role recovery.
+        base.updateSection(guild.id, current => {
+          const history = { ...current.achievementHistory };
+          history[member.id] = { ...history[member.id], [rule.ruleId]: { achievedAt: now(), roleId: role.id, celebration: 'suppressed' } };
+          return { ...current, achievementHistory: history };
+        });
+        if (!awarded.includes(role.id) || !section.settings.announcePromotions) continue;
+        if (!section.settings.celebrateRetroactive) continue;
+        let status = 'failed';
+        try { if (await announcePromotion(live, rule, role, section.settings)) { announced += 1; status = 'sent'; } } catch (error) { console.warn('[TimedRoles] Celebration failed:', error.message); }
+        base.updateSection(guild.id, current => {
+          const history = { ...current.achievementHistory };
+          const entries = { ...history[member.id] };
+          entries[rule.ruleId] = { ...entries[rule.ruleId], celebration: status };
+          history[member.id] = entries;
+          return { ...current, achievementHistory: history };
+        });
       }
       return { status: awarded.length || removed.length ? 'changed' : 'noop', awarded, removed, announced, progression: state.progression };
     }
