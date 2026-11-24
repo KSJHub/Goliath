@@ -196,6 +196,13 @@ function buildSettingsPanel(guildId) {
   };
 }
 
+function readStartingPoint(interaction) {
+  const startMode = interaction.fields.getTextInputValue('startMode').trim().toLowerCase();
+  const date = interaction.fields.getTextInputValue('customStartAt').trim();
+  if (!['original', 'continuous', 'custom'].includes(startMode)) throw new Error('Choose original, continuous or custom.');
+  if (startMode === 'custom' && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw new Error('Enter a valid custom date in YYYY-MM-DD format.');
+  return { startMode, customStartAt: startMode === 'custom' ? date : null };
+}
 function buildRuleModal(customId, title, rule = {}) {
   return new ModalBuilder()
     .setCustomId(customId)
@@ -204,6 +211,8 @@ function buildRuleModal(customId, title, rule = {}) {
       row(new TextInputBuilder().setCustomId('name').setLabel('Milestone name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(rule.name || 'Veteran')),
       row(new TextInputBuilder().setCustomId('value').setLabel('Time value').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(6).setValue(String(rule.value || 6))),
       row(new TextInputBuilder().setCustomId('unit').setLabel('minutes, hours, days, weeks, months or years').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10).setValue(rule.unit || 'months')),
+      row(new TextInputBuilder().setCustomId('startMode').setLabel('Start: original, continuous or custom').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10).setValue(rule.startMode || 'original')),
+      row(new TextInputBuilder().setCustomId('customStartAt').setLabel('Custom start date (YYYY-MM-DD)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10).setValue(rule.customStartAt?.slice(0, 10) || '')),
     );
 }
 function buildIntervalModal(current) {
@@ -228,7 +237,8 @@ async function buildPreviewPanel(guild, memberId) {
       .setTitle(emojiLabel('SEARCH', 'Member Tenure Preview'))
       .setDescription([
         `**Member:** <@${member.id}>`,
-        `**Joined:** ${formatTimestamp(member.joinedAt, 'F')}`,
+        `**Original known join:** ${progression.joinedAt ? formatTimestamp(progression.joinedAt, 'F') : 'Unknown'}`,
+        `**Current membership join:** ${formatTimestamp(member.joinedAt, 'F')}`,
         `**Current milestone:** ${progression.current ? `${progression.current.name} → <@&${progression.current.roleId}>` : 'No milestone reached yet'}`,
         `**Next milestone:** ${progression.next ? `${progression.next.name} → <@&${progression.next.roleId}>` : 'Highest configured milestone reached'}`,
         `**Next promotion:** ${progression.nextAt ? formatTimestamp(progression.nextAt) : 'None'}`,
@@ -320,6 +330,7 @@ async function handleTimedRolesInteraction(interaction) {
           roleId,
           value: interaction.fields.getTextInputValue('value'),
           unit: interaction.fields.getTextInputValue('unit'),
+          ...readStartingPoint(interaction),
           createdBy: interaction.user.id,
         }, { actorId: interaction.user.id });
         return refresh(interaction);
@@ -333,6 +344,7 @@ async function handleTimedRolesInteraction(interaction) {
           name: interaction.fields.getTextInputValue('name'),
           value: interaction.fields.getTextInputValue('value'),
           unit: interaction.fields.getTextInputValue('unit'),
+          ...readStartingPoint(interaction),
         }, { actorId: interaction.user.id });
         return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
       }
