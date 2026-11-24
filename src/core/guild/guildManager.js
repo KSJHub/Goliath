@@ -526,6 +526,32 @@ function importMembershipRecords(guild, members) {
   return imported;
 }
 
+// Recover historical dates without changing current membership or inventing departures.
+function mergeMembershipEvidence(guildId, evidence) {
+  const section = getGuildSection(guildId, 'membershipRecords', { schemaVersion: 1, members: {} });
+  const members = { ...section.members };
+  let recovered = 0;
+  for (const [rawId, rawDate] of evidence) {
+    const id = normalizeDiscordId(rawId);
+    const timestamp = Date.parse(rawDate);
+    if (!id || !Number.isFinite(timestamp) || timestamp <= 0 || timestamp > Date.now()) continue;
+    const at = new Date(timestamp).toISOString();
+    const previous = members[id];
+    if (previous?.firstJoinedAt && previous.firstJoinedAt <= at) continue;
+    members[id] = {
+      ...previous,
+      firstJoinedAt: at,
+      firstJoinedSource: 'discord_historical_snapshot',
+      lastJoinedAt: previous?.lastJoinedAt || at,
+      active: previous?.active ?? null,
+      history: [...(previous?.history || []), { type: 'historical_join_observed', at, source: 'discord_historical_snapshot' }],
+    };
+    recovered++;
+  }
+  if (recovered) updateGuildSection(guildId, 'membershipRecords', current => ({ ...current, schemaVersion: 1, members }));
+  return recovered;
+}
+
 function normalizeLogType(type = 'general') {
   const key = String(type || '').trim();
   return LOG_CHANNEL_ALIASES[key] || key || 'general';
@@ -801,6 +827,7 @@ module.exports = {
   getGuildFilePath,
   observeMembership,
   importMembershipRecords,
+  mergeMembershipEvidence,
 
   getGuildConfig,
   saveGuildConfig,
