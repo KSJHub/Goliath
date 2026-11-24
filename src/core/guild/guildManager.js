@@ -335,6 +335,8 @@ function mergeDefaults(data = {}) {
     createdAt: source.createdAt || base.createdAt || now(),
     updatedAt: source.updatedAt || base.updatedAt || now(),
     subscription: normalizeSubscription(source.subscription || base.subscription),
+    // Guild membership history is independent of module configuration and resets.
+    membershipRecords: isPlainObject(source.membershipRecords) ? clone(source.membershipRecords) : { schemaVersion: 1, members: {} },
     modules: buildModules(source),
   };
 }
