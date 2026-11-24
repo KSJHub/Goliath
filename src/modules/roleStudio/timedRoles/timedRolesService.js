@@ -166,7 +166,8 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
         const baseline = Date.parse(section.analytics?.celebrationBaselineAt);
         const lastScan = Date.parse(section.analytics?.lastScanAt);
         const configuredAt = Date.parse(rule.createdAt);
-        const cutoff = Math.max(baseline, lastScan, configuredAt);
+        const cutoffs = [baseline, lastScan, configuredAt].filter(Number.isFinite);
+        const cutoff = cutoffs.length ? Math.max(...cutoffs) : NaN;
         const newlyDue = Number.isFinite(dueAt) && Number.isFinite(cutoff) && dueAt > cutoff && dueAt <= Date.now();
         if (!newlyDue && !section.settings.celebrateRetroactive) continue;
         let status = 'failed';
@@ -178,7 +179,9 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
           history[member.id] = entries;
           return { ...current, achievementHistory: history };
         });
+        base.recordAudit(guild.id, 'celebration_' + status, { memberId: member.id, ruleId: rule.ruleId, roleId: role.id });
       }
+      if (awarded.length || removed.length) base.recordAudit(guild.id, 'member_roles_changed', { memberId: member.id, awarded, removed });
       return { status: awarded.length || removed.length ? 'changed' : 'noop', awarded, removed, announced, progression: state.progression };
     }
   }
@@ -192,7 +195,11 @@ async function applyProgressionToMember(member) {
     if (!guildManager.isModuleEnabled(member.guild.id, SECTION)) throw new Error('Timed Roles is disabled.');
     const section = base.getSection(member.guild.id);
     const rules = base.listRules(member.guild.id).filter((rule) => rule.enabled);
-    return applyUnlocked(member, section, rules);
+    try { return await applyUnlocked(member, section, rules); }
+    catch (error) {
+      base.recordAudit(member.guild.id, 'member_progression_failed', { memberId: member.id, error: String(error.message).slice(0,500) });
+      throw error;
+    }
   });
 }
 
@@ -243,6 +250,7 @@ async function scanGuild(guild, meta = {}) {
         if (applied.status === 'noop' || applied.status === 'skipped') result.skipped += 1;
       } catch (error) {
         result.failed += 1;
+        base.recordAudit(guild.id, 'member_progression_failed', { memberId: member.id, error: String(error.message).slice(0,500) }, meta);
         const progression = base.getMemberProgression(member, rules);
         const affected = progression.current ? [progression.current] : [];
         for (const rule of affected) stats.get(rule.ruleId).error ||= error.message;
