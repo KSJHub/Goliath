@@ -70,20 +70,14 @@ function desiredState(member, section, rules) {
   return { progression, targetRules, targetRoleIds, milestoneRoleIds, cleanupRoleIds };
 }
 
-async function announcePromotion(member, rule, role, settings, progression) {
-  if (!settings.announcePromotions || !settings.announcementChannelId) return false;
-  const channel = member.guild.channels.cache.get(settings.announcementChannelId)
-    || await member.guild.channels.fetch(settings.announcementChannelId).catch(() => null);
-  if (!channel?.isTextBased?.() || typeof channel.send !== 'function') return false;
-  const permissions = channel.permissionsFor?.(member.guild.members.me);
-  if (permissions && (!permissions.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages))) return false;
+function renderCelebration(member, rule, role, settings, progression, channel = null) {
   const interaction = {
     guild: member.guild,
     guildId: member.guild.id,
     user: member.user,
     member,
     channel,
-    channelId: channel.id,
+    channelId: channel?.id || null,
   };
   const record = guildManager.getGuildSection(member.guild.id, 'membershipRecords', { members: {} }).members?.[member.id];
   const timestamp = value => {
@@ -94,7 +88,7 @@ async function announcePromotion(member, rule, role, settings, progression) {
     '{member}': '<@' + member.id + '>',
     '{username}': member.user.username,
     '{milestone}': rule.name,
-    '{role}': '<@&' + role.id + '>',
+    '{role}': '<@&' + (role?.id || rule.roleId) + '>',
     '{duration}': base.formatDuration(rule),
     '{server}': member.guild.name,
     '{joined}': timestamp(record?.firstJoinedAt || member.joinedAt),
@@ -104,10 +98,21 @@ async function announcePromotion(member, rule, role, settings, progression) {
   };
   const render = template => replaceVars(String(template || ''), interaction, true, variables);
   const message = render(settings.announcementMessage || 'Congratulations {member}! You have achieved {milestone} after {duration} in {server}.');
+  return { message, title: render(settings.celebrationTitle || '{milestone} — Achievement Unlocked!') };
+}
+
+async function announcePromotion(member, rule, role, settings, progression) {
+  if (!settings.announcePromotions || !settings.announcementChannelId) return false;
+  const channel = member.guild.channels.cache.get(settings.announcementChannelId)
+    || await member.guild.channels.fetch(settings.announcementChannelId).catch(() => null);
+  if (!channel?.isTextBased?.() || typeof channel.send !== 'function') return false;
+  const permissions = channel.permissionsFor?.(member.guild.members.me);
+  if (permissions && (!permissions.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages))) return false;
+  const { message, title } = renderCelebration(member, rule, role, settings, progression, channel);
   const allowedMentions = { parse: [], users: [member.id], roles: [], repliedUser: false };
   if (settings.celebrationEmbed !== false) {
     if (!permissions?.has(PermissionFlagsBits.EmbedLinks)) throw new Error('Goliath requires Embed Links for celebrations.');
-    const embed = new EmbedBuilder().setTitle(render(settings.celebrationTitle || '{milestone} — Achievement Unlocked!').slice(0,256)).setDescription(message.slice(0,4096)).setColor(Number.isInteger(settings.celebrationColor) && settings.celebrationColor >= 0 && settings.celebrationColor <= 0xffffff ? settings.celebrationColor : 0x57F287).setTimestamp();
+    const embed = new EmbedBuilder().setTitle(title.slice(0,256)).setDescription(message.slice(0,4096)).setColor(Number.isInteger(settings.celebrationColor) && settings.celebrationColor >= 0 && settings.celebrationColor <= 0xffffff ? settings.celebrationColor : 0x57F287).setTimestamp();
     if (settings.celebrationGif && /^https:\/\//i.test(settings.celebrationGif)) embed.setImage(settings.celebrationGif);
     await channel.send({ content: '<@' + member.id + '>', embeds: [embed], allowedMentions });
   } else await channel.send({ content: message.slice(0,2000), allowedMentions });
@@ -300,6 +305,7 @@ async function startup(client) {
 }
 
 module.exports = {
+  renderCelebration,
   ...base,
   SECTION,
   applyProgressionToMember,
