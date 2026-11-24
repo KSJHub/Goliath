@@ -1,6 +1,5 @@
 'use strict';
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
-const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton, goliathNavigation, emojiLabel, EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -107,17 +106,11 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
       row(
         button(`${PREFIX}:scan`, emojiLabel('INVESTIGATE', 'Scan Now'), ButtonStyle.Success),
         button(`${PREFIX}:simulate`, emojiLabel('TEST_SEND', 'Simulate'), ButtonStyle.Primary),
-        button(`${PREFIX}:records`, 'Membership Records'),
-        button(`${PREFIX}:repair`, emojiLabel('WELCOME_DIAGNOSTICS', 'Repair')),
-        button(`${PREFIX}:newReward`, 'Create New Role', ButtonStyle.Primary),
+        button(`${PREFIX}:records`, emojiLabel('MEMBERS','Membership Records')),
+        button(`${PREFIX}:maintenance`, emojiLabel('TOOLS', 'Maintenance')),
+        button(`${PREFIX}:newReward`, emojiLabel('ADD','Create New Role'), ButtonStyle.Primary),
       ),
-      row(
-        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
-        button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:reactionRoles', emojiLabel('BACK', 'Back')),
-        button(`${PREFIX}:settings`, emojiLabel('SETTINGS', 'Settings')),
-        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
-      ),
+      goliathNavigation('admin:reactionRoles', PREFIX + ':settings'),
     ],
   };
 }
@@ -159,8 +152,8 @@ function buildMembershipRecordsPanel(guild, requestedPage = 0) {
     components: [
       row(new UserSelectMenuBuilder().setCustomId(PREFIX + ':recordMember').setPlaceholder('Choose current member').setMinValues(1).setMaxValues(1)),
       ...(visible.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':recordHistorical').setPlaceholder('Browse recorded members').addOptions(visible.map(record => ({label:(guild.members.cache.get(record.id)?.displayName || record.id).slice(0,100),value:record.id,description:(record.active === true ? 'Active' : record.active === false ? 'Departed' : 'Unknown') + ' · ' + record.id}))))] : []),
-      row(button(PREFIX + ':recordsPage:' + (page-1),'Previous',ButtonStyle.Secondary,page===0),button(PREFIX + ':recordsPage:' + (page+1),'Next',ButtonStyle.Secondary,page>=pages-1),button(PREFIX + ':recordSearch','Search')),
-      row(button(PREFIX, emojiLabel('BACK', 'Back')), button(PREFIX + ':settings', emojiLabel('SETTINGS', 'Settings'))),
+      row(button(PREFIX + ':recordsPage:' + (page-1),emojiLabel('ROLE_PREVIOUS','Previous'),ButtonStyle.Secondary,page===0),button(PREFIX + ':recordsPage:' + (page+1),emojiLabel('ROLE_NEXT','Next'),ButtonStyle.Secondary,page>=pages-1),button(PREFIX + ':recordSearch',emojiLabel('SEARCH','Search'))),
+      goliathNavigation(PREFIX,PREFIX + ':settings'),
     ],
   };
 }
@@ -180,7 +173,7 @@ function buildMembershipRecordPanel(guild, id, canEdit = false) {
     ].join('\n') : 'No membership record found.')],
     components: [
       ...(record && canEdit && rules.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':override:' + id).setPlaceholder('Edit individual milestone schedule').addOptions(rules.map(rule => ({ label: rule.name.slice(0,100), value: rule.ruleId }))))] : []),
-      ...(record ? [row(button(PREFIX + ':recordAchievements:' + id,'Achievements'))] : []),
+      ...(record ? [row(button(PREFIX + ':recordAchievements:' + id,emojiLabel('ACHIEVEMENT','Achievements')))] : []),
       row(button(PREFIX + ':records', emojiLabel('BACK', 'Back'))),
     ],
   };
@@ -204,7 +197,7 @@ function buildRuleCelebrationPanel(guild, ruleId) {
         {label:'Embed',value:'embed',default:own.celebrationEmbed === true},
         {label:'Message',value:'message',default:own.celebrationEmbed === false}
       ])),
-      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,'Edit Template'), button(PREFIX + ':ruleCelebrationPreview:' + ruleId,'Preview')),
+      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,emojiLabel('EDIT','Edit Template')), button(PREFIX + ':ruleCelebrationPreview:' + ruleId,emojiLabel('PREVIEW','Preview'))),
       row(button(PREFIX + ':editBack:' + ruleId,emojiLabel('BACK','Back')))
     ]
   };
@@ -223,7 +216,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(rule.enabled ? 0x5865F2 : 0x747F8D)
-      .setTitle(`⏳ ${rule.name}`)
+      .setTitle(emojiLabel('TIMER',rule.name))
       .setDescription([
         `**Award role:** ${guild.roles.cache.has(rule.roleId) ? `<@&${rule.roleId}>` : 'Missing — create a replacement role below.'}`,
         `**Required tenure:** ${formatDuration(rule)}`,
@@ -282,10 +275,11 @@ function buildSettingsPanel(guildId) {
       row(
         button(`${PREFIX}:interval`, emojiLabel('ROLE_CLOCK', 'Scan Interval')),
         button(`${PREFIX}:message`, emojiLabel('USER_FEEDBACK', 'Promotion Message')),
-        button(`${PREFIX}:recordsAccess`, 'Records Access'),
-        button(`${PREFIX}:celebrations`, 'Celebrations'),
-        button(`${PREFIX}:logging`, 'Logging'),
+        button(`${PREFIX}:recordsAccess`, emojiLabel('PERMISSIONS','Records Access')),
+        button(`${PREFIX}:celebrations`, emojiLabel('ACHIEVEMENT','Celebrations')),
+        button(`${PREFIX}:logging`, emojiLabel('SCROLL','Logging')),
       ),
+      row(button(PREFIX + ':auditPage:0',emojiLabel('HISTORY','Audit History'))),
       row(button(PREFIX, emojiLabel('BACK', 'Back'))),
     ],
   };
@@ -300,9 +294,9 @@ function buildAuditPanel(guildId, requestedPage = 0) {
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Timed Roles · Audit History').setDescription('Permanent records: ' + events.length + '\nPage ' + (page + 1) + ' of ' + pages);
   for (const event of entries) embed.addFields({ name: String(event.type || 'Event').replace(/_/g,' ').slice(0,256), value: (formatTimestamp(event.at,'F') + '\nActor: ' + (event.actorId ? '<@' + event.actorId + '>' : 'System / unknown') + '\n' + JSON.stringify(event.details || {})).slice(0,1024) });
   return { embeds: [embed], components: [
-    row(button(PREFIX + ':auditPage:' + (page - 1),'Previous',ButtonStyle.Secondary,page === 0),button(PREFIX + ':auditPage:' + (page + 1),'Next',ButtonStyle.Secondary,page >= pages - 1)),
-    row(button(PREFIX + ':auditExport','Export Audit')),
-    row(button(PREFIX + ':logging',emojiLabel('BACK','Back')),button(PREFIX + ':settings',emojiLabel('SETTINGS','Settings')))
+    row(button(PREFIX + ':auditPage:' + (page - 1),emojiLabel('ROLE_PREVIOUS','Previous'),ButtonStyle.Secondary,page === 0),button(PREFIX + ':auditPage:' + (page + 1),emojiLabel('ROLE_NEXT','Next'),ButtonStyle.Secondary,page >= pages - 1)),
+    row(button(PREFIX + ':auditExport',emojiLabel('MOD_EXPORT','Export Audit'))),
+    goliathNavigation(PREFIX + ':logging',PREFIX + ':settings')
   ] };
 }
 function buildLoggingPanel(guildId) {
@@ -315,7 +309,7 @@ function buildLoggingPanel(guildId) {
       row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':loggingEvents').setPlaceholder('Select logging events').setMinValues(0).setMaxValues(LOG_EVENTS.length).addOptions(LOG_EVENTS.map(value => ({label:value.replace(/_/g,' '),value,default:(s.events || []).includes(value)})))),
       row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':loggingDestination').setPlaceholder('Select logging channel').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)),
       row(new RoleSelectMenuBuilder().setCustomId(PREFIX + ':loggingRoles').setPlaceholder('Select notification roles').setMinValues(0).setMaxValues(10)),
-      row(button(PREFIX + ':settings',emojiLabel('BACK','Back')),button(PREFIX + ':auditPage:0','Audit History'))
+      goliathNavigation(PREFIX + ':settings',PREFIX + ':settings')
     ]
   };
 }
@@ -334,7 +328,7 @@ function buildCelebrationPanel(guildId) {
     ].join('\n')), embed],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':celebrationChannel').setPlaceholder('Celebration channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-      row(button(PREFIX + ':celebrationToggle', s.announcePromotions ? 'Disable' : 'Enable'), button(PREFIX + ':celebrationFormat', 'Switch Format'), button(PREFIX + ':celebrationEdit', 'Edit Template')),
+      row(button(PREFIX + ':celebrationToggle', s.announcePromotions ? 'Disable' : 'Enable'), button(PREFIX + ':celebrationFormat', 'Switch Format'), button(PREFIX + ':celebrationEdit', emojiLabel('EDIT','Edit Template'))),
       row(button(PREFIX + ':settings', emojiLabel('BACK', 'Back'))),
     ],
   };
@@ -433,6 +427,16 @@ async function handleTimedRolesInteraction(interaction) {
   if (!customId.startsWith(PREFIX)) return false;
   try {
     if (customId === PREFIX) return refresh(interaction);
+    if (customId === PREFIX + ':maintenance') {
+      const enabled = guildManager.isModuleEnabled(interaction.guild.id,'timedRoles');
+      const count = rolePickerPageCount(interaction.guild);
+      return refresh(interaction, { embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('TOOLS','Timed Roles Maintenance'))],components:[
+        row(button(PREFIX + (enabled ? ':disable' : ':enable'),emojiLabel(enabled ? 'USER_PAUSE' : 'USER_PLAY',enabled ? 'Disable' : 'Enable')),button(PREFIX + ':repair',emojiLabel('REPAIR','Repair')),button(PREFIX + ':export',emojiLabel('MOD_EXPORT','Export'))),
+        ...(count > 1 ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':rolePageSelect').setPlaceholder('Choose role picker page').addOptions(Array.from({length:Math.min(count,25)},(_,i)=>({label:'Role page ' + (i+1),value:String(i)}))))] : []),
+        goliathNavigation(PREFIX,PREFIX + ':settings')
+      ] });
+    }
+    if (customId === PREFIX + ':rolePageSelect') return refresh(interaction,null,Number(interaction.values[0]) || 0);
     if (customId.startsWith(PREFIX + ':auditPage:') || customId === PREFIX + ':auditExport') {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
       if (customId === PREFIX + ':auditExport') {
@@ -478,7 +482,7 @@ async function handleTimedRolesInteraction(interaction) {
       const page = Math.max(0,Math.min(pages-1,Math.floor(Number(requestedPage)||0)));
       const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Membership · Achievements').setDescription('Member: <@' + id + '>\nRecorded achievements: ' + entries.length + '\nPage ' + (page+1) + ' of ' + pages);
       for (const [ruleId,entry] of entries.slice(page*5,page*5+5)) embed.addFields({name:(section.rules[ruleId]?.name || entry.milestoneName || 'Archived milestone ' + ruleId).slice(0,256),value:('Achieved: ' + formatTimestamp(entry.achievedAt,'F') + '\nReward: <@&' + entry.roleId + '>\nCelebration: ' + (entry.celebration || 'Unknown')).slice(0,1024)});
-      const payload = { embeds:[embed],components:[row(button(PREFIX + ':recordAchievements:' + id + ':' + (page-1),'Previous',ButtonStyle.Secondary,page===0),button(PREFIX + ':recordAchievements:' + id + ':' + (page+1),'Next',ButtonStyle.Secondary,page>=pages-1)),row(button(PREFIX + ':records',emojiLabel('BACK','Back')))] };
+      const payload = { embeds:[embed],components:[row(button(PREFIX + ':recordAchievements:' + id + ':' + (page-1),emojiLabel('ROLE_PREVIOUS','Previous'),ButtonStyle.Secondary,page===0),button(PREFIX + ':recordAchievements:' + id + ':' + (page+1),emojiLabel('ROLE_NEXT','Next'),ButtonStyle.Secondary,page>=pages-1)),row(button(PREFIX + ':records',emojiLabel('BACK','Back')))] };
       if (interaction.message?.flags?.has(64)) return refresh(interaction,payload);
       return interaction.reply({...payload,ephemeral:true,allowedMentions:{parse:[]}});
     }
