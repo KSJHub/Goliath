@@ -159,7 +159,7 @@ function buildMembershipRecordsPanel(guild, requestedPage = 0) {
     components: [
       row(new UserSelectMenuBuilder().setCustomId(PREFIX + ':recordMember').setPlaceholder('Choose current member').setMinValues(1).setMaxValues(1)),
       ...(visible.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':recordHistorical').setPlaceholder('Browse recorded members').addOptions(visible.map(record => ({label:(guild.members.cache.get(record.id)?.displayName || record.id).slice(0,100),value:record.id,description:(record.active === true ? 'Active' : record.active === false ? 'Departed' : 'Unknown') + ' · ' + record.id}))))] : []),
-      row(button(PREFIX + ':recordsPage:' + (page-1),'Previous',ButtonStyle.Secondary,page===0),button(PREFIX + ':recordsPage:' + (page+1),'Next',ButtonStyle.Secondary,page>=pages-1)),
+      row(button(PREFIX + ':recordsPage:' + (page-1),'Previous',ButtonStyle.Secondary,page===0),button(PREFIX + ':recordsPage:' + (page+1),'Next',ButtonStyle.Secondary,page>=pages-1),button(PREFIX + ':recordSearch','Search')),
       row(button(PREFIX, emojiLabel('BACK', 'Back')), button(PREFIX + ':settings', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
@@ -458,6 +458,15 @@ async function handleTimedRolesInteraction(interaction) {
       else if (action !== '') throw new Error('Unknown logging control.');
       if (action) timedRoles.updateSettings(interaction.guild.id, { logging }, { actorId: interaction.user.id });
       return refresh(interaction, buildLoggingPanel(interaction.guild.id));
+    }
+    if ([PREFIX + ':recordSearch', PREFIX + ':recordSearchSubmit'].includes(customId)) {
+      if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
+      if (customId.endsWith(':recordSearch')) return interaction.showModal(new ModalBuilder().setCustomId(PREFIX + ':recordSearchSubmit').setTitle('Find Membership Record').addComponents(row(new TextInputBuilder().setCustomId('memberId').setLabel('Discord user ID or mention').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(30))));
+      const id = interaction.fields.getTextInputValue('memberId').trim().replace(/^<@!?(\d+)>$/, '$1');
+      if (!/^\d{15,25}$/.test(id)) throw new Error('Enter a valid Discord user ID.');
+      if (!guildManager.getGuildSection(interaction.guild.id,'membershipRecords',{}).members?.[id]) throw new Error('No membership record exists for that user ID.');
+      const payload = buildMembershipRecordPanel(interaction.guild,id,interaction.user.id === interaction.guild.ownerId || interaction.memberPermissions?.has('Administrator'));
+      return interaction.reply({...payload,ephemeral:true,allowedMentions:{parse:[]}});
     }
     if (customId.startsWith(PREFIX + ':recordAchievements:')) {
       if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
