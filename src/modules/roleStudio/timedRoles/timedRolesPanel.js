@@ -12,6 +12,7 @@ const {
   EmbedBuilder,
   ModalBuilder,
   LabelBuilder,
+  RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextInputBuilder,
@@ -120,6 +121,26 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
   };
 }
 
+function canViewMembershipRecords(interaction) {
+  const access = timedRoles.getSection(interaction.guild.id).settings.recordsAccess || {};
+  return interaction.user.id === interaction.guild.ownerId ||
+    (access.allowAdministrators !== false && interaction.memberPermissions?.has('Administrator')) ||
+    (access.roleIds || []).some(id => interaction.member?.roles?.cache?.has(id));
+}
+function buildRecordsAccessPanel(guild) {
+  const access = timedRoles.getSection(guild.id).settings.recordsAccess || {};
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('SETTINGS', 'Membership Records Access')).setDescription(
+      'The guild owner always retains access.\\nAdministrators: ' + (access.allowAdministrators !== false ? 'Allowed' : 'Not automatically allowed') +
+      '\\nAccess roles: ' + ((access.roleIds || []).map(id => '<@&' + id + '>').join(', ') || 'None')
+    )],
+    components: [
+      row(new RoleSelectMenuBuilder().setCustomId(PREFIX + ':recordsAccessRoles').setPlaceholder('Choose permitted roles').setMinValues(0).setMaxValues(10)),
+      row(button(PREFIX + ':recordsAccessToggle', 'Toggle administrator access')),
+      row(button(PREFIX + ':settings', emojiLabel('BACK', 'Back'))),
+    ],
+  };
+}
 function buildMembershipRecordsPanel(guild) {
   const records = Object.values(guildManager.getGuildSection(guild.id, 'membershipRecords', {}).members || {});
   return {
@@ -223,8 +244,9 @@ function buildSettingsPanel(guildId) {
       row(
         button(`${PREFIX}:interval`, emojiLabel('ROLE_CLOCK', 'Scan Interval')),
         button(`${PREFIX}:message`, emojiLabel('USER_FEEDBACK', 'Promotion Message')),
-        button(PREFIX, emojiLabel('BACK', 'Back')),
+        button(`${PREFIX}:recordsAccess`, 'Records Access'),
       ),
+      row(button(PREFIX, emojiLabel('BACK', 'Back'))),
     ],
   };
 }
@@ -324,10 +346,17 @@ async function handleTimedRolesInteraction(interaction) {
   try {
     if (customId === PREFIX) return refresh(interaction);
     if (customId === PREFIX + ':records' || customId === PREFIX + ':recordMember') {
-      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Only the guild owner or administrators may view membership records.');
+      if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
       return refresh(interaction, customId.endsWith(':recordMember') ? buildMembershipRecordPanel(interaction.guild, interaction.values[0]) : buildMembershipRecordsPanel(interaction.guild));
     }
 
+    if ([PREFIX + ':recordsAccess', PREFIX + ':recordsAccessRoles', PREFIX + ':recordsAccessToggle'].includes(customId)) {
+      if (interaction.user.id !== interaction.guild.ownerId) throw new Error('Only the guild owner can change membership record access.');
+      const access = timedRoles.getSection(interaction.guild.id).settings.recordsAccess || {};
+      if (customId.endsWith('Roles')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, roleIds: (interaction.values || []).filter(id => id !== interaction.guild.id && interaction.guild.roles.cache.has(id)) } });
+      if (customId.endsWith('Toggle')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, allowAdministrators: access.allowAdministrators === false } });
+      return refresh(interaction, buildRecordsAccessPanel(interaction.guild));
+    }
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
       return refresh(interaction, null, rolePicker.page);
