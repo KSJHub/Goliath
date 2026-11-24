@@ -450,6 +450,38 @@ function updateGuildSection(guildId, sectionName, updater, fallback = {}, guildO
   return replaceGuildSection(guildId, sectionName, isPlainObject(next) ? next : {}, guildOrMeta);
 }
 
+// Membership dates are Discord guild dates, never account creation dates.
+function observeMembership(member, present = true) {
+  const guildId = normalizeGuildId(member.guild.id);
+  const userId = normalizeDiscordId(member.id);
+  const joined = member.joinedTimestamp ?? member.joinedAt?.getTime?.();
+  if (!userId || !Number.isFinite(joined) || joined <= 0 || joined > Date.now()) return null;
+  const joinedAt = new Date(joined).toISOString();
+  const stamp = now();
+  const section = getGuildSection(guildId, 'membershipRecords', { schemaVersion: 1, members: {} });
+  const previous = section.members?.[userId];
+  if (previous?.lastJoinedAt > joinedAt) return previous;
+  if (previous?.lastJoinedAt === joinedAt && previous.active === present) return previous;
+  const history = Array.isArray(previous?.history) ? [...previous.history] : [];
+  if (!history.some(event => event.type === 'join' && event.at === joinedAt)) {
+    history.push({ type: 'join', at: joinedAt, source: 'discord_guild' });
+  }
+  if (!present) history.push({ type: 'leave', at: stamp, source: 'discord_event' });
+  const record = {
+    ...previous,
+    firstJoinedAt: previous?.firstJoinedAt && previous.firstJoinedAt < joinedAt ? previous.firstJoinedAt : joinedAt,
+    lastJoinedAt: joinedAt,
+    lastLeftAt: present ? previous?.lastLeftAt || null : stamp,
+    active: present,
+    joinCount: history.filter(event => event.type === 'join').length,
+    history,
+  };
+  updateGuildSection(guildId, 'membershipRecords', current => ({
+    ...current, schemaVersion: 1, members: { ...current.members, [userId]: record },
+  }), { schemaVersion: 1, members: {} });
+  return record;
+}
+
 function normalizeLogType(type = 'general') {
   const key = String(type || '').trim();
   return LOG_CHANNEL_ALIASES[key] || key || 'general';
@@ -723,6 +755,7 @@ module.exports = {
   DEFAULT_MODULES,
 
   getGuildFilePath,
+  observeMembership,
 
   getGuildConfig,
   saveGuildConfig,
