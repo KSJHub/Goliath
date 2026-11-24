@@ -180,6 +180,7 @@ function buildMembershipRecordPanel(guild, id, canEdit = false) {
     ].join('\n') : 'No membership record found.')],
     components: [
       ...(record && canEdit && rules.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':override:' + id).setPlaceholder('Edit individual milestone schedule').addOptions(rules.map(rule => ({ label: rule.name.slice(0,100), value: rule.ruleId }))))] : []),
+      ...(record ? [row(button(PREFIX + ':recordAchievements:' + id,'Achievements'))] : []),
       row(button(PREFIX + ':records', emojiLabel('BACK', 'Back'))),
     ],
   };
@@ -457,6 +458,20 @@ async function handleTimedRolesInteraction(interaction) {
       else if (action !== '') throw new Error('Unknown logging control.');
       if (action) timedRoles.updateSettings(interaction.guild.id, { logging }, { actorId: interaction.user.id });
       return refresh(interaction, buildLoggingPanel(interaction.guild.id));
+    }
+    if (customId.startsWith(PREFIX + ':recordAchievements:')) {
+      if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
+      const [, , , id, requestedPage] = customId.split(':');
+      if (!/^\d{15,25}$/.test(id)) throw new Error('Invalid member ID.');
+      const section = timedRoles.getSection(interaction.guild.id);
+      const entries = Object.entries(section.achievementHistory?.[id] || {}).sort((a,b) => String(b[1].achievedAt).localeCompare(String(a[1].achievedAt)));
+      const pages = Math.max(1, Math.ceil(entries.length / 5));
+      const page = Math.max(0,Math.min(pages-1,Math.floor(Number(requestedPage)||0)));
+      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Membership · Achievements').setDescription('Member: <@' + id + '>\nRecorded achievements: ' + entries.length + '\nPage ' + (page+1) + ' of ' + pages);
+      for (const [ruleId,entry] of entries.slice(page*5,page*5+5)) embed.addFields({name:(section.rules[ruleId]?.name || entry.milestoneName || 'Archived milestone ' + ruleId).slice(0,256),value:('Achieved: ' + formatTimestamp(entry.achievedAt,'F') + '\nReward: <@&' + entry.roleId + '>\nCelebration: ' + (entry.celebration || 'Unknown')).slice(0,1024)});
+      const payload = { embeds:[embed],components:[row(button(PREFIX + ':recordAchievements:' + id + ':' + (page-1),'Previous',ButtonStyle.Secondary,page===0),button(PREFIX + ':recordAchievements:' + id + ':' + (page+1),'Next',ButtonStyle.Secondary,page>=pages-1)),row(button(PREFIX + ':records',emojiLabel('BACK','Back')))] };
+      if (interaction.message?.flags?.has(64)) return refresh(interaction,payload);
+      return interaction.reply({...payload,ephemeral:true,allowedMentions:{parse:[]}});
     }
     if ([PREFIX + ':records', PREFIX + ':recordMember', PREFIX + ':recordHistorical'].includes(customId) || customId.startsWith(PREFIX + ':recordsPage:')) {
       if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
