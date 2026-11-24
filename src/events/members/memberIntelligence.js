@@ -1,5 +1,6 @@
 'use strict';
 
+const guildManager = require('../../core/guild/guildManager');
 const intelligence = require('../../core/administration/mod/intelligence');
 const joinIntelligence = require('../../core/administration/mod/joinIntelligence');
 const continuousIntelligence = require('../../core/administration/mod/continuousIntelligence');
@@ -8,6 +9,8 @@ module.exports = [
   {
     name: 'guildMemberAdd',
     async execute(member) {
+      try { guildManager.observeMembership(member, true); }
+      catch (error) { console.warn('[Membership Records] join capture failed:', error?.message || error); }
       try { intelligence.observeJoin(member); }
       catch (error) { console.warn('[Member Intelligence] join capture failed:', error?.message || error); }
 
@@ -36,6 +39,8 @@ module.exports = [
   {
     name: 'guildMemberRemove',
     execute(member) {
+      try { guildManager.observeMembership(member, false); }
+      catch (error) { console.warn('[Membership Records] leave capture failed:', error?.message || error); }
       try { intelligence.observeLeave(member, 'leave'); }
       catch (error) { console.warn('[Member Intelligence] leave capture failed:', error?.message || error); }
     },
