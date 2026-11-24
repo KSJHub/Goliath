@@ -1222,7 +1222,11 @@ async function verificationLifecycleAudit() {
     contains(manager, 'if(!observedTransition)return {handled:false};', 'A non-pending join cannot be mistaken for observed Discord screening clearance');
     contains(manager, "threadMode==='threaded'||threadMode==='hybrid'", 'Threaded logging ignores category-specific destinations');
     contains(manager, "if(threadMode==='threaded'||threadMode==='hybrid')return false;", 'Threaded logging cannot fall back to unrelated channels');
-    contains(panel, 'Verification · Security Passports', 'Threaded logging shows a simplified member security passport interface');
+    contains(panel, "threaded=c.threadLogging?.mode==='threaded'", 'Logging controls share one exclusive mode');
+    contains(panel, "toggle('admin:verification:logMode:standard','Channel Logs',!threaded)", 'Channel Logs toggle reflects exclusive mode');
+    contains(panel, "toggle('admin:verification:logMode:threaded','Thread Logs',threaded)", 'Thread Logs toggle reflects exclusive mode');
+    contains(panel, 'All enabled categories go to a single private member thread.', 'Threaded logging explains the shared private passport destination');
+    contains(panel, "if(!['standard','threaded'].includes(mode))", 'Logging mode handler rejects unsupported modes');
     contains(manager, 'Approving administrator: not provided by Discord.', 'Screening logs do not invent an approver');
     contains(manager, "await logEvent(m.guild,section,'attempt',", 'Screening clearance writes to the member activity thread');
 
