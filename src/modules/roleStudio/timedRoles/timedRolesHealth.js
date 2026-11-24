@@ -95,8 +95,7 @@ async function repairTimedRoles(guild, meta = {}) {
     for (const rule of base.listRules(guild.id)) {
       const targetRole = await resolveRole(guild, rule.roleId);
       if (!targetRole) {
-        base.removeRule(guild.id, rule.ruleId, { ...meta, action: meta.action || 'timed_roles_repair_missing_target' });
-        removedRuleIds.push(rule.ruleId);
+        // Preserve milestone configuration and history for explicit reward-role recovery.
         continue;
       }
 
