@@ -206,6 +206,7 @@ function getMemberProgression(member, rules = listRules(member.guild.id)) {
   return {
     joinedAt: joinedAt && Number.isFinite(new Date(joinedAt).getTime()) ? new Date(joinedAt).toISOString() : null,
     due,
+    dueAtByRule: Object.fromEntries(entries.map(entry => [entry.rule.ruleId, entry.date.toISOString()])),
     current: due.length ? due[due.length - 1] : null,
     next: upcoming[0]?.rule || null,
     nextAt: upcoming[0]?.date.toISOString() || null,
