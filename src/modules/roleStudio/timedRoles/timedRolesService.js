@@ -157,7 +157,7 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
         // Persist before sending to avoid repeated celebrations after restart or role recovery.
         base.updateSection(guild.id, current => {
           const history = { ...current.achievementHistory };
-          history[member.id] = { ...history[member.id], [rule.ruleId]: { achievedAt: now(), roleId: role.id, celebration: 'suppressed' } };
+          history[member.id] = { ...history[member.id], [rule.ruleId]: { achievedAt: now(), milestoneName: rule.name, roleId: role.id, celebration: 'suppressed' } };
           return { ...current, achievementHistory: history };
         });
         const celebrationSettings = { ...section.settings, ...rule.celebration };
