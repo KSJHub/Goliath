@@ -134,7 +134,8 @@ function removeRule(guildId, ruleId, meta = {}) {
 }
 
 function eligibleAt(joinedAt, rule) {
-  const date = new Date(joinedAt || 0);
+  if (!joinedAt) return null;
+  const date = new Date(joinedAt);
   if (!Number.isFinite(date.getTime())) return null;
   const value = Number(rule.value || 1);
   if (rule.unit === 'minutes') date.setUTCMinutes(date.getUTCMinutes() + value);
@@ -162,23 +163,25 @@ async function resolveRole(guild, roleId) { return guild.roles.cache.get(roleId)
 
 function getMemberProgression(member, rules = listRules(member.guild.id)) {
   const enabledRules = rules.filter((rule) => rule.enabled);
+  const record = guildManager.getGuildSection(member.guild.id, 'membershipRecords', {}).members?.[member.id];
+  const joinedAt = record?.firstJoinedAt || member.joinedAt;
   const timestamp = Date.now();
   const due = enabledRules.filter((rule) => {
-    const date = eligibleAt(member.joinedAt, rule);
+    const date = eligibleAt(joinedAt, rule);
     return date && date.getTime() <= timestamp;
   });
   const upcoming = enabledRules.filter((rule) => {
-    const date = eligibleAt(member.joinedAt, rule);
+    const date = eligibleAt(joinedAt, rule);
     return date && date.getTime() > timestamp;
   });
   const current = due.length ? due[due.length - 1] : null;
   const next = upcoming.length ? upcoming[0] : null;
   return {
-    joinedAt: member.joinedAt?.toISOString() || null,
+    joinedAt: joinedAt && Number.isFinite(new Date(joinedAt).getTime()) ? new Date(joinedAt).toISOString() : null,
     due,
     current,
     next,
-    nextAt: next ? eligibleAt(member.joinedAt, next)?.toISOString() || null : null,
+    nextAt: next ? eligibleAt(joinedAt, next)?.toISOString() || null : null,
   };
 }
 
