@@ -282,6 +282,51 @@ async function scanGuild(guild, meta = {}) {
   });
 }
 
+async function deliverAuditNotifications(guild) {
+  return withTimedRolesLock(guild.id, async () => {
+    const section = base.getSection(guild.id);
+    const config = section.settings.logging || {};
+    const events = Array.isArray(section.operationalAudit) ? section.operationalAudit : [];
+    const cursor = section.auditDelivery?.cursor;
+    const index = cursor ? events.findIndex(event => event.id === cursor) : -1;
+    // Never broadcast historical audit records when notifications are first configured.
+    const pending = index < 0 ? [] : events.slice(index + 1, index + 26);
+    const advance = (id, extra = {}) => base.updateSection(guild.id, current => ({ ...current, auditDelivery: { ...current.auditDelivery, ...extra, cursor: id } }));
+    if (index < 0) {
+      if (events.length) advance(events[events.length - 1].id);
+      return;
+    }
+    for (const event of pending) {
+      if (!['channel','thread'].includes(config.mode) || !config.channelId || !config.events?.includes(event.type)) { advance(event.id); continue; }
+      const channel = await guild.channels.fetch(config.channelId).catch(() => null);
+      if (!channel?.isTextBased?.() || !channel.send) throw new Error('Timed Roles log channel unavailable.');
+      const permissions = channel.permissionsFor(guild.members.me);
+      if (!permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) throw new Error('Missing Timed Roles logging permissions.');
+      let destination = channel;
+      if (config.mode === 'thread') {
+        if (!permissions.has([PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.SendMessagesInThreads])) throw new Error('Missing Timed Roles thread permissions.');
+        const saved = base.getSection(guild.id).auditDelivery?.threadId;
+        destination = saved ? await guild.channels.fetch(saved).catch(() => null) : null;
+        if (!destination?.isThread?.() || destination.parentId !== channel.id || destination.archived || destination.locked) {
+          destination = await channel.threads.create({ name: 'Timed Roles Audit', autoArchiveDuration: 1440, reason: 'Timed Roles operational logging' });
+          base.updateSection(guild.id, current => ({ ...current, auditDelivery: { ...current.auditDelivery, threadId: destination.id } }));
+        }
+      }
+      const roles = (Array.isArray(config.roleIds) ? config.roleIds : []).filter(id => id !== guild.id && guild.roles.cache.has(id)).slice(0,10);
+      const embed = new EmbedBuilder().setTitle('Timed Roles · ' + event.type.replace(/_/g,' ')).setColor(event.type.includes('failed') ? 0xED4245 : 0x5865F2).setDescription(JSON.stringify(event.details || {}, null, 2).slice(0,3900)).setFooter({ text: 'Audit ' + event.id }).setTimestamp(new Date(event.at));
+      // Persist the attempt before sending: prefer a missed notification to duplicate pings after a crash.
+      advance(event.id, { lastAttemptAt: now(), lastStatus: 'attempted' });
+      try {
+        await destination.send({ content: roles.map(id => '<@&' + id + '>').join(' ') || undefined, embeds: [embed], allowedMentions: { parse: [], roles, users: [], repliedUser: false } });
+        advance(event.id, { lastStatus: 'sent', lastError: null });
+      } catch (error) {
+        advance(event.id, { lastStatus: 'failed', lastError: String(error.message).slice(0,500) });
+        console.warn('[TimedRoles] Audit delivery failed:', error.message);
+      }
+    }
+  });
+}
+
 async function startup(client) {
   if (client.__goliathTimedRolesStarted) return null;
   client.__goliathTimedRolesStarted = true;
@@ -307,6 +352,18 @@ async function startup(client) {
   // Do not force a full Timed Roles guild scan during startup.
   // scanGuild() performs guild.members.fetch(), which hydrates the
   // complete Discord member cache. Normal scheduled scans remain active.
+  let delivering = false;
+  const deliveryTimer = setInterval(async () => {
+    if (delivering) return;
+    delivering = true;
+    try {
+      for (const guild of client.guilds.cache.values()) {
+        if (!guild.available) continue;
+        try { await deliverAuditNotifications(guild); } catch (error) { console.warn('[TimedRoles] Audit notification:', error.message); }
+      }
+    } finally { delivering = false; }
+  }, 30000);
+  deliveryTimer.unref?.();
   const timer = setInterval(() => run(false).catch((error) => console.warn(`[TimedRoles] Scheduler failed: ${error.message}`)), SCHEDULER_TICK_MS);
   timer.unref?.();
   return timer;
