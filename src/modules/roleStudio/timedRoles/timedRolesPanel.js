@@ -276,12 +276,28 @@ function buildSettingsPanel(guildId) {
         button(`${PREFIX}:message`, emojiLabel('USER_FEEDBACK', 'Promotion Message')),
         button(`${PREFIX}:recordsAccess`, 'Records Access'),
         button(`${PREFIX}:celebrations`, 'Celebrations'),
+        button(`${PREFIX}:logging`, 'Logging'),
       ),
       row(button(PREFIX, emojiLabel('BACK', 'Back'))),
     ],
   };
 }
 
+const LOG_EVENTS = ['milestone_created','milestone_updated','milestone_deleted','settings_updated','member_dates_updated','member_roles_changed','celebration_sent','celebration_failed','member_progression_failed'];
+function buildLoggingPanel(guildId) {
+  const s = timedRoles.getSection(guildId).settings.logging || {};
+  const mode = s.mode || 'off';
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Timed Roles · Logging').setDescription('Permanent audit records remain active.\nNotification mode: ' + mode + '\nDestination: ' + (s.channelId ? '<#' + s.channelId + '>' : 'Not selected'))],
+    components: [
+      row(button(PREFIX + ':loggingChannelMode','Channel Logs: ' + (mode === 'channel' ? 'ON' : 'OFF'),mode === 'channel' ? ButtonStyle.Success : ButtonStyle.Secondary),button(PREFIX + ':loggingThreadMode','Thread Logs: ' + (mode === 'thread' ? 'ON' : 'OFF'),mode === 'thread' ? ButtonStyle.Success : ButtonStyle.Secondary)),
+      row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':loggingEvents').setPlaceholder('Select logging events').setMinValues(0).setMaxValues(LOG_EVENTS.length).addOptions(LOG_EVENTS.map(value => ({label:value.replace(/_/g,' '),value,default:(s.events || []).includes(value)})))),
+      row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':loggingDestination').setPlaceholder('Select logging channel').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)),
+      row(new RoleSelectMenuBuilder().setCustomId(PREFIX + ':loggingRoles').setPlaceholder('Select notification roles').setMinValues(0).setMaxValues(10)),
+      row(button(PREFIX + ':settings',emojiLabel('BACK','Back')))
+    ]
+  };
+}
 function buildCelebrationPanel(guildId) {
   const s = timedRoles.getSection(guildId).settings;
   const embed = new EmbedBuilder().setColor(0x57F287).setTitle(s.celebrationTitle || '{milestone} — Achievement Unlocked!').setDescription((s.announcementMessage || '').slice(0, 4096));
@@ -396,6 +412,20 @@ async function handleTimedRolesInteraction(interaction) {
   if (!customId.startsWith(PREFIX)) return false;
   try {
     if (customId === PREFIX) return refresh(interaction);
+    if (customId.startsWith(PREFIX + ':logging')) {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
+      const logging = { ...timedRoles.getSection(interaction.guild.id).settings.logging };
+      const action = customId.slice((PREFIX + ':logging').length);
+      if (action === 'ChannelMode' || action === 'ThreadMode') {
+        const mode = action === 'ChannelMode' ? 'channel' : 'thread';
+        logging.mode = logging.mode === mode ? 'off' : mode;
+      } else if (action === 'Events') logging.events = interaction.values.filter(value => LOG_EVENTS.includes(value));
+      else if (action === 'Destination') logging.channelId = interaction.values[0] || null;
+      else if (action === 'Roles') logging.roleIds = interaction.values.filter(id => id !== interaction.guild.id && interaction.guild.roles.cache.has(id));
+      else if (action !== '') throw new Error('Unknown logging control.');
+      if (action) timedRoles.updateSettings(interaction.guild.id, { logging }, { actorId: interaction.user.id });
+      return refresh(interaction, buildLoggingPanel(interaction.guild.id));
+    }
     if (customId === PREFIX + ':records' || customId === PREFIX + ':recordMember') {
       if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
       return refresh(interaction, customId.endsWith(':recordMember') ? buildMembershipRecordPanel(interaction.guild, interaction.values[0], interaction.user.id === interaction.guild.ownerId || interaction.memberPermissions?.has('Administrator')) : buildMembershipRecordsPanel(interaction.guild));
