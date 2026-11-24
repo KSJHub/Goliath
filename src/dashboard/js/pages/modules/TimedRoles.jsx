@@ -57,7 +57,7 @@ function StatCard({ theme, label, value, hint }) {
   );
 }
 
-const emptyDraft = { name: '', roleId: '', value: 1, unit: 'years', startMode: 'original', customStartAt: '', removeRoleIds: [], enabled: true };
+const emptyDraft = { name: '', roleId: '', value: 1, unit: 'years', startMode: 'original', customStartAt: '', removeRoleIds: [], enabled: true, celebration: {} };
 
 export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
@@ -170,6 +170,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
 
   async function saveRule() {
     if (!draft.roleId || !draft.name.trim() || !Number.isInteger(draft.value) || draft.value < 1 || draft.value > 1000000 || !draft.unit || (draft.startMode === 'custom' && !draft.customStartAt)) { setError('Enter a milestone name, reward role, valid duration and starting date.'); return; }
+    if (draft.celebration?.celebrationGif && !/^https:\/\//i.test(draft.celebration.celebrationGif)) { setError('Use an HTTPS celebration image URL.'); return; }
     const path = editingRuleId
       ? `/api/timed-roles/${guildId}/rules/${editingRuleId}`
       : `/api/timed-roles/${guildId}/rules`;
@@ -192,6 +193,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
       customStartAt: rule.customStartAt?.slice(0,10) || '',
       removeRoleIds: rule.removeRoleIds || [],
       enabled: rule.enabled !== false,
+      celebration: {...(rule.celebration || {})},
     });
   }
 
@@ -280,6 +282,15 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
           </ThemedSelect>
           <span style={{ fontSize: 12, fontWeight: 700 }}>Hold Ctrl/Cmd to select multiple roles. The award role cannot remove itself.</span>
         </label>
+        <details>
+          <summary>Individual celebration overrides</summary>
+          <p style={{color:theme.mutedText}}>Leave fields inherited to use the server celebration settings.</p>
+          <label>Celebration mode<ThemedSelect theme={theme} value={draft.celebration?.announcePromotions === undefined ? 'inherit' : String(draft.celebration.announcePromotions)} onChange={e=>setDraft(current=>{const celebration={...current.celebration};if(e.target.value==='inherit')delete celebration.announcePromotions;else celebration.announcePromotions=e.target.value==='true';return {...current,celebration};})} style={fieldStyle(theme)}><option value="inherit">Inherit</option><option value="true">Enabled</option><option value="false">Disabled</option></ThemedSelect></label>
+          <label>Format<ThemedSelect theme={theme} value={draft.celebration?.celebrationEmbed === undefined ? 'inherit' : String(draft.celebration.celebrationEmbed)} onChange={e=>setDraft(current=>{const celebration={...current.celebration};if(e.target.value==='inherit')delete celebration.celebrationEmbed;else celebration.celebrationEmbed=e.target.value==='true';return {...current,celebration};})} style={fieldStyle(theme)}><option value="inherit">Inherit</option><option value="true">Embed</option><option value="false">Message</option></ThemedSelect></label>
+          <ChannelSelect theme={theme} resources={channels} value={draft.celebration?.announcementChannelId || ''} onChange={value=>setDraft(current=>{const celebration={...current.celebration};if(value)celebration.announcementChannelId=value;else delete celebration.announcementChannelId;return {...current,celebration};})} label="Override announcement channel (empty inherits)" />
+          {['celebrationTitle','announcementMessage','celebrationGif'].map(key=><label key={key} style={{display:'grid',gap:6}}>{({celebrationTitle:'Title',announcementMessage:'Message',celebrationGif:'HTTPS GIF or image URL'})[key]}<input value={draft.celebration?.[key] || ''} placeholder={settings[key] || 'Inherit default'} onChange={e=>setDraft(current=>{const celebration={...current.celebration};if(e.target.value)celebration[key]=e.target.value;else delete celebration[key];return {...current,celebration};})} style={fieldStyle(theme)} /></label>)}
+          <button type="button" style={buttonStyle(theme)} onClick={()=>setDraft(current=>({...current,celebration:{}}))}>Restore inherited settings</button>
+        </details>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={saveRule} disabled={saving === 'rule' || !draft.roleId} style={buttonStyle(theme, 'success')}>{saving === 'rule' ? 'Saving...' : editingRuleId ? 'Save Changes' : 'Create Milestone'}</button>
           {editingRuleId ? <button type="button" onClick={() => { setEditingRuleId(''); setDraft(emptyDraft); }} style={buttonStyle(theme)}>Cancel</button> : null}
