@@ -62,6 +62,8 @@ function normalizeRule(rule = {}) {
     value,
     unit,
     removeRoleIds,
+    startMode: ['original', 'continuous', 'custom'].includes(rule.startMode) ? rule.startMode : 'original',
+    customStartAt: typeof rule.customStartAt === 'string' && Number.isFinite(Date.parse(rule.customStartAt)) ? new Date(rule.customStartAt).toISOString() : null,
     createdBy: cleanId(rule.createdBy),
     createdAt: rule.createdAt || now(),
     updatedAt: now(),
@@ -119,6 +121,7 @@ function updateSettings(guildId, settings = {}, meta = {}) {
 function saveRule(guildId, input, meta = {}) {
   const normalized = normalizeRule(input);
   if (!normalized.roleId) throw new Error('A valid Discord role is required.');
+  if (normalized.startMode === 'custom' && !normalized.customStartAt) throw new Error('A valid custom starting date is required.');
   return updateSection(guildId, (section) => ({
     ...section,
     rules: { ...section.rules, [normalized.ruleId]: { ...(section.rules[normalized.ruleId] || {}), ...normalized } },
@@ -162,26 +165,23 @@ function canManageRole(guild, role) {
 async function resolveRole(guild, roleId) { return guild.roles.cache.get(roleId) || guild.roles.fetch(roleId).catch(() => null); }
 
 function getMemberProgression(member, rules = listRules(member.guild.id)) {
-  const enabledRules = rules.filter((rule) => rule.enabled);
   const record = guildManager.getGuildSection(member.guild.id, 'membershipRecords', {}).members?.[member.id];
   const joinedAt = record?.firstJoinedAt || member.joinedAt;
   const timestamp = Date.now();
-  const due = enabledRules.filter((rule) => {
-    const date = eligibleAt(joinedAt, rule);
-    return date && date.getTime() <= timestamp;
-  });
-  const upcoming = enabledRules.filter((rule) => {
-    const date = eligibleAt(joinedAt, rule);
-    return date && date.getTime() > timestamp;
-  });
-  const current = due.length ? due[due.length - 1] : null;
-  const next = upcoming.length ? upcoming[0] : null;
+  const entries = rules.filter(rule => rule.enabled).map(rule => {
+    const start = rule.startMode === 'custom' ? rule.customStartAt
+      : rule.startMode === 'continuous' ? member.joinedAt : joinedAt;
+    return { rule, date: eligibleAt(start, rule) };
+  }).filter(entry => entry.date && Number.isFinite(entry.date.getTime()))
+    .sort((a, b) => a.date - b.date || durationRank(a.rule) - durationRank(b.rule));
+  const due = entries.filter(entry => entry.date.getTime() <= timestamp).map(entry => entry.rule);
+  const upcoming = entries.filter(entry => entry.date.getTime() > timestamp);
   return {
     joinedAt: joinedAt && Number.isFinite(new Date(joinedAt).getTime()) ? new Date(joinedAt).toISOString() : null,
     due,
-    current,
-    next,
-    nextAt: next ? eligibleAt(joinedAt, next)?.toISOString() || null : null,
+    current: due.length ? due[due.length - 1] : null,
+    next: upcoming[0]?.rule || null,
+    nextAt: upcoming[0]?.date.toISOString() || null,
   };
 }
 
