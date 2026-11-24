@@ -182,6 +182,13 @@ router.get('/:guildId/records/:memberId', requireRecordsAccess, (req,res) => {
     return ok(res,{record,achievements:section.achievementHistory?.[memberId] || {},overrides:section.memberOverrides?.[memberId] || {}});
   } catch(error) { return fail(res,error); }
 });
+router.get('/:guildId/audit', requireRecordsAccess, (req,res) => {
+  try {
+    const events = timedRoles.getSection(guildId(req)).operationalAudit || [];
+    const page = Math.min(Math.max(0,Math.ceil(events.length/25)-1),Math.max(0,Math.floor(Number(req.query.page)||0)));
+    return ok(res,{total:events.length,page,events:events.slice().reverse().slice(page*25,page*25+25)});
+  } catch(error) { return fail(res,error); }
+});
 router.get('/:guildId/export', (req, res) => {
   try {
     const id = guildId(req);
