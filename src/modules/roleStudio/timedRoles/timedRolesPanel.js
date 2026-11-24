@@ -11,6 +11,7 @@ const {
   ChannelType,
   EmbedBuilder,
   ModalBuilder,
+  LabelBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextInputBuilder,
@@ -197,23 +198,25 @@ function buildSettingsPanel(guildId) {
 }
 
 function readStartingPoint(interaction) {
-  const startMode = interaction.fields.getTextInputValue('startMode').trim().toLowerCase();
+  const startMode = interaction.fields.getStringSelectValues('startMode')[0];
   const date = interaction.fields.getTextInputValue('customStartAt').trim();
   if (!['original', 'continuous', 'custom'].includes(startMode)) throw new Error('Choose original, continuous or custom.');
   if (startMode === 'custom' && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw new Error('Enter a valid custom date in YYYY-MM-DD format.');
   return { startMode, customStartAt: startMode === 'custom' ? date : null };
 }
 function buildRuleModal(customId, title, rule = {}) {
-  return new ModalBuilder()
-    .setCustomId(customId)
-    .setTitle(title)
-    .addComponents(
-      row(new TextInputBuilder().setCustomId('name').setLabel('Milestone name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(rule.name || 'Veteran')),
-      row(new TextInputBuilder().setCustomId('value').setLabel('Time value').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(6).setValue(String(rule.value || 6))),
-      row(new TextInputBuilder().setCustomId('unit').setLabel('minutes, hours, days, weeks, months or years').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10).setValue(rule.unit || 'months')),
-      row(new TextInputBuilder().setCustomId('startMode').setLabel('Start: original, continuous or custom').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10).setValue(rule.startMode || 'original')),
-      row(new TextInputBuilder().setCustomId('customStartAt').setLabel('Custom start date (YYYY-MM-DD)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10).setValue(rule.customStartAt?.slice(0, 10) || '')),
-    );
+  const field = (label, input) => new LabelBuilder().setLabel(label).setTextInputComponent(input);
+  const select = (label, id, choices, selected) => new LabelBuilder().setLabel(label).setStringSelectMenuComponent(
+    new StringSelectMenuBuilder().setCustomId(id).setMinValues(1).setMaxValues(1)
+      .addOptions(choices.map(([value, name]) => ({ label: name, value, default: value === selected })))
+  );
+  return new ModalBuilder().setCustomId(customId).setTitle(title).addLabelComponents(
+    field('Milestone name', new TextInputBuilder().setCustomId('name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(rule.name || '')),
+    field('Time value', new TextInputBuilder().setCustomId('value').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(6).setValue(String(rule.value || 1))),
+    select('Time unit', 'unit', ['minutes','hours','days','weeks','months','years'].map(unit => [unit, unit[0].toUpperCase() + unit.slice(1)]), rule.unit || 'months'),
+    select('Starting point', 'startMode', [['original','Original membership'],['continuous','Continuous membership'],['custom','Custom date']], rule.startMode || 'original'),
+    field('Custom start date (YYYY-MM-DD)', new TextInputBuilder().setCustomId('customStartAt').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10).setValue(rule.customStartAt?.slice(0, 10) || '')),
+  );
 }
 function buildIntervalModal(current) {
   return new ModalBuilder().setCustomId(`${PREFIX}:intervalSubmit`).setTitle('Timed Roles Scan Interval').addComponents(
@@ -329,7 +332,7 @@ async function handleTimedRolesInteraction(interaction) {
           name: interaction.fields.getTextInputValue('name'),
           roleId,
           value: interaction.fields.getTextInputValue('value'),
-          unit: interaction.fields.getTextInputValue('unit'),
+          unit: interaction.fields.getStringSelectValues('unit')[0],
           ...readStartingPoint(interaction),
           createdBy: interaction.user.id,
         }, { actorId: interaction.user.id });
@@ -343,7 +346,7 @@ async function handleTimedRolesInteraction(interaction) {
           ...rule,
           name: interaction.fields.getTextInputValue('name'),
           value: interaction.fields.getTextInputValue('value'),
-          unit: interaction.fields.getTextInputValue('unit'),
+          unit: interaction.fields.getStringSelectValues('unit')[0],
           ...readStartingPoint(interaction),
         }, { actorId: interaction.user.id });
         return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
