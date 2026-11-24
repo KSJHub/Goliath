@@ -120,24 +120,32 @@ function setEnabled(guildId, enabled, meta = {}) {
   guildManager.setModuleEnabled(guildId, SECTION, enabled === true, meta);
   return { ...getSection(guildId), enabled: guildManager.isModuleEnabled(guildId, SECTION) };
 }
+function appendAudit(section, type, details, meta = {}) {
+  const entry = { id: createId(), at: now(), type, actorId: cleanId(meta.actorId), details };
+  return { ...section, operationalAudit: [...(Array.isArray(section.operationalAudit) ? section.operationalAudit : []), entry] };
+}
+function recordAudit(guildId, type, details, meta = {}) {
+  return updateSection(guildId, section => appendAudit(section, type, details, meta), meta);
+}
 function updateSettings(guildId, settings = {}, meta = {}) {
-  return updateSection(guildId, (section) => ({ ...section, settings: { ...section.settings, ...settings }, updatedAt: now() }), meta);
+  return updateSection(guildId, (section) => appendAudit({ ...section, settings: { ...section.settings, ...settings }, updatedAt: now() }, 'settings_updated', { keys: Object.keys(settings) }, meta), meta);
 }
 function saveRule(guildId, input, meta = {}) {
   const normalized = normalizeRule(input);
   if (!normalized.roleId) throw new Error('A valid Discord role is required.');
   if (normalized.startMode === 'custom' && !normalized.customStartAt) throw new Error('A valid custom starting date is required.');
-  return updateSection(guildId, (section) => ({
-    ...section,
-    rules: { ...section.rules, [normalized.ruleId]: { ...(section.rules[normalized.ruleId] || {}), ...normalized } },
-    updatedAt: now(),
-  }), meta).rules[normalized.ruleId];
+  return updateSection(guildId, section => {
+    const previous = section.rules[normalized.ruleId];
+    const next = { ...section, rules: { ...section.rules, [normalized.ruleId]: { ...previous, ...normalized } }, updatedAt: now() };
+    const keys = Object.keys(normalized).filter(key => !['updatedAt','lastRunAt','lastAwarded','lastError'].includes(key) && JSON.stringify(previous?.[key]) !== JSON.stringify(normalized[key]));
+    return keys.length ? appendAudit(next, previous ? 'milestone_updated' : 'milestone_created', { ruleId: normalized.ruleId, keys }, meta) : next;
+  }, meta).rules[normalized.ruleId];
 }
 function removeRule(guildId, ruleId, meta = {}) {
   return updateSection(guildId, (section) => {
     const rules = { ...section.rules };
     delete rules[cleanText(ruleId, 80)];
-    return { ...section, rules, updatedAt: now() };
+    return appendAudit({ ...section, rules, updatedAt: now() }, 'milestone_deleted', { ruleId }, meta);
   }, meta);
 }
 
@@ -186,7 +194,7 @@ function setMemberMilestoneOverride(guildId, memberId, ruleId, input, meta = {})
     else delete member[ruleId];
     if (Object.keys(member).length) all[id] = member;
     else delete all[id];
-    return { ...section, memberOverrides: all };
+    return appendAudit({ ...section, memberOverrides: all }, 'member_dates_updated', { memberId: id, ruleId, previous: section.memberOverrides?.[id]?.[ruleId] || null, next: override }, meta);
   }, meta);
 }
 
@@ -444,6 +452,7 @@ module.exports = {
   setEnabled,
   updateSettings,
   updateSection,
+  recordAudit,
   saveRule,
   removeRule,
   eligibleAt,
