@@ -67,7 +67,8 @@ async function validateRuleRoles(target, input = {}) {
 
 async function overview(req, id) {
   const enabled = guildManager.isModuleEnabled(id, timedRoles.SECTION);
-  const config = { ...timedRoles.getSection(id), enabled };
+  const { achievementHistory, operationalAudit, memberOverrides, auditDelivery, ...publicConfig } = timedRoles.getSection(id);
+  const config = { ...publicConfig, enabled };
   const target = await guild(req, id);
   return {
     guildId: id,
@@ -95,7 +96,12 @@ router.patch('/:guildId/enabled', async (req, res) => {
 router.patch('/:guildId/settings', async (req, res) => {
   try {
     const id = guildId(req);
-    timedRoles.updateSettings(id, req.body?.settings || req.body || {}, { actorId: actor(req), action: 'timed_roles_dashboard_settings' });
+    const patch = req.body?.settings || req.body || {};
+    if (Object.prototype.hasOwnProperty.call(patch,'recordsAccess')) {
+      const target = await guild(req,id);
+      if (!target || target.ownerId !== actor(req)) return fail(res,new Error('Only the guild owner may change membership record access.'),403);
+    }
+    timedRoles.updateSettings(id, patch, { actorId: actor(req), action: 'timed_roles_dashboard_settings' });
     return ok(res, await overview(req, id));
   } catch (error) { return fail(res, error); }
 });
@@ -147,12 +153,42 @@ router.post('/:guildId/repair', async (req, res) => {
     return ok(res, { repair, ...(await overview(req, id)) });
   } catch (error) { return fail(res, error); }
 });
+async function requireRecordsAccess(req,res,next) {
+  try {
+    const id = guildId(req);
+    const target = await guild(req,id);
+    const userId = actor(req);
+    const member = target && await target.members.fetch(userId).catch(() => null);
+    const access = timedRoles.getSection(id).settings.recordsAccess || {};
+    if (!target || !(target.ownerId === userId || (access.allowAdministrators !== false && member?.permissions.has(PermissionFlagsBits.Administrator)) || (access.roleIds || []).some(roleId => member?.roles.cache.has(roleId)))) return fail(res,new Error('Membership record access denied.'),403);
+    res.setHeader('Cache-Control','no-store');
+    return next();
+  } catch(error) { return fail(res,error,403); }
+}
+router.get('/:guildId/records', requireRecordsAccess, (req,res) => {
+  try {
+    const records = guildManager.getGuildSection(guildId(req),'membershipRecords',{}).members || {};
+    const ids = Object.keys(records).sort();
+    const page = Math.min(Math.max(0,Math.ceil(ids.length/25)-1),Math.max(0,Math.floor(Number(req.query.page)||0)));
+    return ok(res,{total:ids.length,page,records:ids.slice(page*25,page*25+25).map(id=>({ ...records[id], id, history:undefined }))});
+  } catch(error) { return fail(res,error); }
+});
+router.get('/:guildId/records/:memberId', requireRecordsAccess, (req,res) => {
+  try {
+    const id = guildId(req), memberId = cleanDiscordId(req.params.memberId);
+    const record = guildManager.getGuildSection(id,'membershipRecords',{}).members?.[memberId];
+    if (!record) return fail(res,new Error('Membership record not found.'),404);
+    const section = timedRoles.getSection(id);
+    return ok(res,{record,achievements:section.achievementHistory?.[memberId] || {},overrides:section.memberOverrides?.[memberId] || {}});
+  } catch(error) { return fail(res,error); }
+});
 router.get('/:guildId/export', (req, res) => {
   try {
     const id = guildId(req);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="goliath-timed-roles-${id}.json"`);
-    return res.send(JSON.stringify(timedRoles.exportConfiguration(id), null, 2));
+    const { achievementHistory, operationalAudit, memberOverrides, auditDelivery, ...config } = timedRoles.exportConfiguration(id);
+    return res.send(JSON.stringify(config, null, 2));
   } catch (error) { return fail(res, error); }
 });
 
