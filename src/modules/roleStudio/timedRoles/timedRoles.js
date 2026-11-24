@@ -467,5 +467,12 @@ module.exports = {
   scanGuild,
   startup,
   exportConfiguration: getSection,
-  reset: (guildId, meta = {}) => saveSection(guildId, defaultSection(), meta),
+  reset: (guildId, meta = {}) => updateSection(guildId, section => appendAudit({
+    ...defaultSection(),
+    achievementHistory: section.achievementHistory || {},
+    operationalAudit: section.operationalAudit || [],
+    auditDelivery: section.auditDelivery || {},
+    memberOverrides: section.memberOverrides || {},
+    settings: { ...defaultSection().settings, recordsAccess: section.settings?.recordsAccess },
+  }, 'configuration_reset', {}, meta), meta),
 };
