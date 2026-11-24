@@ -284,6 +284,19 @@ function buildSettingsPanel(guildId) {
 }
 
 const LOG_EVENTS = ['milestone_created','milestone_updated','milestone_deleted','settings_updated','member_dates_updated','member_roles_changed','celebration_sent','celebration_failed','member_progression_failed'];
+function buildAuditPanel(guildId, requestedPage = 0) {
+  const events = timedRoles.getSection(guildId).operationalAudit || [];
+  const pages = Math.max(1, Math.ceil(events.length / 5));
+  const page = Math.max(0, Math.min(pages - 1, Number(requestedPage) || 0));
+  const entries = events.slice().reverse().slice(page * 5, page * 5 + 5);
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Timed Roles · Audit History').setDescription('Permanent records: ' + events.length + '\nPage ' + (page + 1) + ' of ' + pages);
+  for (const event of entries) embed.addFields({ name: String(event.type || 'Event').replace(/_/g,' ').slice(0,256), value: (formatTimestamp(event.at,'F') + '\nActor: ' + (event.actorId ? '<@' + event.actorId + '>' : 'System / unknown') + '\n' + JSON.stringify(event.details || {})).slice(0,1024) });
+  return { embeds: [embed], components: [
+    row(button(PREFIX + ':auditPage:' + (page - 1),'Previous',ButtonStyle.Secondary,page === 0),button(PREFIX + ':auditPage:' + (page + 1),'Next',ButtonStyle.Secondary,page >= pages - 1)),
+    row(button(PREFIX + ':auditExport','Export Audit')),
+    row(button(PREFIX + ':logging',emojiLabel('BACK','Back')),button(PREFIX + ':settings',emojiLabel('SETTINGS','Settings')))
+  ] };
+}
 function buildLoggingPanel(guildId) {
   const s = timedRoles.getSection(guildId).settings.logging || {};
   const mode = s.mode || 'off';
@@ -294,7 +307,7 @@ function buildLoggingPanel(guildId) {
       row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':loggingEvents').setPlaceholder('Select logging events').setMinValues(0).setMaxValues(LOG_EVENTS.length).addOptions(LOG_EVENTS.map(value => ({label:value.replace(/_/g,' '),value,default:(s.events || []).includes(value)})))),
       row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':loggingDestination').setPlaceholder('Select logging channel').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)),
       row(new RoleSelectMenuBuilder().setCustomId(PREFIX + ':loggingRoles').setPlaceholder('Select notification roles').setMinValues(0).setMaxValues(10)),
-      row(button(PREFIX + ':settings',emojiLabel('BACK','Back')))
+      row(button(PREFIX + ':settings',emojiLabel('BACK','Back')),button(PREFIX + ':auditPage:0','Audit History'))
     ]
   };
 }
@@ -412,6 +425,18 @@ async function handleTimedRolesInteraction(interaction) {
   if (!customId.startsWith(PREFIX)) return false;
   try {
     if (customId === PREFIX) return refresh(interaction);
+    if (customId.startsWith(PREFIX + ':auditPage:') || customId === PREFIX + ':auditExport') {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
+      if (customId === PREFIX + ':auditExport') {
+        const events = timedRoles.getSection(interaction.guild.id).operationalAudit || [];
+        const file = Buffer.from(JSON.stringify(events,null,2),'utf8');
+        if (file.length > 8 * 1024 * 1024) throw new Error('Audit export exceeds the safe attachment size.');
+        return interaction.reply({ files: [new AttachmentBuilder(file,{name:'timed-roles-audit.json'})], ephemeral:true, allowedMentions:{parse:[]} });
+      }
+      const payload = buildAuditPanel(interaction.guild.id, Number(customId.split(':').pop()));
+      if (interaction.message?.flags?.has(64)) return refresh(interaction,payload);
+      return interaction.reply({ ...payload, ephemeral:true, allowedMentions:{parse:[]} });
+    }
     if (customId.startsWith(PREFIX + ':logging')) {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
       const logging = { ...timedRoles.getSection(interaction.guild.id).settings.logging };
