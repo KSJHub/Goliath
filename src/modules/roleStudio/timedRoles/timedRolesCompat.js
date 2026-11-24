@@ -31,10 +31,12 @@ function installTimedRolesCompat() {
       const original = panel.handleTimedRolesInteraction;
       panel.handleTimedRolesInteraction = async function hardenedTimedRolesInteraction(interaction) {
         try {
-          const allowed = await security.enforceInteractionSecurity(interaction, { level: 'admin', guildOnly: true });
-          if (!allowed) return true;
-
           const customId = String(interaction.customId || '');
+          const recordsRead = ['admin:timedRoles:records', 'admin:timedRoles:recordMember'].includes(customId);
+          const allowed = await security.enforceInteractionSecurity(interaction, { level: recordsRead ? null : 'admin', guildOnly: true });
+          if (!allowed?.allowed) return true;
+          // The records panel independently checks the guild's configured access roles.
+          // No other administrative action bypasses the admin permission check.
           if (customId.startsWith('admin:timedRoles:createSubmit:')) {
             const roleId = customId.split(':').pop();
             const duplicate = base.listRules(interaction.guild.id).find((rule) => rule.roleId === roleId);
