@@ -251,12 +251,33 @@ function buildSettingsPanel(guildId) {
         button(`${PREFIX}:interval`, emojiLabel('ROLE_CLOCK', 'Scan Interval')),
         button(`${PREFIX}:message`, emojiLabel('USER_FEEDBACK', 'Promotion Message')),
         button(`${PREFIX}:recordsAccess`, 'Records Access'),
+        button(`${PREFIX}:celebrations`, 'Celebrations'),
       ),
       row(button(PREFIX, emojiLabel('BACK', 'Back'))),
     ],
   };
 }
 
+function buildCelebrationPanel(guildId) {
+  const s = timedRoles.getSection(guildId).settings;
+  const embed = new EmbedBuilder().setColor(0x57F287).setTitle(s.celebrationTitle || 'Milestone achieved!').setDescription((s.announcementMessage || '').slice(0, 4096));
+  if (s.celebrationGif && /^https:\/\//i.test(s.celebrationGif)) embed.setImage(s.celebrationGif);
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Celebration Settings').setDescription([
+      'Announcements: ' + (s.announcePromotions ? 'Enabled' : 'Disabled'),
+      'Channel: ' + (s.announcementChannelId ? '<#' + s.announcementChannelId + '>' : 'Not selected'),
+      'Format: ' + (s.celebrationEmbed !== false ? 'Embed' : 'Message'),
+      'Mentions: Individual member only',
+      'Historical awards: ' + (s.celebrateRetroactive ? 'Celebrations allowed' : 'Silent'),
+      'Template preview below (placeholders are not resolved).'
+    ].join('\n')), embed],
+    components: [
+      row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':celebrationChannel').setPlaceholder('Celebration channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
+      row(button(PREFIX + ':celebrationToggle', s.announcePromotions ? 'Disable' : 'Enable'), button(PREFIX + ':celebrationFormat', 'Switch Format'), button(PREFIX + ':celebrationEdit', 'Edit Template')),
+      row(button(PREFIX + ':settings', emojiLabel('BACK', 'Back'))),
+    ],
+  };
+}
 function readStartingPoint(interaction) {
   const startMode = interaction.fields.getStringSelectValues('startMode')[0];
   const date = interaction.fields.getTextInputValue('customStartAt').trim();
@@ -436,6 +457,36 @@ async function handleTimedRolesInteraction(interaction) {
         timedRoles.saveRule(interaction.guild.id, { ...rule, roleId: role.id }, { actorId: interaction.user.id });
       });
       return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
+    }
+    if ([PREFIX + ':celebrations', PREFIX + ':celebrationChannel', PREFIX + ':celebrationToggle', PREFIX + ':celebrationFormat', PREFIX + ':celebrationEdit', PREFIX + ':celebrationSubmit'].includes(customId)) {
+      if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
+      const s = timedRoles.getSection(interaction.guild.id).settings;
+      const patch = {};
+      if (customId.endsWith(':celebrationChannel')) patch.announcementChannelId = interaction.values[0] || null;
+      if (customId.endsWith(':celebrationToggle')) patch.announcePromotions = !s.announcePromotions;
+      if (customId.endsWith(':celebrationFormat')) patch.celebrationEmbed = s.celebrationEmbed === false;
+      if (customId.endsWith(':celebrationEdit')) {
+        const field = (id, label, value, max, required, style) => {
+          const input = new TextInputBuilder().setCustomId(id).setLabel(label).setMaxLength(max).setRequired(required).setStyle(style);
+          if (value) input.setValue(value.slice(0,max));
+          return row(input);
+        };
+        return interaction.showModal(new ModalBuilder().setCustomId(PREFIX + ':celebrationSubmit').setTitle('Celebration Template').addComponents(
+          field('title','Title',s.celebrationTitle,256,true,TextInputStyle.Short),
+          field('message','Message',s.announcementMessage,1000,true,TextInputStyle.Paragraph),
+          field('gif','Optional HTTPS GIF URL',s.celebrationGif,1000,false,TextInputStyle.Short)
+        ));
+      }
+      if (customId.endsWith(':celebrationSubmit')) {
+        patch.celebrationTitle = interaction.fields.getTextInputValue('title').trim();
+        patch.announcementMessage = interaction.fields.getTextInputValue('message').trim();
+        const gif = interaction.fields.getTextInputValue('gif').trim();
+        if (gif && (new URL(gif).protocol !== 'https:')) throw new Error('Use an HTTPS image URL.');
+        if (!patch.celebrationTitle || !patch.announcementMessage) throw new Error('Title and message are required.');
+        patch.celebrationGif = gif || null;
+      }
+      if (Object.keys(patch).length) timedRoles.updateSettings(interaction.guild.id, patch, { actorId: interaction.user.id });
+      return refresh(interaction, buildCelebrationPanel(interaction.guild.id));
     }
     const rolePicker = parseRolePickerId(customId);
     if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
