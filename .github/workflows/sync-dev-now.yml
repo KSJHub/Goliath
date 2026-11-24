@@ -343,13 +343,29 @@ jobs:
               exit 1
             fi
 
-            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 http://127.0.0.1:3001/api/auth/me || true)"
-            # Verify public HTTPS certificates; never accept an invalid TLS
-            # chain as a successful deployment health check.
-            PUBLIC_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/api/auth/me" || true)"
-            DASHBOARD_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/" || true)"
-            SUBDOMAIN_API_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 https://dev.goliath.ksjdigital.co.uk/api/auth/me || true)"
-            SUBDOMAIN_DASHBOARD_STATUS="$(curl -fsS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 https://dev.goliath.ksjdigital.co.uk/ || true)"
+            # Retry transient transport failures without accepting invalid HTTP or TLS results.
+            health_status() {
+              local url="$1" status rc attempt
+              for attempt in 1 2 3; do
+                rc=0
+                status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 20 "$url")" || rc=$?
+                if [ "$rc" -eq 0 ]; then printf '%s' "$status"; return 0; fi
+                case "$rc" in
+                  5|6|7|28|52|55|56) ;;
+                  *) printf '000'; return 0 ;;
+                esac
+                if [ "$attempt" -lt 3 ]; then
+                  echo "Transient health transport failure ($rc), retry $attempt/3: $url" >&2
+                  sleep "$((attempt * 2))"
+                fi
+              done
+              printf '000'
+            }
+            DIRECT_STATUS="$(health_status http://127.0.0.1:3001/api/auth/me)"
+            PUBLIC_STATUS="$(health_status "$DEV_PUBLIC_URL/api/auth/me")"
+            DASHBOARD_STATUS="$(health_status "$DEV_PUBLIC_URL/")"
+            SUBDOMAIN_API_STATUS="$(health_status https://dev.goliath.ksjdigital.co.uk/api/auth/me)"
+            SUBDOMAIN_DASHBOARD_STATUS="$(health_status https://dev.goliath.ksjdigital.co.uk/)"
             [ "$SUBDOMAIN_DASHBOARD_STATUS" = 200 ] || { echo "DEV subdomain dashboard health failed: $SUBDOMAIN_DASHBOARD_STATUS" >&2; exit 1; }
             case "$SUBDOMAIN_API_STATUS" in 200|401) ;; *) echo "DEV subdomain API health failed: $SUBDOMAIN_API_STATUS" >&2; exit 1;; esac
             [ "$DASHBOARD_STATUS" = 200 ] || { echo "DEV dashboard health failed: $DASHBOARD_STATUS" >&2; exit 1; }
