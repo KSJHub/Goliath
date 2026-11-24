@@ -142,8 +142,11 @@ function buildRecordsAccessPanel(guild) {
     ],
   };
 }
-function buildMembershipRecordsPanel(guild) {
-  const records = Object.values(guildManager.getGuildSection(guild.id, 'membershipRecords', {}).members || {});
+function buildMembershipRecordsPanel(guild, requestedPage = 0) {
+  const records = Object.entries(guildManager.getGuildSection(guild.id, 'membershipRecords', {}).members || {}).filter(([id]) => /^\d{15,25}$/.test(id)).map(([id, record]) => ({ ...record, id })).sort((a,b) => a.id.localeCompare(b.id));
+  const pages = Math.max(1, Math.ceil(records.length / 25));
+  const page = Math.max(0, Math.min(pages - 1, Math.floor(Number(requestedPage) || 0)));
+  const visible = records.slice(page * 25, page * 25 + 25);
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Membership Records').setDescription([
       'Guild membership history is retained independently of Timed Roles.',
@@ -151,10 +154,12 @@ function buildMembershipRecordsPanel(guild) {
       '**Active:** ' + records.filter(record => record.active === true).length,
       '**Inactive:** ' + records.filter(record => record.active === false).length,
       '**Unknown status:** ' + records.filter(record => record.active == null).length,
-      'Select a current member to inspect their recorded dates.',
+      'Browse current and departed members. Page ' + (page + 1) + ' of ' + pages,
     ].join('\n'))],
     components: [
-      row(new UserSelectMenuBuilder().setCustomId(PREFIX + ':recordMember').setPlaceholder('Choose member').setMinValues(1).setMaxValues(1)),
+      row(new UserSelectMenuBuilder().setCustomId(PREFIX + ':recordMember').setPlaceholder('Choose current member').setMinValues(1).setMaxValues(1)),
+      ...(visible.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':recordHistorical').setPlaceholder('Browse recorded members').addOptions(visible.map(record => ({label:(guild.members.cache.get(record.id)?.displayName || record.id).slice(0,100),value:record.id,description:(record.active === true ? 'Active' : record.active === false ? 'Departed' : 'Unknown') + ' · ' + record.id}))))] : []),
+      row(button(PREFIX + ':recordsPage:' + (page-1),'Previous',ButtonStyle.Secondary,page===0),button(PREFIX + ':recordsPage:' + (page+1),'Next',ButtonStyle.Secondary,page>=pages-1)),
       row(button(PREFIX, emojiLabel('BACK', 'Back')), button(PREFIX + ':settings', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
@@ -169,6 +174,8 @@ function buildMembershipRecordPanel(guild, id, canEdit = false) {
       '**Latest join:** ' + formatTimestamp(record.lastJoinedAt, 'F'),
       '**Last recorded departure:** ' + formatTimestamp(record.lastLeftAt, 'F'),
       '**Observed joins:** ' + (record.joinCount ?? 'Unknown'),
+      '**User ID:** ' + id,
+      '**Recent membership events:**\n' + (Array.isArray(record.history) ? record.history.slice(-5).map(event => String(event.type || 'Event') + ' · ' + formatTimestamp(event.at,'F')).join('\n') : 'None'),
       '**Status:** ' + (record.active == null ? 'Unknown' : record.active ? 'Active' : 'Inactive'),
     ].join('\n') : 'No membership record found.')],
     components: [
@@ -451,9 +458,12 @@ async function handleTimedRolesInteraction(interaction) {
       if (action) timedRoles.updateSettings(interaction.guild.id, { logging }, { actorId: interaction.user.id });
       return refresh(interaction, buildLoggingPanel(interaction.guild.id));
     }
-    if (customId === PREFIX + ':records' || customId === PREFIX + ':recordMember') {
+    if ([PREFIX + ':records', PREFIX + ':recordMember', PREFIX + ':recordHistorical'].includes(customId) || customId.startsWith(PREFIX + ':recordsPage:')) {
       if (!canViewMembershipRecords(interaction)) throw new Error('You do not have permission to view membership records.');
-      return refresh(interaction, customId.endsWith(':recordMember') ? buildMembershipRecordPanel(interaction.guild, interaction.values[0], interaction.user.id === interaction.guild.ownerId || interaction.memberPermissions?.has('Administrator')) : buildMembershipRecordsPanel(interaction.guild));
+      const selected = customId.endsWith(':recordMember') || customId.endsWith(':recordHistorical');
+      const payload = selected ? buildMembershipRecordPanel(interaction.guild, interaction.values[0], interaction.user.id === interaction.guild.ownerId || interaction.memberPermissions?.has('Administrator')) : buildMembershipRecordsPanel(interaction.guild, customId.startsWith(PREFIX + ':recordsPage:') ? Number(customId.split(':').pop()) : 0);
+      if (interaction.message?.flags?.has(64)) return refresh(interaction,payload);
+      return interaction.reply({ ...payload, ephemeral:true, allowedMentions:{parse:[]} });
     }
 
     if ([PREFIX + ':recordsAccess', PREFIX + ':recordsAccessRoles', PREFIX + ':recordsAccessToggle'].includes(customId)) {
