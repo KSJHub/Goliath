@@ -175,7 +175,7 @@ function buildMembershipRecordPanel(guild, id, canEdit = false) {
     components: [
       ...(record && canEdit && rules.length ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':override:' + id).setPlaceholder('Edit individual milestone schedule').addOptions(rules.map(rule => ({ label: rule.name.slice(0,100), value: rule.ruleId }))))] : []),
       ...(record ? [row(button(PREFIX + ':recordAchievements:' + id,emojiLabel('ACHIEVEMENT','Achievements')))] : []),
-      row(button(PREFIX + ':records', emojiLabel('BACK', 'Back'))),
+      goliathNavigation(PREFIX + ':records', PREFIX + ':settings'),
     ],
   };
 }
@@ -199,7 +199,7 @@ function buildRuleCelebrationPanel(guild, ruleId) {
         {label:'Message',value:'message',default:own.celebrationEmbed === false}
       ])),
       row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,emojiLabel('EDIT','Edit Template')), button(PREFIX + ':ruleCelebrationPreview:' + ruleId,emojiLabel('PREVIEW','Preview'))),
-      row(button(PREFIX + ':editBack:' + ruleId,emojiLabel('BACK','Back')))
+      goliathNavigation(PREFIX + ':editBack:' + ruleId, PREFIX + ':settings')
     ]
   };
 }
@@ -393,8 +393,7 @@ async function buildPreviewPanel(guild, memberId) {
       ].join('\n'))],
     components: [row(
       button(`${PREFIX}:applyMember:${member.id}`, emojiLabel('SUCCESS', 'Apply Correct Roles'), ButtonStyle.Success),
-      button(PREFIX, emojiLabel('BACK', 'Back')),
-    )],
+    ), goliathNavigation(PREFIX, PREFIX + ':settings')],
   };
 }
 
@@ -417,8 +416,7 @@ function buildSimulationPanel(result) {
       ].filter(Boolean).join('\n'))],
     components: [row(
       button(`${PREFIX}:scan`, emojiLabel('DEPLOY', 'Apply Changes'), ButtonStyle.Success, !result.changes.length),
-      button(PREFIX, emojiLabel('BACK', 'Back')),
-    )],
+    ), goliathNavigation(PREFIX, PREFIX + ':settings')],
   };
 }
 
@@ -479,7 +477,7 @@ async function handleTimedRolesInteraction(interaction) {
       const page = Math.max(0,Math.min(pages-1,Math.floor(Number(requestedPage)||0)));
       const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('Membership · Achievements').setDescription('Member: <@' + id + '>\nRecorded achievements: ' + entries.length + '\nPage ' + (page+1) + ' of ' + pages);
       for (const [ruleId,entry] of entries.slice(page*5,page*5+5)) embed.addFields({name:(section.rules[ruleId]?.name || entry.milestoneName || 'Archived milestone ' + ruleId).slice(0,256),value:('Achieved: ' + formatTimestamp(entry.achievedAt,'F') + '\nReward: <@&' + entry.roleId + '>\nCelebration: ' + (entry.celebration || 'Unknown')).slice(0,1024)});
-      const payload = { embeds:[embed],components:[row(button(PREFIX + ':recordAchievements:' + id + ':' + (page-1),emojiLabel('ROLE_PREVIOUS','Previous'),ButtonStyle.Secondary,page===0),button(PREFIX + ':recordAchievements:' + id + ':' + (page+1),emojiLabel('ROLE_NEXT','Next'),ButtonStyle.Secondary,page>=pages-1)),row(button(PREFIX + ':records',emojiLabel('BACK','Back')))] };
+      const payload = { embeds:[embed],components:[row(button(PREFIX + ':recordAchievements:' + id + ':' + (page-1),emojiLabel('ROLE_PREVIOUS','Previous'),ButtonStyle.Secondary,page===0),button(PREFIX + ':recordAchievements:' + id + ':' + (page+1),emojiLabel('ROLE_NEXT','Next'),ButtonStyle.Secondary,page>=pages-1)),goliathNavigation(PREFIX + ':records', PREFIX + ':settings')] };
       if (interaction.message?.flags?.has(64)) return refresh(interaction,payload);
       return interaction.reply({...payload,ephemeral:true,allowedMentions:{parse:[]}});
     }
@@ -828,7 +826,7 @@ async function handleTimedRolesInteraction(interaction) {
       const ruleId = customId.split(':').pop();
       const rule=timedRoles.getRule(interaction.guild.id,ruleId);
       if(!rule)throw new Error('Milestone not found.');
-      return refresh(interaction,{embeds:[new EmbedBuilder().setColor(0xED4245).setTitle('Delete milestone?').setDescription('Delete **'+rule.name+'**? Existing Discord roles and historical membership records are not deleted.')],components:[row(button(PREFIX+':confirmDelete:'+ruleId,emojiLabel('DELETE','Confirm Delete'),ButtonStyle.Danger)),row(button(PREFIX+':editBack:'+ruleId,emojiLabel('BACK','Back')))]});
+      return refresh(interaction,{embeds:[new EmbedBuilder().setColor(0xED4245).setTitle('Delete milestone?').setDescription('Delete **'+rule.name+'**? Existing Discord roles and historical membership records are not deleted.')],components:[row(button(PREFIX+':confirmDelete:'+ruleId,emojiLabel('DELETE','Confirm Delete'),ButtonStyle.Danger)),goliathNavigation(PREFIX+':editBack:'+ruleId,PREFIX+':settings')]});
     }
     if (customId.startsWith(`${PREFIX}:confirmDelete:`)) {
       const ruleId=customId.split(':').pop();
