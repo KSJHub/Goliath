@@ -228,8 +228,8 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
         rule.lastError ? `**Last error:** ${rule.lastError}` : '',
       ].filter(Boolean).join('\n'))],
     components: [
+      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:replaceReward:${rule.ruleId}`).setPlaceholder('Choose milestone reward role').setMinValues(1).setMaxValues(1).setDefaultRoles(...(guild.roles.cache.has(rule.roleId) ? [rule.roleId] : []))),
       ...cleanupPicker.rows,
-      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:replaceReward:${rule.ruleId}`).setPlaceholder('Choose milestone reward role').setMinValues(1).setMaxValues(1)),
       row(
         button(`${PREFIX}:edit:${rule.ruleId}`, emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary),
         ...(guild.roles.cache.has(rule.roleId) ? [] : [button(`${PREFIX}:recoverRole:${rule.ruleId}`, 'Create Reward Role', ButtonStyle.Primary)]),
@@ -544,12 +544,17 @@ async function handleTimedRolesInteraction(interaction) {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
       if (customId === PREFIX + ':newReward') return interaction.showModal(buildRuleModal(PREFIX + ':newRewardSubmit', 'Create Milestone and Role'));
       const service = require('./timedRolesService');
+      const replacementId = customId.startsWith(PREFIX + ':replaceReward:') ? customId.slice((PREFIX + ':replaceReward:').length) : null;
       await interaction.deferUpdate();
+      if (replacementId && !timedRoles.getRule(interaction.guild.id,replacementId)) {
+        await refresh(interaction);
+        return interaction.followUp({content:'This milestone is no longer available. The Timed Roles list has been refreshed. Select the current milestone and try again.',ephemeral:true});
+      }
       await service.withTimedRolesLock(interaction.guild.id, async () => {
         const guild = interaction.guild;
         if (!guild.members.me?.permissions.has('ManageRoles')) throw new Error('Goliath requires Manage Roles.');
         if (customId.startsWith(PREFIX + ':replaceReward:')) {
-          const rule = timedRoles.getRule(guild.id, customId.split(':').pop());
+          const rule = timedRoles.getRule(guild.id, replacementId);
           if (!rule) throw new Error('Milestone no longer exists.');
           const roles = await guild.roles.fetch();
           if (interaction.values[0] === rule.roleId) return;
