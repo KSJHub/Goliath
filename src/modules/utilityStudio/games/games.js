@@ -115,9 +115,9 @@ const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Sourc
 function componentRow(...components) { return { type: 1, components }; }
 function panelButton(action, label, style = 2, disabled = false) {
   // Discord renders component emojis separately from button labels.
-  const icons = [`${EMOJIS.DIRECT_MESSAGE}`, `${EMOJIS.GAMEPAD}`, '💱', `${EMOJIS.DESIGN}`, '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶', `${EMOJIS.HEALTH}`];
+  const icons = [`${EMOJIS.DIRECT_MESSAGE}`, `${EMOJIS.GAMEPAD}`, '💱', `${EMOJIS.DESIGN}`, '⭐', '📰', `${EMOJIS.PREVIEW}`, `${EMOJIS.REFRESH}`, `${EMOJIS.BACK_PLAIN}`, `${EMOJIS.CHANNEL_PREVIOUS}`, `${EMOJIS.PAUSE_PLAIN}`, `${EMOJIS.CHANNEL_NEXT}`, `${EMOJIS.HEALTH}`];
   const leading = icons.find(icon => label.startsWith(icon + ' '));
-  const trailing = label.endsWith(' ▶') ? '▶' : null;
+  const trailing = label.endsWith(` ${EMOJIS.CHANNEL_NEXT}`) ? `${EMOJIS.CHANNEL_NEXT}` : null;
   const emoji = leading || trailing;
   return { type: 2, custom_id: PANEL_PREFIX + action,
     label: emoji ? (leading ? label.slice(leading.length).trim() : label.slice(0, -2).trim()) : label,
@@ -140,7 +140,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   const nav = componentRow(panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`),
     panelButton('pricing', '💱 Currency'), panelButton('display', `${EMOJIS.DESIGN} Display`));
   const embed = { title: page === 'home' ? `${EMOJIS.GAMEPAD} Games` : `${EMOJIS.GAMEPAD} Games · Free Games`, color: SECTIONS[0].color,
-    description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
+    description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Paused`].filter(Boolean).join('\n\n'),
     fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
   let controls = [];
   if (page === 'settings') {
@@ -148,8 +148,8 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     embed.description = [notice && escape(notice), 'Manage module availability, delivery and diagnostics. Changes sync with the dashboard.'].filter(Boolean).join('\n\n');
     const updates = getGameUpdates(guild.id);
     embed.fields = [
-      { name: `${EMOJIS.GAME_GIFT} Free Games`, value: c.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
-      { name: '📰 Game Updates', value: updates.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
+      { name: `${EMOJIS.GAME_GIFT} Free Games`, value: c.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Disabled`, inline: true },
+      { name: '📰 Game Updates', value: updates.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Disabled`, inline: true },
       { name: `${EMOJIS.HEALTH} Health`, value: [
         'Delivery: ' + (c.channelId ? '<#' + c.channelId + '>' : `${EMOJIS.WARNING} Channel not set`),
         'Last success: ' + statusTime(c.state.lastSuccess),
@@ -159,9 +159,9 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
       ].join('\n'), inline: false },
     ];
     controls = [
-      componentRow(panelButton('enabled', c.enabled ? '⏸ Disable Free Games' : '▶ Enable Free Games', c.enabled ? 2 : 3),
+      componentRow(panelButton('enabled', c.enabled ? `${EMOJIS.PAUSE_PLAIN} Disable Free Games` : `${EMOJIS.CHANNEL_NEXT} Enable Free Games`, c.enabled ? 2 : 3),
         panelButton('updates:home:0', '📰 Game Updates'), panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`)),
-      componentRow(panelButton('health', `${EMOJIS.HEALTH} Health`), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+      componentRow(panelButton('health', `${EMOJIS.HEALTH} Health`), panelButton('refresh', `${EMOJIS.REFRESH} Refresh`, 2, !c.enabled)),
     ];
   } else if (page === 'health') {
     embed.title = `${EMOJIS.HEALTH} Games · Health`;
@@ -214,8 +214,8 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
       componentRow({ type: 6, custom_id: PANEL_PREFIX + 'routeRole:' + id, min_values: 0, max_values: 1,
         placeholder: 'Notification role for this channel',
         ...(route.roleId ? { default_values: [{ id: route.roleId, type: 'role' }] } : {}) }),
-      componentRow(panelButton('routeToggle:' + id, route.enabled ? '⏸ Pause channel' : '▶ Enable channel'),
-        panelButton('routeAlerts:' + id, route.alerts ? '🔕 Disable alerts' : '🔔 Enable alerts')),
+      componentRow(panelButton('routeToggle:' + id, route.enabled ? `${EMOJIS.PAUSE_PLAIN} Pause channel` : `${EMOJIS.CHANNEL_NEXT} Enable channel`),
+        panelButton('routeAlerts:' + id, route.alerts ? `${EMOJIS.WELCOME_MUTED} Disable alerts` : `${EMOJIS.BELL} Enable alerts`)),
     ];
   } else if (page === 'filters') {
     embed.title += ' · Offers';
@@ -247,17 +247,17 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   } else {
     embed.description = [
       notice && escape(notice),
-      `**${EMOJIS.GAME_GIFT} Free Games** ` + (c.enabled ? '🟢 On' : '⏸ Off') + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? '🟢 On' : '⏸ Off'),
+      `**${EMOJIS.GAME_GIFT} Free Games** ` + (c.enabled ? `${EMOJIS.ENABLED} On` : `${EMOJIS.PAUSE_PLAIN} Off`) + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? `${EMOJIS.ENABLED} On` : `${EMOJIS.PAUSE_PLAIN} Off`),
       `**${EMOJIS.DIRECT_MESSAGE} Delivery** ` + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
       `**${EMOJIS.GAMEPAD} Catalogue** ` + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
-      '**🕒 Synced** ' + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
+      `**${EMOJIS.ROLE_CLOCK} Synced** ` + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
     ].filter(Boolean).join('\n');
     embed.fields = [];
     if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
     controls = [
-      componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', '👁 Preview'),
+      componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', `${EMOJIS.PREVIEW} Preview`),
         panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`), panelButton('pricing', '💱 Currency')),
-      componentRow(panelButton('display', `${EMOJIS.DESIGN} Display`), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+      componentRow(panelButton('display', `${EMOJIS.DESIGN} Display`), panelButton('refresh', `${EMOJIS.REFRESH} Refresh`, 2, !c.enabled)),
       gamesNavigation('studio', 'settings'),
     ];
   }
@@ -290,8 +290,8 @@ async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
   if (candidates.length) rows.push(choiceMenu('featuredOfferId', 'Choose a main game · ' + (page + 1) + '/' + totalPages,
     candidates.slice(page * 25, page * 25 + 25).map(offer => [offer.id, shortTitle(offer.title).slice(0, 100)]), [c.featuredOfferId]));
   rows.push(choiceMenu('featuredArtwork', 'Featured artwork', [['thumbnail', 'Top-right artwork thumbnail'], ['hidden', 'Hide artwork']], [c.featuredArtwork]));
-  if (totalPages > 1) rows.push(componentRow(panelButton('featured:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
-    panelButton('featured:' + (page + 1), 'Next ▶', 2, page === totalPages - 1)));
+  if (totalPages > 1) rows.push(componentRow(panelButton('featured:' + Math.max(0, page - 1), `${EMOJIS.CHANNEL_PREVIOUS} Previous`, 2, page === 0),
+    panelButton('featured:' + (page + 1), `Next ${EMOJIS.CHANNEL_NEXT}`, 2, page === totalPages - 1)));
   rows.push(gamesNavigation('display', 'display'));
   return { ...payload, components: rows };
 }
@@ -345,8 +345,8 @@ async function handleAdminInteraction(interaction) {
       const pages = buildListing(filterOffers(feed.offers, c), { ...c, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), await loadPlatformPresentation(guild.client, guild.id));
       const page = Math.min(Number(action.split(':')[1]), pages.length - 1);
       await reply({ ...pages[page], content: 'Preview only · saved server settings · no listing or notifications posted',
-        components: [componentRow(panelButton('preview:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
-          panelButton('preview:' + (page + 1), 'Next ▶', 2, page === pages.length - 1)),
+        components: [componentRow(panelButton('preview:' + Math.max(0, page - 1), `${EMOJIS.CHANNEL_PREVIOUS} Previous`, 2, page === 0),
+          panelButton('preview:' + (page + 1), `Next ${EMOJIS.CHANNEL_NEXT}`, 2, page === pages.length - 1)),
           gamesNavigation('home', 'display')] });
       return true;
     }
@@ -533,16 +533,16 @@ function buildUpdatesPanel(guild, page = 0, notice = '') {
   const subscriptions = Object.values(config.subscriptions).sort((a, b) => a.name.localeCompare(b.name));
   const pages = Math.max(1, Math.ceil(subscriptions.length / 25)); page = Math.min(Math.max(0, Number(page) || 0), pages - 1);
   const embed = { title: '📰 Games · Game Updates', color: SECTIONS[2].color,
-    description: [notice && escape(notice), config.enabled ? '🟢 Automatic updates enabled' : '⏸ Automatic updates paused',
+    description: [notice && escape(notice), config.enabled ? `${EMOJIS.ENABLED} Automatic updates enabled` : `${EMOJIS.PAUSE_PLAIN} Automatic updates paused`,
       'Follow Steam publisher announcements. Choose a game, its destination and the updates you want. New subscriptions start with the next announcement.'].filter(Boolean).join('\n\n'),
     fields: [{ name: 'Subscriptions', value: subscriptions.length + ' games · ' + subscriptions.filter(sub => sub.enabled).length + ' active', inline: true },
       { name: 'Quiet hours', value: config.quietStart ? config.quietStart + '–' + config.quietEnd + ' · ' + getConfig(guild.id).timeZone : 'Off', inline: true }],
     footer: { text: 'Games · Game Updates · ' + (page + 1) + '/' + pages }, timestamp: new Date().toISOString() };
   const rows = [componentRow(panelButton('updates:toggle', config.enabled ? 'Pause updates' : 'Enable updates', config.enabled ? 2 : 3),
     panelButton('updates:check', 'Check now'), panelButton('updates:quiet', 'Quiet hours'), panelButton('updates:history:0', 'Delivery history'))];
-  if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? '▶ ' : '⏸ ') + sub.name])));
+  if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? `${EMOJIS.CHANNEL_NEXT} ` : `${EMOJIS.PAUSE_PLAIN} `) + sub.name])));
   rows.push(componentRow(panelButton('updates:catalog', 'Browse games'), panelButton('updates:add', 'Add Steam game')));
-  if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0), panelButton('updates:home:' + (page + 1), 'Next ▶', 2, page === pages - 1)));
+  if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), `${EMOJIS.CHANNEL_PREVIOUS} Previous`, 2, page === 0), panelButton('updates:home:' + (page + 1), `Next ${EMOJIS.CHANNEL_NEXT}`, 2, page === pages - 1)));
   rows.push(gamesNavigation('home', 'display'));
   return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
 }
@@ -554,10 +554,10 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const updateRoutes = effectiveUpdateDestinations(sub);
   const queuedCount = sub.pending.length - heldCount;
   const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
-    description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
+    description: [notice && escape(notice), sub.enabled ? `${EMOJIS.CHANNEL_NEXT} Subscription enabled` : `${EMOJIS.PAUSE_PLAIN} Subscription paused`,
       'Steam announcements can be delivered to up to ten channels, with independent role notifications.',
       sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
-    fields: [{ name: 'Destinations', value: updateRoutes.length ? updateRoutes.map(route => (route.enabled ? '▶ ' : '⏸ ') + '<#' + route.channelId + '>' + (route.roleId ? ' · <@&' + route.roleId + '>' : '')).join('\n').slice(0, 1024) : 'Choose a channel', inline: false },
+    fields: [{ name: 'Destinations', value: updateRoutes.length ? updateRoutes.map(route => (route.enabled ? `${EMOJIS.CHANNEL_NEXT} ` : `${EMOJIS.PAUSE_PLAIN} `) + '<#' + route.channelId + '>' + (route.roleId ? ' · <@&' + route.roleId + '>' : '')).join('\n').slice(0, 1024) : 'Choose a channel', inline: false },
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
       { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + queuedCount + '\nHeld for review: ' + heldCount, inline: false }],
     footer: { text: 'Games · Steam publisher announcements' }, timestamp: new Date().toISOString() };
@@ -602,8 +602,8 @@ function buildGameUpdateHistoryPanel(guild, page = 0, status = 'all') {
   const filterOptions = statuses.map(value => [value, value === 'all' ? 'All outcomes' : value.replace(/_/g, ' ')]);
   return { content: null, embeds: [embed], allowedMentions: { parse: [] }, components: [
     choiceMenu('updates:history-filter', 'Filter delivery outcomes', filterOptions, [status]),
-    componentRow(panelButton('updates:history:' + Math.max(0, page - 1) + ':' + status, '◀ Previous', 2, page === 0),
-      panelButton('updates:history:' + Math.min(pages - 1, page + 1) + ':' + status, 'Next ▶', 2, page === pages - 1)),
+    componentRow(panelButton('updates:history:' + Math.max(0, page - 1) + ':' + status, `${EMOJIS.CHANNEL_PREVIOUS} Previous`, 2, page === 0),
+      panelButton('updates:history:' + Math.min(pages - 1, page + 1) + ':' + status, `Next ${EMOJIS.CHANNEL_NEXT}`, 2, page === pages - 1)),
     gamesNavigation('updates:home:0', 'home')
   ] };
 }
@@ -626,8 +626,8 @@ async function handleGameUpdatesInteraction(i, action, reply) {
     payload.components = [
       choiceMenu('updates:choose', 'Game catalogue · page ' + (page + 1), catalogue.slice(page * 25, page * 25 + 25).map(game => [game.appId, game.name + (game.catalogueType && game.catalogueType !== 'game' ? ' (' + game.catalogueType.toUpperCase() + ' - legacy)' : '')])),
       ...(pageCount > 1 ? [componentRow(
-        panelButton('updates:catalog:' + (page - 1), '◀ Previous', 2, page === 0),
-        panelButton('updates:catalog:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
+        panelButton('updates:catalog:' + (page - 1), `${EMOJIS.CHANNEL_PREVIOUS} Previous`, 2, page === 0),
+        panelButton('updates:catalog:' + (page + 1), `Next ${EMOJIS.CHANNEL_NEXT}`, 2, page === pageCount - 1)
       )] : []),
       componentRow(panelButton('updates:publishers:0', 'Publisher games'), panelButton('updates:add', 'Add Steam game')),
       gamesNavigation('updates:home:0', 'home')
@@ -645,8 +645,8 @@ async function handleGameUpdatesInteraction(i, action, reply) {
     payload.components = [
       choiceMenu('updates:publisher-info', 'Publisher games · page ' + (page + 1), catalogue.slice(page * 25, page * 25 + 25).map(game => [game.id, game.name])),
       ...(pageCount > 1 ? [componentRow(
-        panelButton('updates:publishers:' + (page - 1), '◀ Previous', 2, page === 0),
-        panelButton('updates:publishers:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
+        panelButton('updates:publishers:' + (page - 1), `${EMOJIS.CHANNEL_PREVIOUS} Previous`, 2, page === 0),
+        panelButton('updates:publishers:' + (page + 1), `Next ${EMOJIS.CHANNEL_NEXT}`, 2, page === pageCount - 1)
       )] : []),
       componentRow(panelButton('updates:catalog:0', 'Steam games')),
       gamesNavigation('updates:home:0', 'home')
