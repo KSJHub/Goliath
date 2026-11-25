@@ -65,7 +65,8 @@ function securityPage(g,user){
  {name:'2 · '+EMOJIS.SYSTEM+' Security checks',value:SECURITY.map(([k,label])=>(enabled.includes(k)?EMOJIS.ENABLED:EMOJIS.DISABLED)+' **'+label+'**'+(order.includes(FLOW_KEYS[k])?' · Required':'')).join('\n')},
  {name:'3 · '+EMOJIS.CLIPBOARD+' Required order',value:order.map((step,n)=>(n+1)+'. '+(SECURITY.find(([k])=>FLOW_KEYS[k]===step)?.[1]||step)).join('\n')||'None'},
  {name:'4 · '+EMOJIS.INFO+' Controls',value:'**Enabled checks:** Choose available checks.\n**Required checks:** Choose checks members must complete.\n**Configure a check:** Edit individual options.\n**Settings:** Manage limits, access rules and monitoring.'});
- return {embeds:[embed],components:[row(protectionPresetMenu()),row(available),row(required),row(configure),finalNav('home',missing.length?button('admin:verification:repairRequiredChecks','Enable Required Checks',ButtonStyle.Success):null)]};
+ if(missing.length)return {embeds:[embed],components:[row(protectionPresetMenu()),row(available),row(required),row(configure),finalNav('home',button('admin:verification:repairRequiredChecks','Enable Required Checks',ButtonStyle.Success))]};
+ return {embeds:[embed],components:[row(protectionPresetMenu()),row(available),row(required),row(configure),finalNav('home')]};
 }
 function securityMethodsPage(g,user){return securityPage(g,user);}
 const METHOD_NUMBERS={
