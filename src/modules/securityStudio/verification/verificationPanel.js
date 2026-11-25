@@ -148,7 +148,7 @@ function logsPage(g,user,st){
  if(current&&g.channels.cache.has(current))channel.setDefaultChannels(current);
  const roles=new RoleSelectMenuBuilder().setCustomId('admin:verification:logPingRoles').setPlaceholder('Select roles to notify').setMinValues(0).setMaxValues(10);
  if(c.logPingRoles?.length)roles.setDefaultRoles(...c.logPingRoles.filter(id=>g.roles.cache.has(id)).slice(0,10));
- const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Logs'),['Configure channel and Security Passport logging.','Only one logging mode can be active at a time.'],user,guildManager.isModuleEnabled(g.id,'verification')?0x57F287:0x5865F2).addFields(
+ const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Logs'),['Configure channel and thread logging.','Only one logging mode can be active at a time.'],user,guildManager.isModuleEnabled(g.id,'verification')?0x57F287:0x5865F2).addFields(
  {name:`1 · ${EMOJIS.SETTINGS} Logging mode`,value:`**Channel Logs:** ${threaded?`${EMOJIS.DISABLED} Off`:`${EMOJIS.ENABLED} On`}   ·   **Thread Logs:** ${threaded?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}`,inline:false},
  {name:`2 · ${EMOJIS.DOCUMENT} Destination`,value:'**Default:** '+channelText(threaded?c.threadLogging?.channelId:c.logChannelId)+'\n'+(threaded?'All enabled categories go to a single private member thread.':'Category overrides take priority over the default.'),inline:false},
  {name:`3 · ${EMOJIS.INCIDENT_AUDIT} Log categories`,value:LOG_TYPES.map(x=>`${enabled.includes(x)?EMOJIS.ENABLED:EMOJIS.INACTIVE} **${title(x)}** → ${channelText(threaded?c.threadLogging?.channelId:c.logs?.[x+'ChannelId']||c.logChannelId)}`).join('\n'),inline:false},
@@ -173,13 +173,13 @@ function threadSettingsPage(g,user){
  if(t.channelId&&g.channels.cache.has(t.channelId))channel.setDefaultChannels(t.channelId);
  const on=v=>v?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`;
  const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Thread Settings'),['Organise security logs into a dedicated case for each verification session. Changes save immediately.'],user).addFields(
- {name:`1 · ${EMOJIS.CLIPBOARD} Logging mode`,value:'**Current:** '+title(mode)+`\n${EMOJIS.DOCUMENT} **Channel Logs:** Default channel with optional category destinations.\n${EMOJIS.UTILITY_THREAD} **Security Passports:** One staff-only channel with a thread for each member.`,inline:false},
- {name:`2 · ${EMOJIS.LOCK} Destination`,value:'**Channel:** '+channelText(t.channelId)+'\nChoose a staff-only text channel. Category routes are ignored in Security Passports mode. Failed thread delivery will not redirect private logs into other channels.',inline:false},
+ {name:`1 · ${EMOJIS.CLIPBOARD} Logging mode`,value:'**Current:** '+title(mode)+`\n${EMOJIS.DOCUMENT} **Channel Logs:** Default channel with optional category destinations.\n${EMOJIS.UTILITY_THREAD} **Thread Logs:** One staff-only channel with a thread for each member.`,inline:false},
+ {name:`2 · ${EMOJIS.LOCK} Destination`,value:'**Channel:** '+channelText(t.channelId)+'\nChoose a staff-only text channel. Category routes are ignored in Thread Logs mode. Failed thread delivery will not redirect private logs into other channels.',inline:false},
  {name:`3 · ${EMOJIS.ROLE_CLOCK} Auto-hide`,value:'**Inactivity:** 7 days (fixed)'+'\nArchives inactive threads without deleting their history.',inline:false},
  {name:`4 · ${EMOJIS.ROLE_TAG} Case naming`,value:'**Example:** Verification • '+(t.naming==='id'?'123456789012345678':t.naming==='username'?'member':'member • 123456789012345678')+'\nChoose how staff identify each case.',inline:false},
  {name:`5 · ${EMOJIS.SETTINGS} Case policies`,value:'**Success archive:** '+on(t.archiveOnSuccess!==false)+' · **Success lock:** '+on(t.lockOnSuccess)+'\n**Failure archive:** '+on(t.archiveOnFailure)+' · **Quarantine archive:** '+on(t.archiveOnQuarantine)+'\nOpen Case Policies to change these behaviours.',inline:false});
  return {embeds:[embed],components:[
- select('mode','Choose logging mode',[['standard','Channel Logs',EMOJIS.DOCUMENT,'Default channel and category routing'],['threaded','Security Passports',EMOJIS.UTILITY_THREAD,'One channel with member case threads']],mode),
+ select('mode','Choose logging mode',[['standard','Channel Logs',EMOJIS.DOCUMENT,'Default channel and category routing'],['threaded','Thread Logs',EMOJIS.UTILITY_THREAD,'One channel with member case threads']],mode),
  row(channel),
 
  select('naming','Choose case naming',[['both','Username + User ID',EMOJIS.ROLE_TAG,'Show both identifiers'],['username','Username',EMOJIS.USER,'Show the member username'],['id','User ID',EMOJIS.USER_ID,'Show the Discord user ID']],t.naming||'both'),
