@@ -313,7 +313,7 @@ async function deliverAuditNotifications(guild) {
         }
       }
       const roles = (Array.isArray(config.roleIds) ? config.roleIds : []).filter(id => id !== guild.id && guild.roles.cache.has(id)).slice(0,10);
-      const embed = new EmbedBuilder().setTitle('Timed Roles · ' + event.type.replace(/_/g,' ')).setColor(event.type.includes('failed') ? 0xED4245 : 0x5865F2).setDescription(JSON.stringify(event.details || {}, null, 2).slice(0,3900)).setFooter({ text: 'Audit ' + event.id }).setTimestamp(new Date(event.at));
+      const embed = new EmbedBuilder().setTitle('Timed Roles · ' + event.type.replace(/_/g,' ')).setColor(event.type.includes('failed') ? 0xED4245 : 0x5865F2).setDescription('An operational event was recorded. Authorised administrators can inspect its details in Timed Roles Audit History.').setFooter({ text: 'Audit ' + event.id }).setTimestamp(new Date(event.at));
       // Persist the attempt before sending: prefer a missed notification to duplicate pings after a crash.
       advance(event.id, { lastAttemptAt: now(), lastStatus: 'attempted' });
       try {
@@ -335,7 +335,7 @@ async function startup(client) {
     const timestamp = Date.now();
     let scannedGuilds = 0; let guildFailures = 0; let memberFailures = 0;
     for (const guild of client.guilds.cache.values()) {
-      if (!force && !base.shouldScanGuild(guild.id, timestamp)) continue;
+      if (!guild.available || (!force && !base.shouldScanGuild(guild.id, timestamp))) continue;
       try {
         const result = await scanGuild(guild, { actorId: client.user?.id, action: force ? 'timed_roles_startup_scan' : 'timed_roles_scheduled_scan' });
         scannedGuilds += 1;
@@ -364,7 +364,14 @@ async function startup(client) {
     } finally { delivering = false; }
   }, 30000);
   deliveryTimer.unref?.();
-  const timer = setInterval(() => run(false).catch((error) => console.warn(`[TimedRoles] Scheduler failed: ${error.message}`)), SCHEDULER_TICK_MS);
+  let scanning = false;
+  const timer = setInterval(async () => {
+    if(scanning)return;
+    scanning=true;
+    try{await run(false);}
+    catch(error){console.warn(`[TimedRoles] Scheduler failed: ${error.message}`);}
+    finally{scanning=false;}
+  }, SCHEDULER_TICK_MS);
   timer.unref?.();
   return timer;
 }
