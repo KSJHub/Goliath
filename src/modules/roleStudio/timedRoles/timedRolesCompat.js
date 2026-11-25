@@ -15,7 +15,7 @@ function installTimedRolesCompat() {
   base.saveRule = function validatedTimedRoleSave(guildId, input = {}, meta = {}) {
     const value = Number(input.value ?? input.durationValue ?? 1);
     const unit = String(input.unit || input.durationUnit || 'days').toLowerCase();
-    if (!Number.isFinite(value) || value < 1 || value > 1_000_000) throw new Error('Timed Roles duration must be a finite value between 1 and 1,000,000.');
+    if (!Number.isInteger(value) || value < 1 || value > 1_000_000) throw new Error('Timed Roles duration must be a whole number between 1 and 1,000,000.');
     if (!base.UNITS.includes(unit)) throw new Error('Timed Roles duration unit is invalid.');
     return originalSaveRule(guildId, input, meta);
   };
@@ -32,7 +32,7 @@ function installTimedRolesCompat() {
       panel.handleTimedRolesInteraction = async function hardenedTimedRolesInteraction(interaction) {
         try {
           const customId = String(interaction.customId || '');
-          const recordsRead = ['admin:timedRoles:records', 'admin:timedRoles:recordMember'].includes(customId);
+          const recordsRead = /^admin:timedRoles:(?:records|recordMember|recordHistorical|recordSearch|recordSearchSubmit|recordsPage:-?\d+|recordAchievements:\d{15,25}(?::-?\d+)?)$/.test(customId);
           const allowed = await security.enforceInteractionSecurity(interaction, { level: recordsRead ? null : 'admin', guildOnly: true });
           if (!allowed?.allowed) return true;
           // The records panel independently checks the guild's configured access roles.
