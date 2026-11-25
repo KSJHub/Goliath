@@ -107,8 +107,8 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
         button(`${PREFIX}:scan`, emojiLabel('INVESTIGATE', 'Scan Now'), ButtonStyle.Success),
         button(`${PREFIX}:simulate`, emojiLabel('TEST_SEND', 'Simulate'), ButtonStyle.Primary),
         button(`${PREFIX}:records`, emojiLabel('MEMBERS','Membership Records')),
-        button(`${PREFIX}:maintenance`, emojiLabel('TOOLS', 'Maintenance')),
         button(`${PREFIX}:newReward`, emojiLabel('ADD','Create New Role'), ButtonStyle.Primary),
+        ...(pageCount > 1 ? [button(PREFIX + ':rolePageNext:' + ((safePage + 1) % pageCount), emojiLabel('ROLE_NEXT','Next Role Page'))] : []),
       ),
       goliathNavigation('admin:reactionRoles', PREFIX + ':settings'),
     ],
@@ -280,7 +280,12 @@ function buildSettingsPanel(guildId) {
         button(`${PREFIX}:celebrations`, emojiLabel('ACHIEVEMENT','Celebrations')),
         button(`${PREFIX}:logging`, emojiLabel('SCROLL','Logging')),
       ),
-      row(button(PREFIX + ':auditPage:0',emojiLabel('HISTORY','Audit History'))),
+      row(
+        button(PREFIX + (guildManager.isModuleEnabled(guildId,'timedRoles') ? ':disable' : ':enable'), guildManager.isModuleEnabled(guildId,'timedRoles') ? emojiLabel('USER_PAUSE','Disable') : emojiLabel('USER_PLAY','Enable')),
+        button(PREFIX + ':repair',emojiLabel('REPAIR','Repair')),
+        button(PREFIX + ':export',emojiLabel('MOD_EXPORT','Export')),
+        button(PREFIX + ':auditPage:0',emojiLabel('HISTORY','Audit History')),
+      ),
       row(button(PREFIX, emojiLabel('BACK', 'Back'))),
     ],
   };
@@ -428,16 +433,7 @@ async function handleTimedRolesInteraction(interaction) {
   if (!customId.startsWith(PREFIX)) return false;
   try {
     if (customId === PREFIX) return refresh(interaction);
-    if (customId === PREFIX + ':maintenance') {
-      const enabled = guildManager.isModuleEnabled(interaction.guild.id,'timedRoles');
-      const count = rolePickerPageCount(interaction.guild);
-      return refresh(interaction, { embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('TOOLS','Timed Roles Maintenance'))],components:[
-        row(button(PREFIX + (enabled ? ':disable' : ':enable'),emojiLabel(enabled ? 'USER_PAUSE' : 'USER_PLAY',enabled ? 'Disable' : 'Enable')),button(PREFIX + ':repair',emojiLabel('REPAIR','Repair')),button(PREFIX + ':export',emojiLabel('MOD_EXPORT','Export'))),
-        ...(count > 1 ? [row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':rolePageSelect').setPlaceholder('Choose role picker page').addOptions(Array.from({length:Math.min(count,25)},(_,i)=>({label:'Role page ' + (i+1),value:String(i)}))))] : []),
-        goliathNavigation(PREFIX,PREFIX + ':settings')
-      ] });
-    }
-    if (customId === PREFIX + ':rolePageSelect') return refresh(interaction,null,Number(interaction.values[0]) || 0);
+    if (customId.startsWith(PREFIX + ':rolePageNext:')) return refresh(interaction,null,Number(customId.split(':').pop()) || 0);
     if (customId.startsWith(PREFIX + ':auditPage:') || customId === PREFIX + ':auditExport') {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
       if (customId === PREFIX + ':auditExport') {
@@ -744,8 +740,14 @@ async function handleTimedRolesInteraction(interaction) {
     }
 
     if (customId === `${PREFIX}:settings`) return refresh(interaction, buildSettingsPanel(interaction.guild.id));
-    if (customId === `${PREFIX}:enable`) guildManager.setModuleEnabled(interaction.guild.id, 'timedRoles', true, { actorId: interaction.user.id });
-    if (customId === `${PREFIX}:disable`) guildManager.setModuleEnabled(interaction.guild.id, 'timedRoles', false, { actorId: interaction.user.id });
+    if (customId === `${PREFIX}:enable`) {
+      guildManager.setModuleEnabled(interaction.guild.id, 'timedRoles', true, { actorId: interaction.user.id });
+      return refresh(interaction, buildSettingsPanel(interaction.guild.id));
+    }
+    if (customId === `${PREFIX}:disable`) {
+      guildManager.setModuleEnabled(interaction.guild.id, 'timedRoles', false, { actorId: interaction.user.id });
+      return refresh(interaction, buildSettingsPanel(interaction.guild.id));
+    }
     if (customId === `${PREFIX}:toggleBots`) {
       const section = timedRoles.getSection(interaction.guild.id);
       timedRoles.updateSettings(interaction.guild.id, { includeBots: !section.settings.includeBots }, { actorId: interaction.user.id });
@@ -783,10 +785,10 @@ async function handleTimedRolesInteraction(interaction) {
     if (customId === `${PREFIX}:repair`) {
       await interaction.deferUpdate();
       await timedRolesHealth.repairTimedRoles(interaction.guild, { actorId: interaction.user.id });
-      return refresh(interaction);
+      return refresh(interaction, buildSettingsPanel(interaction.guild.id));
     }
     if (customId === `${PREFIX}:reset`) {
-      return refresh(interaction,{embeds:[new EmbedBuilder().setColor(0xED4245).setTitle('Reset Timed Roles configuration?').setDescription('This resets milestone configuration. Membership records and achievement history are retained.')],components:[row(button(PREFIX+':confirmReset',emojiLabel('DELETE','Confirm Reset'),ButtonStyle.Danger)),row(button(PREFIX+':maintenance',emojiLabel('BACK','Back')))]});
+      return refresh(interaction,{embeds:[new EmbedBuilder().setColor(0xED4245).setTitle('Reset Timed Roles configuration?').setDescription('This resets milestone configuration. Membership records and achievement history are retained.')],components:[row(button(PREFIX+':confirmReset',emojiLabel('DELETE','Confirm Reset'),ButtonStyle.Danger)),row(button(PREFIX+':settings',emojiLabel('BACK','Back')))]});
     }
     if (customId === `${PREFIX}:confirmReset`) {
       await interaction.deferUpdate();
