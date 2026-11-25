@@ -49,6 +49,10 @@ function hasAnyRole(m,ids){return cleanIds(ids).some(id=>m.roles.cache.has(id));
 function isBypass(m,s){return hasAnyRole(m,roleIds(s,'bypass'))||(s.allowStaffBypass&&canManageVerification(m));}
 async function logEvent(g,section,type,content,subjectUserId=null){
   if(!content)return false;
+  const categories=section.settings?.logEnabledCategories;
+  if(Array.isArray(categories)&&!categories.includes(type))return false;
+  const pingRoles=cleanIds(section.settings?.logPingRoles).filter(id=>id!==g.id).slice(0,10);
+  const pingOptions=enabled=>enabled&&pingRoles.length?{content:pingRoles.map(id=>`<@&${id}>`).join(' '),allowedMentions:{parse:[],users:[],roles:pingRoles}}:{};
   const threadMode=section.settings?.threadLogging?.mode;
   // A member security passport has exactly one destination in threaded mode.
   // Category-specific routes are exclusively for standard channel logging.
@@ -79,7 +83,7 @@ async function logEvent(g,section,type,content,subjectUserId=null){
   if(type==='attempt'&&(raw.includes('Pending role assignment confirmed by Discord.')||raw.includes('Pending role check: no Pending roles configured.')))style={...style,title:'Pending Access Confirmed',status:'Unverified',emoji:EMOJIS.SECURITY,color:0xfefefe};
   if(type==='failure'&&raw.includes('Challenge remains active.'))style={...style,title:'Incorrect '+(methodLabel||'Security')+' Answer',status:'Retry available'};
   const mention=raw.match(/<@!?(\d{15,25})>/);
-  const userId=mention?.[1]||(/^[0-9]{15,25}$/.test(String(subjectUserId||''))?String(subjectUserId):null);
+  const userId=(/^[0-9]{15,25}$/.test(String(subjectUserId||''))?String(subjectUserId):null)||mention?.[1]||null;
   const member=userId?(g.members?.cache?.get(userId)||await g.members?.fetch?.(userId).catch(()=>null)):null;
   const username=member?.user?.username||null;
   let details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
@@ -111,13 +115,13 @@ async function logEvent(g,section,type,content,subjectUserId=null){
   const t=section.settings?.threadLogging;
   if(t?.mode!=='standard'&&t?.channelId&&userId&&!['raid','bot'].includes(type)){
     try{
-      if(await deliverVerificationThread(g,userId,username,t,type,embed,options,style))return true;
+      if(await deliverVerificationThread(g,userId,username,t,type,embed,options,style,pingOptions,section.settings))return true;
     }catch(error){console.error('[Verification] Thread delivery fallback:',error?.message||error);}
   }
   try{
     if(threadMode==='threaded'||threadMode==='hybrid')return false;
     if(!c?.send)return false;
-    await c.send(options);
+    await c.send({...options,...pingOptions(section.settings?.logPingOnPost)});
     return true;
   }catch(error){
     console.error('[Verification] Log embed delivery failed:',error?.message||error);
@@ -125,7 +129,7 @@ async function logEvent(g,section,type,content,subjectUserId=null){
   }
 }
 const verificationThreadQueues=new Map();
-async function deliverVerificationThread(g,userId,username,t,type,embed,options,style){
+async function deliverVerificationThread(g,userId,username,t,type,embed,options,style,pingOptions,settings){
   const key=g.id+':'+userId;
   const previous=verificationThreadQueues.get(key)||Promise.resolve();
   const work=previous.catch(()=>{}).then(async()=>{
@@ -152,6 +156,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
       card.setFields([]);
       return {embeds:[card],allowedMentions:{parse:[],users:[],roles:[]}};
     };
+    const created=!thread;
     if(!thread){
       const name=('Verification • '+(t.naming==='id'?userId:t.naming==='username'?(username||userId):(username||'Member')+' • '+userId)).slice(0,100);
       // Starting the thread from its parent case card avoids a second,
@@ -166,7 +171,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     if(thread.locked)return false;
     if(thread.archived)await thread.setArchived(false);
     if(verificationStore.getSession(g.id,userId)?.sessionId!==session.sessionId)return false;
-    await thread.send(options);
+    await thread.send({...options,...pingOptions(settings?.logPingOnPost||(created&&settings?.logPingOnThread))});
     if(!summaryId){
       const summary=await parent.send(caseSummaryOptions(thread.id));
       summaryId=summary.id;
