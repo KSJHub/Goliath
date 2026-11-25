@@ -23,8 +23,8 @@ async function refreshMember(guild, member) {
 function assertManageableMember(guild, member) {
   if (!member) throw new Error('Member could not be found.');
   if (member.id === guild.members.me?.id) throw new Error('Goliath cannot manage its own timed roles.');
-  if (member.id === guild.ownerId) throw new Error('Timed roles cannot be managed on the server owner.');
-  if (member.manageable === false) throw new Error(`${member.displayName || member.user?.username || 'This member'} is above Goliath and cannot be managed.`);
+  // Discord's individual role PUT/DELETE endpoints enforce the role hierarchy,
+  // not the kick/ban/nickname manageability of the recipient.
   return member;
 }
 
@@ -34,7 +34,7 @@ function assertManageableRole(guild, role) {
   if (!role) throw new Error('A configured Timed Roles role no longer exists.');
   if (role.id === guild.id) throw new Error('@everyone cannot be used by Timed Roles.');
   if (role.managed) throw new Error(`${role.name} is managed by an integration.`);
-  if (role.position >= me.roles.highest.position) throw new Error(`${role.name} is above Goliath's highest role.`);
+  if (me.roles.highest.comparePositionTo(role) <= 0) throw new Error(`${role.name} is above Goliath's highest role.`);
   return role;
 }
 
@@ -123,7 +123,7 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
   const guild = member.guild;
   if (!member?.joinedAt) return { status: 'skipped', awarded: [], removed: [], announced: 0 };
   if (member.user?.bot && section.settings.includeBots !== true) return { status: 'skipped', awarded: [], removed: [], announced: 0 };
-  if(member.id===guild.ownerId || member.id===guild.members.me?.id || member.manageable===false)return {status:'skipped',awarded:[],removed:[],announced:0};
+  if(member.id===guild.members.me?.id)return {status:'skipped',awarded:[],removed:[],announced:0};
   assertManageableMember(guild, member);
 
   const state = desiredState(member, section, rules, context);
@@ -221,9 +221,9 @@ async function simulateGuild(guild) {
     result.membersChecked += 1;
     try {
       const state = desiredState(member, section, rules, context);
-      if(!member.joinedAt || member.id===guild.ownerId || member.id===guild.members.me?.id || member.manageable===false){
+      if(!member.joinedAt || member.id===guild.members.me?.id){
         result.skipped++;
-        if(state.targetRules.some(rule=>!member.roles.cache.has(rule.roleId)))result.blocked.push({memberId:member.id,error:'Member is the guild owner, bot itself, above Goliath, or lacks a join date.'});
+        if(state.targetRules.some(rule=>!member.roles.cache.has(rule.roleId)))result.blocked.push({memberId:member.id,error:'Member is Goliath itself or lacks a guild join date.'});
         continue;
       }
       for(const rule of state.targetRules)assertManageableRole(guild,await resolveRole(guild,rule.roleId));
