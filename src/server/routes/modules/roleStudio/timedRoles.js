@@ -128,6 +128,34 @@ router.put('/:guildId/rules/:ruleId', async (req, res) => {
     return ok(res, { rule, ...(await overview(req, id)) });
   } catch (error) { return fail(res, error); }
 });
+router.post('/:guildId/rules/:ruleId/recover-role', async (req,res) => {
+  try {
+    const id=guildId(req), target=await guild(req,id);
+    if(!target) throw new Error('Guild unavailable.');
+    const member=await target.members.fetch(actor(req)).catch(()=>null);
+    if(!(target.ownerId===actor(req) || member?.permissions.has(PermissionFlagsBits.Administrator))) return fail(res,new Error('Administrator permission required.'),403);
+    const rule=await timedRoles.withTimedRolesLock(id,async()=>{
+      const current=timedRoles.getRule(id,req.params.ruleId);
+      if(!current)throw new Error('Milestone not found.');
+      const roles=await target.roles.fetch();
+      if(roles.has(current.roleId))throw new Error('The reward role still exists.');
+      if(!target.members.me?.permissions.has(PermissionFlagsBits.ManageRoles))throw new Error('Goliath requires Manage Roles.');
+      let role;
+      if(req.body?.roleId){
+        role=roles.get(cleanDiscordId(req.body.roleId));
+        if(!role)throw new Error('Replacement role not found.');
+        await validateRuleRoles(target,{...current,roleId:role.id});
+      }else{
+        const name=String(current.name || '').trim().slice(0,100);
+        if(!name || roles.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw new Error('Select an existing role instead; the milestone name is unavailable.');
+        role=await target.roles.create({name,permissions:[],mentionable:false,reason:'Timed Roles reward recovery'});
+      }
+      try{return timedRoles.saveRule(id,{...current,roleId:role.id},{actorId:actor(req),action:'timed_roles_reward_recovery'});}
+      catch(error){throw new Error('Reward could not be linked. Role ID '+role.id+': '+error.message);}
+    });
+    return ok(res,{rule,...(await overview(req,id))});
+  }catch(error){return fail(res,error);}
+});
 router.delete('/:guildId/rules/:ruleId', async (req, res) => {
   try {
     const id = guildId(req);
