@@ -56,7 +56,11 @@ async function requireTimedRolesAccess(req, res, next) {
   }
 }
 
-router.use('/:guildId', requireTimedRolesAccess);
+router.use('/:guildId', (req,res,next) => {
+  // Only exact read-only records routes use the independent membership ACL.
+  if(req.method==='GET' && /^\/(?:records(?:\/\d{15,25})?|audit)\/?$/.test(req.path)) return next();
+  return requireTimedRolesAccess(req,res,next);
+});
 
 async function validateRuleRoles(target, input = {}) {
   const roleIds = [input.roleId, ...(Array.isArray(input.removeRoleIds) ? input.removeRoleIds : [])].filter(Boolean);
@@ -221,10 +225,11 @@ async function requireRecordsAccess(req,res,next) {
   try {
     const id = guildId(req);
     const target = await guild(req,id);
-    const userId = actor(req);
+    const userId = cleanDiscordId(req.session?.user?.id);
+    if(!userId)return res.status(401).json({success:false,error:'Authentication required.'});
     const member = target && await target.members.fetch(userId).catch(() => null);
     const access = timedRoles.getSection(id).settings.recordsAccess || {};
-    if (!target || !(target.ownerId === userId || (access.allowAdministrators !== false && member?.permissions.has(PermissionFlagsBits.Administrator)) || (access.roleIds || []).some(roleId => member?.roles.cache.has(roleId)))) return fail(res,new Error('Membership record access denied.'),403);
+    if (!target || !(target.ownerId === userId || (access.allowAdministrators !== false && member?.permissions.has(PermissionFlagsBits.Administrator)) || (Array.isArray(access.roleIds) ? access.roleIds : []).some(roleId => roleId !== id && member?.roles.cache.has(roleId)))) return fail(res,new Error('Membership record access denied.'),403);
     res.setHeader('Cache-Control','no-store');
     return next();
   } catch(error) { return fail(res,error,403); }
