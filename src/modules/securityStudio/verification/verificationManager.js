@@ -63,7 +63,7 @@ async function logEvent(g,section,type,content,subjectUserId=null){
   const raw=String(content).trim();
   const styles={
     join:{emoji:EMOJIS.TIMER,title:'Verification Pending',color:0xfefefe,status:'Unverified',access:'Restricted'},
-    attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress',access:'Restricted'},
+    attempt:{emoji:EMOJIS.PERMISSIONS,title:'Verification Activity',color:0x5865f2,status:'In progress',access:'Restricted'},
     success:{emoji:EMOJIS.SUCCESS,title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
     failure:{emoji:EMOJIS.ERROR,title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
     roles:{emoji:EMOJIS.SECURITY,title:'Verification Roles Confirmed',color:0x2ecc71,status:'Confirmed',access:'Granted'},
@@ -71,7 +71,7 @@ async function logEvent(g,section,type,content,subjectUserId=null){
     error:{emoji:EMOJIS.WARNING,title:'Verification Error',color:0xe74c3c,status:'Action required'},
     bot:{emoji:EMOJIS.BOT,title:'Bot Verification Event',color:0x95a5a6,status:'Recorded'},
     staff:{emoji:EMOJIS.SECURITY,title:'Verification Staff Decision',color:0x5865f2,status:'Recorded'},
-    intelligence:{emoji:'🧠',title:'Verification Intelligence',color:0x5865f2,status:'Recorded'},
+    intelligence:{emoji:EMOJIS.BRAIN,title:'Verification Intelligence',color:0x5865f2,status:'Recorded'},
     raid:{emoji:EMOJIS.SECURITY_SIREN,title:'Verification Raid Event',color:0xe74c3c,status:'Recorded'}
   };
   let style=styles[type]||{emoji:EMOJIS.CLIPBOARD,title:'Verification Event',color:0x5865f2,status:'Recorded'};
@@ -102,8 +102,8 @@ async function logEvent(g,section,type,content,subjectUserId=null){
     .addFields(
       {name:`${EMOJIS.USER} Member`,value:userId?`<@${userId}>`:'Not applicable',inline:false},
       {name:`${EMOJIS.ROLE_TAG} Discord Username`,value:username?`\`${username.replace(/`/g,'').slice(0,32)}\``:'Unavailable',inline:true},
-      {name:'🆔 User ID',value:userId?`\`${userId}\``:'Not applicable',inline:true},
-      {name:'🔐 Status',value:style.status,inline:true},
+      {name:`${EMOJIS.USER_ID} User ID`,value:userId?`\`${userId}\``:'Not applicable',inline:true},
+      {name:`${EMOJIS.PERMISSIONS} Status`,value:style.status,inline:true},
       {name:`${EMOJIS.SECURITY} Access`,value:style.access||'Not applicable',inline:true},
       {name:`${EMOJIS.DATE} Joined Server`,value:joinedSeconds?`<t:${joinedSeconds}:d>`:'Unavailable',inline:true},
       {name:`${EMOJIS.ROLE_CLOCK} Event Time`,value:`<t:${timestamp}:t> • <t:${timestamp}:R>`,inline:true},

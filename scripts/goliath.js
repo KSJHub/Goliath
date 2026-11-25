@@ -1337,11 +1337,11 @@ async function verificationLifecycleAudit() {
       assert(styleLine.includes('color:' + color), `Verification ${event} log must retain its agreed embed colour`);
     }
     const verificationEmojis = require('../src/core/ui/emojis').EMOJIS;
-    for (const [key, glyph, label] of [["USER","👤","Member"],["ROLE_TAG","🏷️","Discord Username"],["ROLE_CLOCK","🕒","Event Time"],["CLIPBOARD","📋","Event Details"]]) {
+    for (const [key, glyph, label] of [["USER","👤","Member"],["ROLE_TAG","🏷️","Discord Username"],["ROLE_CLOCK","🕒","Event Time"],["CLIPBOARD","📋","Event Details"],["USER_ID","🆔","User ID"],["PERMISSIONS","🔐","Status"]]) {
       assert.equal(verificationEmojis[key], glyph, `Verification audit glyph for ${label}`);
       contains(manager, 'name:`' + '${EMOJIS.' + key + '} ' + label + '`', `Verification audit log preserves ${label}`);
     }
-    contains(manager, "name:'🆔 User ID'", 'Verification audit log preserves User ID');
+    for (const [key, glyph] of [["STAFF_APPROVAL","👮"],["VERIFICATION_PREVIOUS","◀️"],["BRAIN","🧠"]]) assert.equal(verificationEmojis[key], glyph, `Verification shared glyph ${key}`);
     contains(manager, 'subjectUserId=null', 'Verification audit logger accepts explicit member identity');
     contains(manager, "String(subjectUserId||'')", 'Verification audit logger uses explicit member ID when mention is absent');
     contains(flow, 'logEvent(g,c,type,content,userId)', 'Verification continuation passes member identity to audit logger');
