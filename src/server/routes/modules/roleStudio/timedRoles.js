@@ -105,6 +105,20 @@ router.patch('/:guildId/settings', async (req, res) => {
     return ok(res, await overview(req, id));
   } catch (error) { return fail(res, error); }
 });
+router.post('/:guildId/celebration-preview', async (req,res) => {
+  try {
+    const id=guildId(req), target=await guild(req,id);
+    const member=target && await target.members.fetch(actor(req)).catch(()=>null);
+    if(!member)throw new Error('Preview member unavailable.');
+    const input=req.body || {}, existing=timedRoles.getRule(id,input.ruleId);
+    const rule={...existing,name:String(input.name || existing?.name || 'Example milestone').slice(0,100),roleId:cleanDiscordId(input.roleId)||existing?.roleId||null,value:Math.max(1,Math.min(1000000,Number(input.value)||1)),unit:['minutes','hours','days','weeks','months','years'].includes(input.unit)?input.unit:(existing?.unit || 'months')};
+    const settings={...timedRoles.getSection(id).settings,...(input.celebration || {})};
+    const role=target.roles.cache.get(rule.roleId);
+    const rendered=timedRoles.renderCelebration(member,rule,role,settings,timedRoles.getMemberProgression(member,timedRoles.listRules(id)));
+    res.setHeader('Cache-Control','no-store');
+    return ok(res,{title:rendered.title.slice(0,256),message:rendered.message.slice(0,settings.celebrationEmbed===false?2000:4096),embed:settings.celebrationEmbed!==false,gif:typeof settings.celebrationGif==='string' && /^https:\/\//i.test(settings.celebrationGif)?settings.celebrationGif:null});
+  }catch(error){return fail(res,error);}
+});
 router.post('/:guildId/rules/create-with-role', async (req,res) => {
   try {
     const id=guildId(req), target=await guild(req,id);
