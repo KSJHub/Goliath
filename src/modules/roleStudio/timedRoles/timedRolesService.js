@@ -17,7 +17,7 @@ async function resolveRole(guild, roleId) {
 }
 
 async function refreshMember(guild, member) {
-  return member?.id ? await guild.members.fetch(member.id).catch(() => member) : member;
+  return member?.id ? await guild.members.fetch({user:member.id,force:true}) : member;
 }
 
 function assertManageableMember(guild, member) {
@@ -123,27 +123,34 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
   const guild = member.guild;
   if (!member?.joinedAt) return { status: 'skipped', awarded: [], removed: [], announced: 0 };
   if (member.user?.bot && section.settings.includeBots !== true) return { status: 'skipped', awarded: [], removed: [], announced: 0 };
+  if(member.id===guild.ownerId || member.id===guild.members.me?.id || member.manageable===false)return {status:'skipped',awarded:[],removed:[],announced:0};
   assertManageableMember(guild, member);
 
   const state = desiredState(member, section, rules);
   const targetRoles = [];
-  for (const rule of state.targetRules) targetRoles.push({ rule, role: assertManageableRole(guild, await resolveRole(guild, rule.roleId)) });
+  const blocked=[];
+  for (const rule of state.targetRules) {
+    try{targetRoles.push({rule,role:assertManageableRole(guild,await resolveRole(guild,rule.roleId))});}
+    catch(error){blocked.push({ruleId:rule.ruleId,error:error.message});}
+  }
   const cleanupRoles = [];
-  for (const roleId of state.cleanupRoleIds) {
+  // Never remove existing milestone roles if a desired reward cannot be granted.
+  for (const roleId of blocked.length ? [] : state.cleanupRoleIds) {
     const role = await resolveRole(guild, roleId);
     if (!role) continue;
     cleanupRoles.push(assertManageableRole(guild, role));
   }
 
-  const initial = await refreshMember(guild, member);
+  if(blocked.length && !targetRoles.length)throw new Error(blocked.map(item=>item.error).join('; '));
+  const initial = member;
   const initiallyHeld = new Set(initial.roles.cache.keys());
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    let live = await refreshMember(guild, member);
+    let live = attempt===0 ? initial : await refreshMember(guild, member);
     for (const { role } of targetRoles) if (!live.roles.cache.has(role.id)) await live.roles.add(role, 'Goliath Timed Roles progression');
-    live = await refreshMember(guild, live);
+    if(targetRoles.some(({role})=>!live.roles.cache.has(role.id)))live = await refreshMember(guild, live);
     for (const role of cleanupRoles) if (live.roles.cache.has(role.id)) await live.roles.remove(role, 'Goliath Timed Roles progression cleanup');
-    live = await refreshMember(guild, live);
+    if(targetRoles.some(({role})=>!initiallyHeld.has(role.id)) || cleanupRoles.some(role=>initiallyHeld.has(role.id)))live = await refreshMember(guild, live);
 
     const targetOk = targetRoles.every(({ role }) => live.roles.cache.has(role.id));
     const cleanupOk = cleanupRoles.every((role) => !live.roles.cache.has(role.id));
@@ -182,7 +189,7 @@ async function applyUnlocked(member, section = base.getSection(member.guild.id),
         base.recordAudit(guild.id, 'celebration_' + status, { memberId: member.id, ruleId: rule.ruleId, roleId: role.id });
       }
       if (awarded.length || removed.length) base.recordAudit(guild.id, 'member_roles_changed', { memberId: member.id, awarded, removed });
-      return { status: awarded.length || removed.length ? 'changed' : 'noop', awarded, removed, announced, progression: state.progression };
+      return { status: awarded.length || removed.length ? 'changed' : 'noop', awarded, removed, announced, blocked, progression: state.progression };
     }
   }
 
@@ -246,6 +253,7 @@ async function scanGuild(guild, meta = {}) {
         result.awarded += applied.awarded.length;
         result.removed += applied.removed.length;
         result.announced += applied.announced;
+        if(applied.blocked?.length){result.failed+=1;for(const item of applied.blocked){if(stats.has(item.ruleId))stats.get(item.ruleId).error ||= item.error;}base.recordAudit(guild.id,'member_progression_failed',{memberId:member.id,blocked:applied.blocked},meta);}
         for (const rule of rules) if (applied.awarded.includes(rule.roleId)) stats.get(rule.ruleId).awarded += 1;
         if (applied.status === 'noop' || applied.status === 'skipped') result.skipped += 1;
       } catch (error) {
