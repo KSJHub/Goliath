@@ -10,7 +10,7 @@ module.exports = {
       const rules = timedRoles.listRules(role.guild.id);
       for (const rule of rules) {
         if (rule.roleId === role.id) {
-          timedRoles.removeRule(role.guild.id, rule.ruleId, { action: 'timed_roles_target_role_deleted' });
+          timedRoles.saveRule(role.guild.id, { ...rule, lastError: 'Reward role deleted. Recreate or link a replacement role.' }, { action: 'timed_roles_target_role_deleted' });
           continue;
         }
         if ((rule.removeRoleIds || []).includes(role.id)) {
