@@ -236,7 +236,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
         button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:delete:${rule.ruleId}`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger),
       ),
-      row(button(PREFIX, emojiLabel('BACK', 'Back'))),
+      goliathNavigation(PREFIX,PREFIX + ':settings'),
     ],
   };
 }
@@ -309,7 +309,7 @@ function buildLoggingPanel(guildId) {
       row(new StringSelectMenuBuilder().setCustomId(PREFIX + ':loggingEvents').setPlaceholder('Select logging events').setMinValues(0).setMaxValues(LOG_EVENTS.length).addOptions(LOG_EVENTS.map(value => ({label:value.replace(/_/g,' '),value,default:(s.events || []).includes(value)})))),
       row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':loggingDestination').setPlaceholder('Select logging channel').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)),
       row(new RoleSelectMenuBuilder().setCustomId(PREFIX + ':loggingRoles').setPlaceholder('Select notification roles').setMinValues(0).setMaxValues(10)),
-      goliathNavigation(PREFIX + ':settings',PREFIX + ':settings')
+      row(button(PREFIX + ':settings', emojiLabel('BACK','Back')))
     ]
   };
 }
@@ -781,6 +781,9 @@ async function handleTimedRolesInteraction(interaction) {
       return refresh(interaction);
     }
     if (customId === `${PREFIX}:reset`) {
+      return refresh(interaction,{embeds:[new EmbedBuilder().setColor(0xED4245).setTitle('Reset Timed Roles configuration?').setDescription('This resets milestone configuration. Membership records and achievement history are retained.')],components:[row(button(PREFIX+':confirmReset',emojiLabel('DELETE','Confirm Reset'),ButtonStyle.Danger)),row(button(PREFIX+':maintenance',emojiLabel('BACK','Back')))]});
+    }
+    if (customId === `${PREFIX}:confirmReset`) {
       await interaction.deferUpdate();
       timedRoles.reset(interaction.guild.id, { actorId: interaction.user.id });
       return refresh(interaction);
@@ -816,10 +819,16 @@ async function handleTimedRolesInteraction(interaction) {
     }
     if (customId.startsWith(`${PREFIX}:delete:`)) {
       const ruleId = customId.split(':').pop();
+      const rule=timedRoles.getRule(interaction.guild.id,ruleId);
+      if(!rule)throw new Error('Milestone not found.');
+      return refresh(interaction,{embeds:[new EmbedBuilder().setColor(0xED4245).setTitle('Delete milestone?').setDescription('Delete **'+rule.name+'**? Existing Discord roles and historical membership records are not deleted.')],components:[row(button(PREFIX+':confirmDelete:'+ruleId,emojiLabel('DELETE','Confirm Delete'),ButtonStyle.Danger)),row(button(PREFIX+':editBack:'+ruleId,emojiLabel('BACK','Back')))]});
+    }
+    if (customId.startsWith(`${PREFIX}:confirmDelete:`)) {
+      const ruleId=customId.split(':').pop();
       timedRoles.removeRule(interaction.guild.id, ruleId, { actorId: interaction.user.id });
       return refresh(interaction);
     }
-    return refresh(interaction);
+    throw new Error('This Timed Roles control is no longer available. Reopen the module and try again.');
   } catch (error) {
     const payload = { content: `${EMOJIS.ERROR} Timed Roles setup failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
