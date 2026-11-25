@@ -2327,6 +2327,28 @@ function adminModuleRoutingAudit() {
     assert(timedPanel.includes(':confirmDelete:') && timedPanel.includes(':confirmReset'), 'Timed Roles destructive actions require confirmation');
     assert(timedBase.includes('Math.min(day,end.getUTCDate())'), 'Calendar milestone month-end clamping missing');
     assert(timedBase.includes('context.membershipRecords'), 'Timed Roles membership snapshot support missing');
+    // Exercise the exported production calculation without writing guild data.
+    const tenure = require(root + '/src/modules/roleStudio/timedRoles/timedRoles.js');
+    for (const [start,value,unit,expected] of [
+      ['2026-01-31T12:30:00.000Z',1,'months','2026-02-28T12:30:00.000Z'],
+      ['2026-03-31T00:00:00.000Z',1,'months','2026-04-30T00:00:00.000Z'],
+      ['2024-02-29T00:00:00.000Z',1,'years','2025-02-28T00:00:00.000Z'],
+      ['2024-02-29T00:00:00.000Z',4,'years','2028-02-29T00:00:00.000Z'],
+      ['2026-01-01T23:59:00.000Z',2,'minutes','2026-01-02T00:01:00.000Z'],
+      ['2026-01-01T00:00:00.000Z',2,'hours','2026-01-01T02:00:00.000Z'],
+      ['2026-01-01T00:00:00.000Z',2,'days','2026-01-03T00:00:00.000Z'],
+      ['2026-01-01T00:00:00.000Z',2,'weeks','2026-01-15T00:00:00.000Z'],
+    ]) assert.equal(tenure.eligibleAt(start,{value,unit}).toISOString(),expected,'Timed Roles calendar regression: '+start+' '+value+' '+unit);
+    assert.equal(tenure.eligibleAt(null,{value:1,unit:'days'}),null);
+    assert.equal(tenure.eligibleAt('invalid',{value:1,unit:'days'}),null);
+    const member = {id:'123456789012345678',guild:{id:'123456789012345679'},joinedAt:new Date('2020-01-01T00:00:00Z')};
+    const rule = {ruleId:'test',enabled:true,value:1,unit:'years',startMode:'original'};
+    const context = {membershipRecords:{[member.id]:{firstJoinedAt:'2010-01-01T00:00:00Z'}},memberOverrides:{}};
+    assert.equal(tenure.getMemberProgression(member,[rule],context).dueAtByRule.test,'2011-01-01T00:00:00.000Z');
+    assert.equal(tenure.getMemberProgression(member,[{...rule,startMode:'continuous'}],context).dueAtByRule.test,'2021-01-01T00:00:00.000Z');
+    assert.equal(tenure.getMemberProgression(member,[{...rule,startMode:'custom',customStartAt:'2015-01-01'}],context).dueAtByRule.test,'2016-01-01T00:00:00.000Z');
+    assert.equal(tenure.getMemberProgression(member,[rule],{...context,memberOverrides:{[member.id]:{test:{dueAt:'2018-01-01'}}}}).dueAtByRule.test,'2018-01-01T00:00:00.000Z');
+
 
     // Every studio/module namespace advertised by the central router must remain represented in its routing source.
     const prefixBlock = router.match(/const MODULE_STUDIO_PREFIXES = \[([\s\S]*?)\n\];/);
