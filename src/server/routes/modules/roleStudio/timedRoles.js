@@ -105,6 +105,28 @@ router.patch('/:guildId/settings', async (req, res) => {
     return ok(res, await overview(req, id));
   } catch (error) { return fail(res, error); }
 });
+router.post('/:guildId/rules/create-with-role', async (req,res) => {
+  try {
+    const id=guildId(req), target=await guild(req,id);
+    if(!target)throw new Error('Guild unavailable.');
+    const member=await target.members.fetch(actor(req)).catch(()=>null);
+    if(!(target.ownerId===actor(req) || member?.permissions.has(PermissionFlagsBits.Administrator)))return fail(res,new Error('Administrator permission required.'),403);
+    const input=req.body || {}, name=String(input.name || '').trim(), value=Number(input.value);
+    if(!name || name.length>100 || !Number.isInteger(value) || value<1 || value>1000000 || !['minutes','hours','days','weeks','months','years'].includes(input.unit))throw new Error('Invalid milestone name or duration.');
+    if(!['original','continuous','custom'].includes(input.startMode || 'original'))throw new Error('Invalid starting point.');
+    if(input.startMode==='custom' && (!/^\d{4}-\d{2}-\d{2}$/.test(input.customStartAt || '') || !Number.isFinite(Date.parse(input.customStartAt)) || new Date(input.customStartAt).toISOString().slice(0,10)!==input.customStartAt))throw new Error('Invalid custom date.');
+    const rule=await timedRoles.withTimedRolesLock(id,async()=>{
+      if(!target.members.me?.permissions.has(PermissionFlagsBits.ManageRoles))throw new Error('Goliath requires Manage Roles.');
+      const roles=await target.roles.fetch();
+      if(roles.some(role=>role.name.toLowerCase()===name.toLowerCase()))throw new Error('A role with this name exists. Select it instead.');
+      if(input.removeRoleIds?.length)await validateRuleRoles(target,{removeRoleIds:input.removeRoleIds});
+      const role=await target.roles.create({name,permissions:[],mentionable:false,reason:'Timed Roles milestone creation'});
+      try{return timedRoles.saveRule(id,{name,value,unit:input.unit,startMode:input.startMode,customStartAt:input.customStartAt,removeRoleIds:input.removeRoleIds,celebration:input.celebration,enabled:true,roleId:role.id,createdBy:actor(req)},{actorId:actor(req)});}
+      catch(error){throw new Error('Role created but milestone save failed. Role ID '+role.id+': '+error.message);}
+    });
+    return ok(res,{rule,...(await overview(req,id))});
+  }catch(error){return fail(res,error);}
+});
 router.post('/:guildId/rules', async (req, res) => {
   try {
     const id = guildId(req);
