@@ -415,26 +415,28 @@ async function buildPreviewPanel(guild, memberId) {
 }
 
 function buildSimulationPanel(result) {
-  const examples = result.changes.slice(0, 10).map((change) => `• <@${change.memberId}>: +${change.add.length} / -${change.remove.length}`);
-  return {
-    embeds: [new EmbedBuilder()
-      .setColor(result.failed ? 0xFAA61A : 0x57F287)
-      .setTitle(emojiLabel('TEST_SEND', 'Timed Roles Simulation'))
-      .setDescription([
-        'No roles were changed.',
-        '',
-        `**Members checked:** ${result.membersChecked}`,
-        `**Roles to award:** ${result.awards}`,
-        `**Roles to remove:** ${result.removals}`,
-        `**Already correct:** ${result.unchanged}`,
-        `**Failures:** ${result.failed}`,
-        examples.length ? `\n**Example changes**\n${examples.join('\n')}` : '',
-        result.changes.length > 10 ? `\n…and ${result.changes.length - 10} more member changes.` : '',
-      ].filter(Boolean).join('\n'))],
-    components: [row(
-      button(`${PREFIX}:scan`, emojiLabel('DEPLOY', 'Apply Changes'), ButtonStyle.Success, !result.changes.length),
-    ), goliathNavigation(PREFIX, PREFIX + ':settings')],
-  };
+  const roles = ids => ids.map(id => '<@&'+id+'>').join(', ');
+  const examples = result.changes.slice(0,5).map(change => '<@'+change.memberId+'>\n'+[change.add.length?'Award: '+roles(change.add):'',change.remove.length?'Remove: '+roles(change.remove):''].filter(Boolean).join('\n'));
+  const blocked = (result.blocked || []).slice(0,5).map(item => '<@'+item.memberId+'> — '+String(item.error).slice(0,180));
+  const embed = new EmbedBuilder()
+    .setColor(result.failed || blocked.length ? 0xFAA61A : 0x57F287)
+    .setTitle(emojiLabel('TEST_SEND','Timed Roles Simulation'))
+    .setDescription('Preview only. No roles have been changed.')
+    .addFields({name:'Scan summary',value:[
+      '**Members checked:** '+result.membersChecked,
+      '**Roles to award:** '+result.awards,
+      '**Roles to remove:** '+result.removals,
+      '**Already correct:** '+result.unchanged,
+      '**Skipped:** '+(result.skipped || 0),
+      '**Failures:** '+result.failed
+    ].join('\n')});
+  if(examples.length)embed.addFields({name:'Proposed role changes',value:examples.join('\n\n').slice(0,1024)});
+  if(blocked.length)embed.addFields({name:'Blocked or skipped members',value:blocked.join('\n').slice(0,1024)});
+  if(result.changes.length>5 || (result.blocked || []).length>5)embed.setFooter({text:'Showing up to five examples per category.'});
+  return {embeds:[embed],components:[
+    row(button(PREFIX+':scan',emojiLabel('DEPLOY','Apply Changes'),ButtonStyle.Success,!result.changes.length || result.failed>0)),
+    goliathNavigation(PREFIX,PREFIX+':settings')
+  ]};
 }
 
 async function refresh(interaction, payload = null, rolePage = 0) {
