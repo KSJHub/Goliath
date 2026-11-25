@@ -1221,7 +1221,9 @@ async function verificationLifecycleAudit() {
     contains(manager, "'discord_screening_completed'", 'Discord screening clearance is recorded in member history');
     contains(manager, 'if(!observedTransition)return {handled:false};', 'A non-pending join cannot be mistaken for observed Discord screening clearance');
     contains(manager, "threadMode==='threaded'||threadMode==='hybrid'", 'Threaded logging ignores category-specific destinations');
-    contains(manager, "if(threadMode==='threaded'||threadMode==='hybrid')return false;", 'Threaded logging cannot fall back to unrelated channels');
+    contains(manager, "if(userId||!c?.send||c.type!==0||c.permissionsFor(g.roles.everyone)?.has('ViewChannel')!==false)return false;", 'Threaded member logs cannot fall back and guild-wide logs require a staff-only parent');
+    contains(manager, "?section.settings?.threadLogging?.channelId", 'Threaded destination is exclusively the configured passport parent');
+    contains(manager, "if(Array.isArray(categories)&&!categories.includes(type))return false;", 'Disabled log categories cannot deliver');
     contains(panel, "threaded=c.threadLogging?.mode==='threaded'", 'Logging controls share one exclusive mode');
     contains(panel, "toggle('admin:verification:logMode:standard','Channel Logs',!threaded)", 'Channel Logs toggle reflects exclusive mode');
     contains(panel, "toggle('admin:verification:logMode:threaded','Thread Logs',threaded)", 'Thread Logs toggle reflects exclusive mode');
