@@ -2315,6 +2315,19 @@ function adminModuleRoutingAudit() {
     ];
     for (const [needle, label] of requiredRouterContracts) assert(router.includes(needle), `${label} routing contract is missing`);
     
+    // Timed Roles regression contracts: preserve guild history and reward recovery.
+    const timedBase = fs.readFileSync(root + '/src/modules/roleStudio/timedRoles/timedRoles.js','utf8');
+    const timedService = fs.readFileSync(root + '/src/modules/roleStudio/timedRoles/timedRolesService.js','utf8');
+    const timedPanel = fs.readFileSync(root + '/src/modules/roleStudio/timedRoles/timedRolesPanel.js','utf8');
+    const timedSync = fs.readFileSync(root + '/src/events/roles/timedRolesSync.js','utf8');
+    const timedGuild = fs.readFileSync(root + '/src/core/guild/guildManager.js','utf8');
+    assert(timedGuild.includes('membershipRecords') && timedGuild.includes('observeMembership') && timedGuild.includes('importMembershipRecords'), 'Timed Roles canonical membership persistence missing');
+    assert(!timedSync.includes('timedRoles.removeRule('), 'Deleting a Discord reward must not delete its milestone');
+    assert(timedService.includes('blocked.length ? [] : state.cleanupRoleIds'), 'Blocked rewards must preserve existing roles');
+    assert(timedPanel.includes(':confirmDelete:') && timedPanel.includes(':confirmReset'), 'Timed Roles destructive actions require confirmation');
+    assert(timedBase.includes('Math.min(day,end.getUTCDate())'), 'Calendar milestone month-end clamping missing');
+    assert(timedBase.includes('context.membershipRecords'), 'Timed Roles membership snapshot support missing');
+
     // Every studio/module namespace advertised by the central router must remain represented in its routing source.
     const prefixBlock = router.match(/const MODULE_STUDIO_PREFIXES = \[([\s\S]*?)\n\];/);
     assert(prefixBlock, 'MODULE_STUDIO_PREFIXES could not be parsed');
