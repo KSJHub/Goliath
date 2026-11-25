@@ -126,8 +126,8 @@ function buildRecordsAccessPanel(guild) {
   const access = timedRoles.getSection(guild.id).settings.recordsAccess || {};
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('SETTINGS', 'Membership Records Access')).setDescription(
-      'The guild owner always retains access.\\nAdministrators: ' + (access.allowAdministrators !== false ? 'Allowed' : 'Not automatically allowed') +
-      '\\nAccess roles: ' + ((access.roleIds || []).map(id => '<@&' + id + '>').join(', ') || 'None')
+      'The guild owner always retains access.\nAdministrators: ' + (access.allowAdministrators !== false ? 'Allowed' : 'Not automatically allowed') +
+      '\nAccess roles: ' + ((Array.isArray(access.roleIds) ? access.roleIds : []).map(id => '<@&' + id + '>').join(', ') || 'None')
     )],
     components: [
       row(new RoleSelectMenuBuilder().setCustomId(PREFIX + ':recordsAccessRoles').setPlaceholder('Choose permitted roles').setMinValues(0).setMaxValues(10)),
@@ -498,8 +498,12 @@ async function handleTimedRolesInteraction(interaction) {
     if ([PREFIX + ':recordsAccess', PREFIX + ':recordsAccessRoles', PREFIX + ':recordsAccessToggle'].includes(customId)) {
       if (interaction.user.id !== interaction.guild.ownerId) throw new Error('Only the guild owner can change membership record access.');
       const access = timedRoles.getSection(interaction.guild.id).settings.recordsAccess || {};
-      if (customId.endsWith('Roles')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, roleIds: (interaction.values || []).filter(id => id !== interaction.guild.id && interaction.guild.roles.cache.has(id)) } });
-      if (customId.endsWith('Toggle')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, allowAdministrators: access.allowAdministrators === false } });
+      if (customId.endsWith('Roles')) {
+        const ids=interaction.values || [];
+        if(ids.length>10 || ids.some(id=>id===interaction.guild.id || !interaction.guild.roles.cache.has(id)))throw new Error('Select up to 10 valid guild roles other than @everyone.');
+        timedRoles.updateSettings(interaction.guild.id,{recordsAccess:{...access,roleIds:[...new Set(ids)]}},{actorId:interaction.user.id});
+      }
+      if (customId.endsWith('Toggle')) timedRoles.updateSettings(interaction.guild.id, { recordsAccess: { ...access, allowAdministrators: access.allowAdministrators === false } }, {actorId:interaction.user.id});
       return refresh(interaction, buildRecordsAccessPanel(interaction.guild));
     }
     if (customId.startsWith(PREFIX + ':override:') || customId.startsWith(PREFIX + ':overrideSubmit:')) {
