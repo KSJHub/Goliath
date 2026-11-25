@@ -1,6 +1,7 @@
 'use strict';
 
 const { ActionRowBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { EMOJIS } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const verificationStore = require('./verificationStore');
 const guildManager = require('../../../core/guild/guildManager');
@@ -57,25 +58,25 @@ async function logEvent(g,section,type,content,subjectUserId=null){
   const c=configured?(g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null)):null;
   const raw=String(content).trim();
   const styles={
-    join:{emoji:'⏳',title:'Verification Pending',color:0xfefefe,status:'Unverified',access:'Restricted'},
+    join:{emoji:EMOJIS.TIMER,title:'Verification Pending',color:0xfefefe,status:'Unverified',access:'Restricted'},
     attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress',access:'Restricted'},
-    success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
-    failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
-    roles:{emoji:'🛡️',title:'Verification Roles Confirmed',color:0x2ecc71,status:'Confirmed',access:'Granted'},
-    quarantine:{emoji:'🚨',title:'Member Quarantined',color:0xe74c3c,status:'Quarantined',access:'Restricted'},
-    error:{emoji:'⚠️',title:'Verification Error',color:0xe74c3c,status:'Action required'},
-    bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6,status:'Recorded'},
-    staff:{emoji:'🛡️',title:'Verification Staff Decision',color:0x5865f2,status:'Recorded'},
+    success:{emoji:EMOJIS.SUCCESS,title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
+    failure:{emoji:EMOJIS.ERROR,title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
+    roles:{emoji:EMOJIS.SECURITY,title:'Verification Roles Confirmed',color:0x2ecc71,status:'Confirmed',access:'Granted'},
+    quarantine:{emoji:EMOJIS.SECURITY_SIREN,title:'Member Quarantined',color:0xe74c3c,status:'Quarantined',access:'Restricted'},
+    error:{emoji:EMOJIS.WARNING,title:'Verification Error',color:0xe74c3c,status:'Action required'},
+    bot:{emoji:EMOJIS.BOT,title:'Bot Verification Event',color:0x95a5a6,status:'Recorded'},
+    staff:{emoji:EMOJIS.SECURITY,title:'Verification Staff Decision',color:0x5865f2,status:'Recorded'},
     intelligence:{emoji:'🧠',title:'Verification Intelligence',color:0x5865f2,status:'Recorded'},
-    raid:{emoji:'🚨',title:'Verification Raid Event',color:0xe74c3c,status:'Recorded'}
+    raid:{emoji:EMOJIS.SECURITY_SIREN,title:'Verification Raid Event',color:0xe74c3c,status:'Recorded'}
   };
-  let style=styles[type]||{emoji:'📋',title:'Verification Event',color:0x5865f2,status:'Recorded'};
+  let style=styles[type]||{emoji:EMOJIS.CLIPBOARD,title:'Verification Event',color:0x5865f2,status:'Recorded'};
   const method=raw.match(/(?:started |incorrect )(captcha|minigame|one time challenge|one_time_challenge|staff approval|staff_approval)/i)?.[1];
   const methodLabel=method?({'captcha':'CAPTCHA','minigame':'Mini-game','one time challenge':'One-time Challenge','staff approval':'Staff Approval'}[method.toLowerCase().replace(/_/g,' ')]||'Security Check'):null;
   if(type==='attempt'&&methodLabel)style={...style,title:methodLabel+' Started'};
-  if(type==='attempt'&&raw.includes('completed Discord Membership Screening'))style={...style,title:'Membership Screening Complete',status:'Screening passed',emoji:'✅'};
-  if(type==='attempt'&&raw.includes('Goliath security challenges: not started.'))style={...style,title:'Discord Entry State Observed',status:'Unverified',emoji:'📋',color:0xfefefe};
-  if(type==='attempt'&&(raw.includes('Pending role assignment confirmed by Discord.')||raw.includes('Pending role check: no Pending roles configured.')))style={...style,title:'Pending Access Confirmed',status:'Unverified',emoji:'🛡️',color:0xfefefe};
+  if(type==='attempt'&&raw.includes('completed Discord Membership Screening'))style={...style,title:'Membership Screening Complete',status:'Screening passed',emoji:EMOJIS.SUCCESS};
+  if(type==='attempt'&&raw.includes('Goliath security challenges: not started.'))style={...style,title:'Discord Entry State Observed',status:'Unverified',emoji:EMOJIS.CLIPBOARD,color:0xfefefe};
+  if(type==='attempt'&&(raw.includes('Pending role assignment confirmed by Discord.')||raw.includes('Pending role check: no Pending roles configured.')))style={...style,title:'Pending Access Confirmed',status:'Unverified',emoji:EMOJIS.SECURITY,color:0xfefefe};
   if(type==='failure'&&raw.includes('Challenge remains active.'))style={...style,title:'Incorrect '+(methodLabel||'Security')+' Answer',status:'Retry available'};
   const mention=raw.match(/<@!?(\d{15,25})>/);
   const userId=mention?.[1]||(/^[0-9]{15,25}$/.test(String(subjectUserId||''))?String(subjectUserId):null);
@@ -95,14 +96,14 @@ async function logEvent(g,section,type,content,subjectUserId=null){
     .setTitle(`${style.emoji} ${style.title}`)
     .setDescription(sectionRule)
     .addFields(
-      {name:'👤 Member',value:userId?`<@${userId}>`:'Not applicable',inline:false},
-      {name:'🏷️ Discord Username',value:username?`\`${username.replace(/`/g,'').slice(0,32)}\``:'Unavailable',inline:true},
+      {name:`${EMOJIS.USER} Member`,value:userId?`<@${userId}>`:'Not applicable',inline:false},
+      {name:`${EMOJIS.ROLE_TAG} Discord Username`,value:username?`\`${username.replace(/`/g,'').slice(0,32)}\``:'Unavailable',inline:true},
       {name:'🆔 User ID',value:userId?`\`${userId}\``:'Not applicable',inline:true},
       {name:'🔐 Status',value:style.status,inline:true},
-      {name:'🛡️ Access',value:style.access||'Not applicable',inline:true},
-      {name:'📅 Joined Server',value:joinedSeconds?`<t:${joinedSeconds}:d>`:'Unavailable',inline:true},
-      {name:'🕒 Event Time',value:`<t:${timestamp}:t> • <t:${timestamp}:R>`,inline:true},
-      {name:'📋 Event Details',value:(details||'No additional details.').slice(0,1024),inline:false}
+      {name:`${EMOJIS.SECURITY} Access`,value:style.access||'Not applicable',inline:true},
+      {name:`${EMOJIS.DATE} Joined Server`,value:joinedSeconds?`<t:${joinedSeconds}:d>`:'Unavailable',inline:true},
+      {name:`${EMOJIS.ROLE_CLOCK} Event Time`,value:`<t:${timestamp}:t> • <t:${timestamp}:R>`,inline:true},
+      {name:`${EMOJIS.CLIPBOARD} Event Details`,value:(details||'No additional details.').slice(0,1024),inline:false}
     )
     .setFooter({text:'Goliath Verification'})
     .setTimestamp();
@@ -146,7 +147,7 @@ async function deliverVerificationThread(g,userId,username,t,type,embed,options,
     const caseSummaryOptions=threadId=>{
       const card=EmbedBuilder.from(embed);
       card.setColor(0xfefefe);
-      card.setTitle('🧵 Verification • '+(username||userId).slice(0,48));
+      card.setTitle(`${EMOJIS.UTILITY_THREAD} Verification • `+(username||userId).slice(0,48));
       card.setDescription(`**Member:** <@${userId}>\n**Status:** ${style.status||'Pending'}\n**Activity:** ${threadId?`[Open member case](https://discord.com/channels/${g.id}/${threadId})`:'Creating member case…'}`);
       card.setFields([]);
       return {embeds:[card],allowedMentions:{parse:[],users:[],roles:[]}};
