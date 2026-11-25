@@ -116,10 +116,11 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
 }
 
 function canViewMembershipRecords(interaction) {
+  if(!interaction.guild?.id || !interaction.user?.id)return false;
   const access = timedRoles.getSection(interaction.guild.id).settings.recordsAccess || {};
   return interaction.user.id === interaction.guild.ownerId ||
     (access.allowAdministrators !== false && interaction.memberPermissions?.has('Administrator')) ||
-    (access.roleIds || []).some(id => interaction.member?.roles?.cache?.has(id));
+    (Array.isArray(access.roleIds) ? access.roleIds : []).some(id => id !== interaction.guild.id && interaction.member?.roles?.cache?.has(id));
 }
 function buildRecordsAccessPanel(guild) {
   const access = timedRoles.getSection(guild.id).settings.recordsAccess || {};
@@ -838,6 +839,8 @@ async function handleTimedRolesInteraction(interaction) {
 }
 
 module.exports = {
+  canViewMembershipRecords,
+  isMembershipReadControl: id => /^admin:timedRoles:(?:records|recordMember|recordHistorical|recordSearch|recordSearchSubmit|recordsPage:-?\d+|recordAchievements:\d{15,25}(?::-?\d+)?)$/.test(String(id || '')),
   PREFIX,
   formatDuration,
   buildOverview: buildTimedRolesPanel,
