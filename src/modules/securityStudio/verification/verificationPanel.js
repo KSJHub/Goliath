@@ -143,7 +143,7 @@ function logsPage(g,user,st){
  const enabled=c.logEnabledCategories||LOG_TYPES;
  const type=LOG_TYPES.includes(st.logType)?st.logType:threaded?'join':'default';
  const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:logType').setPlaceholder('Choose log category').addOptions([...(threaded?[]:[{label:'Default channel',value:'default',default:type==='default'}]),...LOG_TYPES.map(x=>({label:title(x),value:x,default:x===type,emoji:enabled.includes(x)?EMOJIS.ENABLED:EMOJIS.INACTIVE}))]);
- const channel=new ChannelSelectMenuBuilder().setCustomId(threaded?'admin:verification:threadChannel':`admin:verification:logChannel:${type}`).setPlaceholder(threaded?'Choose private Security Passport channel':'Choose destination for '+title(type)).setMinValues(0).setMaxValues(1).setChannelTypes(ChannelType.GuildText);
+ const channel=new ChannelSelectMenuBuilder().setCustomId(threaded?'admin:verification:threadChannel':`admin:verification:logChannel:${type}`).setPlaceholder('Select log channel').setMinValues(0).setMaxValues(1).setChannelTypes(ChannelType.GuildText);
  const current=threaded?c.threadLogging?.channelId:c.logs?.[type+'ChannelId']||c.logChannelId;
  if(current&&g.channels.cache.has(current))channel.setDefaultChannels(current);
  const roles=new RoleSelectMenuBuilder().setCustomId('admin:verification:logPingRoles').setPlaceholder('Select roles to notify').setMinValues(0).setMaxValues(10);
