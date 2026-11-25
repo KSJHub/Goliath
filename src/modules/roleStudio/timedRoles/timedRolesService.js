@@ -215,12 +215,19 @@ async function simulateGuild(guild) {
   const rules = base.listRules(guild.id).filter((rule) => rule.enabled);
   const context = {membershipRecords:guildManager.getGuildSection(guild.id,'membershipRecords',{}).members || {},memberOverrides:section.memberOverrides || {}};
   const members = await guild.members.fetch();
-  const result = { membersChecked: 0, awards: 0, removals: 0, unchanged: 0, failed: 0, changes: [] };
+  const result = { membersChecked: 0, awards: 0, removals: 0, unchanged: 0, failed: 0, skipped: 0, blocked: [], changes: [] };
   for (const member of members.values()) {
     if (member.user?.bot && section.settings.includeBots !== true) continue;
     result.membersChecked += 1;
     try {
       const state = desiredState(member, section, rules, context);
+      if(!member.joinedAt || member.id===guild.ownerId || member.id===guild.members.me?.id || member.manageable===false){
+        result.skipped++;
+        if(state.targetRules.some(rule=>!member.roles.cache.has(rule.roleId)))result.blocked.push({memberId:member.id,error:'Member is the guild owner, bot itself, above Goliath, or lacks a join date.'});
+        continue;
+      }
+      for(const rule of state.targetRules)assertManageableRole(guild,await resolveRole(guild,rule.roleId));
+      for(const id of state.cleanupRoleIds){const role=await resolveRole(guild,id);if(role)assertManageableRole(guild,role);}
       const add = [...state.targetRoleIds].filter((roleId) => !member.roles.cache.has(roleId));
       const remove = [...state.cleanupRoleIds].filter((roleId) => member.roles.cache.has(roleId));
       if (add.length || remove.length) {
@@ -228,8 +235,9 @@ async function simulateGuild(guild) {
         result.removals += remove.length;
         result.changes.push({ memberId: member.id, add, remove });
       } else result.unchanged += 1;
-    } catch {
+    } catch(error) {
       result.failed += 1;
+      result.blocked.push({memberId:member.id,error:error.message});
     }
   }
   base.updateSection(guild.id, (current) => ({ ...current, analytics: { ...current.analytics, simulations: Number(current.analytics?.simulations || 0) + 1 } }), { action: 'timed_roles_simulation' });
