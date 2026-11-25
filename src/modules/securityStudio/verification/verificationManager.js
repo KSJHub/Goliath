@@ -113,13 +113,18 @@ async function logEvent(g,section,type,content,subjectUserId=null){
     .setTimestamp();
   const options={embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}};
   const t=section.settings?.threadLogging;
-  if(t?.mode!=='standard'&&t?.channelId&&userId&&!['raid','bot'].includes(type)){
+  if((threadMode==='threaded'||threadMode==='hybrid')&&t?.channelId&&userId){
     try{
       if(await deliverVerificationThread(g,userId,username,t,type,embed,options,style,pingOptions,section.settings))return true;
-    }catch(error){console.error('[Verification] Thread delivery fallback:',error?.message||error);}
+    }catch(error){console.error('[Verification] Thread delivery failed:',error?.message||error);}
   }
   try{
-    if(threadMode==='threaded'||threadMode==='hybrid')return false;
+    if(threadMode==='threaded'||threadMode==='hybrid'){
+      // Guild-wide events have no member passport; keep them in the staff-only parent.
+      if(userId||!c?.send||c.type!==0||c.permissionsFor(g.roles.everyone)?.has('ViewChannel')!==false)return false;
+      await c.send({...options,...pingOptions(section.settings?.logPingOnPost)});
+      return true;
+    }
     if(!c?.send)return false;
     await c.send({...options,...pingOptions(section.settings?.logPingOnPost)});
     return true;
