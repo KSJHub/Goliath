@@ -115,7 +115,7 @@ const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Sourc
 function componentRow(...components) { return { type: 1, components }; }
 function panelButton(action, label, style = 2, disabled = false) {
   // Discord renders component emojis separately from button labels.
-  const icons = [`${EMOJIS.DIRECT_MESSAGE}`, `${EMOJIS.GAMEPAD}`, '💱', `${EMOJIS.DESIGN}`, '⭐', '📰', `${EMOJIS.PREVIEW}`, `${EMOJIS.REFRESH}`, `${EMOJIS.BACK_PLAIN}`, `${EMOJIS.CHANNEL_PREVIOUS}`, `${EMOJIS.PAUSE_PLAIN}`, `${EMOJIS.CHANNEL_NEXT}`, `${EMOJIS.HEALTH}`];
+  const icons = [`${EMOJIS.DIRECT_MESSAGE}`, `${EMOJIS.GAMEPAD}`, `${EMOJIS.GAME_CURRENCY}`, `${EMOJIS.DESIGN}`, `${EMOJIS.GAME_FEATURED}`, `${EMOJIS.GAME_UPDATES}`, `${EMOJIS.PREVIEW}`, `${EMOJIS.REFRESH}`, `${EMOJIS.BACK_PLAIN}`, `${EMOJIS.CHANNEL_PREVIOUS}`, `${EMOJIS.PAUSE_PLAIN}`, `${EMOJIS.CHANNEL_NEXT}`, `${EMOJIS.HEALTH}`];
   const leading = icons.find(icon => label.startsWith(icon + ' '));
   const trailing = label.endsWith(` ${EMOJIS.CHANNEL_NEXT}`) ? `${EMOJIS.CHANNEL_NEXT}` : null;
   const emoji = leading || trailing;
@@ -138,7 +138,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   const { escape, SECTIONS } = require('./gamesEmbeds');
   const back = gamesNavigation(page === 'home' ? 'studio' : page === 'settings' ? 'home' : 'settings', 'settings');
   const nav = componentRow(panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`),
-    panelButton('pricing', '💱 Currency'), panelButton('display', `${EMOJIS.DESIGN} Display`));
+    panelButton('pricing', `${EMOJIS.GAME_CURRENCY} Currency`), panelButton('display', `${EMOJIS.DESIGN} Display`));
   const embed = { title: page === 'home' ? `${EMOJIS.GAMEPAD} Games` : `${EMOJIS.GAMEPAD} Games · Free Games`, color: SECTIONS[0].color,
     description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Paused`].filter(Boolean).join('\n\n'),
     fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
@@ -149,7 +149,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     const updates = getGameUpdates(guild.id);
     embed.fields = [
       { name: `${EMOJIS.GAME_GIFT} Free Games`, value: c.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Disabled`, inline: true },
-      { name: '📰 Game Updates', value: updates.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Disabled`, inline: true },
+      { name: `${EMOJIS.GAME_UPDATES} Game Updates`, value: updates.enabled ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.PAUSE_PLAIN} Disabled`, inline: true },
       { name: `${EMOJIS.HEALTH} Health`, value: [
         'Delivery: ' + (c.channelId ? '<#' + c.channelId + '>' : `${EMOJIS.WARNING} Channel not set`),
         'Last success: ' + statusTime(c.state.lastSuccess),
@@ -160,7 +160,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     ];
     controls = [
       componentRow(panelButton('enabled', c.enabled ? `${EMOJIS.PAUSE_PLAIN} Disable Free Games` : `${EMOJIS.CHANNEL_NEXT} Enable Free Games`, c.enabled ? 2 : 3),
-        panelButton('updates:home:0', '📰 Game Updates'), panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`)),
+        panelButton('updates:home:0', `${EMOJIS.GAME_UPDATES} Game Updates`), panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`)),
       componentRow(panelButton('health', `${EMOJIS.HEALTH} Health`), panelButton('refresh', `${EMOJIS.REFRESH} Refresh`, 2, !c.enabled)),
     ];
   } else if (page === 'health') {
@@ -239,7 +239,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     embed.title += ' · Display';
     embed.description += '\nChoose the public listing presentation. Provider credit is retained; currency explanations stay in management settings.';
     controls = [
-      componentRow(panelButton('featured:0', '⭐ Featured main game')),
+      componentRow(panelButton('featured:0', `${EMOJIS.GAME_FEATURED} Featured main game`)),
       choiceMenu('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']], [c.layout]),
       choiceMenu('displayOptions', 'Visible details (clear to hide all)', Object.entries(DISPLAY_OPTIONS),
         Object.keys(DISPLAY_OPTIONS).filter(key => c[key] !== false), true),
@@ -247,16 +247,16 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   } else {
     embed.description = [
       notice && escape(notice),
-      `**${EMOJIS.GAME_GIFT} Free Games** ` + (c.enabled ? `${EMOJIS.ENABLED} On` : `${EMOJIS.PAUSE_PLAIN} Off`) + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? `${EMOJIS.ENABLED} On` : `${EMOJIS.PAUSE_PLAIN} Off`),
-      `**${EMOJIS.DIRECT_MESSAGE} Delivery** ` + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
+      `**${EMOJIS.GAME_GIFT} Free Games** ` + (c.enabled ? `${EMOJIS.ENABLED} On` : `${EMOJIS.PAUSE_PLAIN} Off`) + `   ·   **${EMOJIS.GAME_UPDATES} Game Updates** ` + (c.gameUpdates?.enabled ? `${EMOJIS.ENABLED} On` : `${EMOJIS.PAUSE_PLAIN} Off`),
+      `**${EMOJIS.DIRECT_MESSAGE} Delivery** ` + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + `   ·   **${EMOJIS.GAME_CURRENCY} ` + c.currency + '**',
       `**${EMOJIS.GAMEPAD} Catalogue** ` + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
       `**${EMOJIS.ROLE_CLOCK} Synced** ` + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
     ].filter(Boolean).join('\n');
     embed.fields = [];
-    if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
+    if (c.state.error || c.state.warning) embed.fields.push({ name: `${EMOJIS.WARNING_PLAIN} Attention`, value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
     controls = [
-      componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', `${EMOJIS.PREVIEW} Preview`),
-        panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`), panelButton('pricing', '💱 Currency')),
+      componentRow(panelButton('updates:home:0', `${EMOJIS.GAME_UPDATES} Updates`, 1), panelButton('preview:0', `${EMOJIS.PREVIEW} Preview`),
+        panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`), panelButton('pricing', `${EMOJIS.GAME_CURRENCY} Currency`)),
       componentRow(panelButton('display', `${EMOJIS.DESIGN} Display`), panelButton('refresh', `${EMOJIS.REFRESH} Refresh`, 2, !c.enabled)),
       gamesNavigation('studio', 'settings'),
     ];
@@ -532,7 +532,7 @@ function buildUpdatesPanel(guild, page = 0, notice = '') {
   const config = getGameUpdates(guild.id), { escape, SECTIONS } = require('./gamesEmbeds');
   const subscriptions = Object.values(config.subscriptions).sort((a, b) => a.name.localeCompare(b.name));
   const pages = Math.max(1, Math.ceil(subscriptions.length / 25)); page = Math.min(Math.max(0, Number(page) || 0), pages - 1);
-  const embed = { title: '📰 Games · Game Updates', color: SECTIONS[2].color,
+  const embed = { title: `${EMOJIS.GAME_UPDATES} Games · Game Updates`, color: SECTIONS[2].color,
     description: [notice && escape(notice), config.enabled ? `${EMOJIS.ENABLED} Automatic updates enabled` : `${EMOJIS.PAUSE_PLAIN} Automatic updates paused`,
       'Follow Steam publisher announcements. Choose a game, its destination and the updates you want. New subscriptions start with the next announcement.'].filter(Boolean).join('\n\n'),
     fields: [{ name: 'Subscriptions', value: subscriptions.length + ' games · ' + subscriptions.filter(sub => sub.enabled).length + ' active', inline: true },
@@ -553,10 +553,10 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const heldCount = sub.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching').length;
   const updateRoutes = effectiveUpdateDestinations(sub);
   const queuedCount = sub.pending.length - heldCount;
-  const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
+  const embed = { title: `${EMOJIS.GAME_UPDATES} ` + sub.name, color: SECTIONS[2].color,
     description: [notice && escape(notice), sub.enabled ? `${EMOJIS.CHANNEL_NEXT} Subscription enabled` : `${EMOJIS.PAUSE_PLAIN} Subscription paused`,
       'Steam announcements can be delivered to up to ten channels, with independent role notifications.',
-      sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
+      sub.error && `${EMOJIS.WARNING_PLAIN} ` + escape(sub.error), heldCount && `${EMOJIS.WARNING_PLAIN} ` + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
     fields: [{ name: 'Destinations', value: updateRoutes.length ? updateRoutes.map(route => (route.enabled ? `${EMOJIS.CHANNEL_NEXT} ` : `${EMOJIS.PAUSE_PLAIN} `) + '<#' + route.channelId + '>' + (route.roleId ? ' · <@&' + route.roleId + '>' : '')).join('\n').slice(0, 1024) : 'Choose a channel', inline: false },
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
       { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + queuedCount + '\nHeld for review: ' + heldCount, inline: false }],
@@ -596,7 +596,7 @@ function buildGameUpdateHistoryPanel(guild, page = 0, status = 'all') {
       record.detail ? escape(String(record.detail).slice(0, 180)) : null].filter(Boolean).join(' · ').slice(0, 1024),
     inline: false
   }));
-  const embed = { title: '📰 Games · Delivery history', color: SECTIONS[2].color,
+  const embed = { title: `${EMOJIS.GAME_UPDATES} Games · Delivery history`, color: SECTIONS[2].color,
     description: records.length ? 'Recent Steam announcement outcomes. Uncertain deliveries must be reviewed from their game subscription.' : 'No matching delivery records.',
     fields, footer: { text: 'Games · Delivery history · ' + (page + 1) + '/' + pages + ' · ' + records.length + ' records' } };
   const filterOptions = statuses.map(value => [value, value === 'all' ? 'All outcomes' : value.replace(/_/g, ' ')]);
