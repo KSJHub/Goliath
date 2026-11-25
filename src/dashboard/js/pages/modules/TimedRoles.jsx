@@ -76,6 +76,15 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
   const [recordId, setRecordId] = useState('');
   const [recordError, setRecordError] = useState('');
   const [recordBusy, setRecordBusy] = useState(false);
+  const [schedule,setSchedule]=useState({ruleId:'',startAt:'',dueAt:''});
+  async function saveSchedule() {
+    const requestedGuild=guildId, memberId=record?.memberId;
+    if(!memberId || !schedule.ruleId)return;
+    setRecordBusy(true);setRecordError('');
+    try {const result=await api.request('/api/timed-roles/'+requestedGuild+'/records/'+memberId+'/overrides/'+encodeURIComponent(schedule.ruleId),{method:'PUT',body:JSON.stringify({startAt:schedule.startAt,dueAt:schedule.dueAt})});if(activeGuild.current===requestedGuild)setRecord(current=>current?.memberId===memberId?{...current,overrides:result.overrides}:current);}
+    catch(error){if(activeGuild.current===requestedGuild)setRecordError(error.message || 'Schedule update failed.');}
+    finally{if(activeGuild.current===requestedGuild)setRecordBusy(false);}
+  }
   const [audit,setAudit]=useState(null);
   const [auditError,setAuditError]=useState('');
   const [auditBusy,setAuditBusy]=useState(false);
@@ -149,9 +158,10 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     setRecordBusy(true); setRecordError(''); setRecord(null);
     try {
       const result = await api.request('/api/timed-roles/' + guildId + '/records' + (id ? '/' + encodeURIComponent(id) : '?page=' + page));
-      if (id) setRecord(result); else setRecords(result);
-    } catch (error) { setRecords(null); setRecordError(error.message || 'Record access unavailable.'); }
-    finally { setRecordBusy(false); }
+      if(activeGuild.current!==guildId)return;
+      if (id) {setRecord({...result,memberId:id});setSchedule({ruleId:'',startAt:'',dueAt:''});} else setRecords(result);
+    } catch (error) { if(activeGuild.current===guildId){setRecords(null); setRecordError(error.message || 'Record access unavailable.');} }
+    finally { if(activeGuild.current===guildId)setRecordBusy(false); }
   }
 
   async function runAction(name, fn, message) {
@@ -335,7 +345,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         </div>
         {recordError && <p role="alert">{recordError}</p>}
         {records && <div><p>{records.total} records · Page {records.page+1}</p>{records.records.map(item=><div key={item.id} style={{padding:8}}><button style={buttonStyle(theme)} disabled={recordBusy} onClick={()=>loadRecords(0,item.id)}>{item.id}</button> {item.active===true?'Active':item.active===false?'Departed':'Unknown'} · {item.firstJoinedAt || 'Unknown join'}</div>)}<button style={buttonStyle(theme)} disabled={recordBusy || records.page===0} onClick={()=>loadRecords(records.page-1)}>Previous</button> <button style={buttonStyle(theme)} disabled={recordBusy || (records.page+1)*25>=records.total} onClick={()=>loadRecords(records.page+1)}>Next</button></div>}
-        {record && <div><h3>Member details</h3><p>Original join: {record.record.firstJoinedAt || 'Unknown'}</p><p>Latest join: {record.record.lastJoinedAt || 'Unknown'}</p><p>Last departure: {record.record.lastLeftAt || 'Unknown'}</p><h3>Achievements</h3>{Object.entries(record.achievements || {}).map(([id,item])=><p key={id}>{item.milestoneName || config?.rules?.[id]?.name || id} · {item.achievedAt} · {item.celebration}</p>)}<h3>Individual schedules</h3>{Object.entries(record.overrides || {}).map(([id,item])=><p key={id}>{config?.rules?.[id]?.name || id} · {item.startAt || 'Default start'} · {item.dueAt || 'Calculated due date'}</p>)}</div>}
+        {record && <div><h3>Member details</h3><p>Original join: {record.record.firstJoinedAt || 'Unknown'}</p><p>Latest join: {record.record.lastJoinedAt || 'Unknown'}</p><p>Last departure: {record.record.lastLeftAt || 'Unknown'}</p><h3>Achievements</h3>{Object.entries(record.achievements || {}).map(([id,item])=><p key={id}>{item.milestoneName || config?.rules?.[id]?.name || id} · {item.achievedAt} · {item.celebration}</p>)}<h3>Individual schedules</h3><div style={{display:'grid',gap:8}}><label>Milestone<ThemedSelect theme={theme} value={schedule.ruleId} onChange={e=>{const ruleId=e.target.value,item=record.overrides?.[ruleId];setSchedule({ruleId,startAt:item?.startAt?.slice(0,10)||'',dueAt:item?.dueAt?.slice(0,10)||''});}} style={fieldStyle(theme)}><option value="">Select milestone</option>{rules.map(rule=><option key={rule.ruleId} value={rule.ruleId}>{rule.name}</option>)}</ThemedSelect></label><label>Custom starting date<input type="date" value={schedule.startAt} onChange={e=>setSchedule(current=>({...current,startAt:e.target.value}))} style={fieldStyle(theme)}/></label><label>Custom due date<input type="date" value={schedule.dueAt} onChange={e=>setSchedule(current=>({...current,dueAt:e.target.value}))} style={fieldStyle(theme)}/></label><p>Blank dates restore the default milestone schedule. Administrator access required to save.</p><button type="button" disabled={recordBusy || !schedule.ruleId} onClick={saveSchedule} style={buttonStyle(theme,'primary')}>Save individual schedule</button></div>{Object.entries(record.overrides || {}).map(([id,item])=><p key={id}>{config?.rules?.[id]?.name || id} · {item.startAt || 'Default start'} · {item.dueAt || 'Calculated due date'}</p>)}</div>}
       </section>
       <section style={{...cardStyle,padding:22,display:'grid',gap:12}}>
         <h2 style={{margin:0}}>Audit History</h2>
