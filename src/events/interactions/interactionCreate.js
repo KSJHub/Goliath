@@ -86,6 +86,8 @@ function resolveAdminModuleKey(customId) {
 async function enforceAdminModuleAuthority(interaction) {
   const id = String(interaction?.customId || '');
   if (!id.startsWith('admin:')) return false;
+  // Independent membership read access never grants module administration.
+  if(timedRolesPanel?.isMembershipReadControl?.(id) && timedRolesPanel.canViewMembershipRecords?.(interaction))return false;
   const studio = id.match(/^admin:studio:([a-zA-Z0-9_-]+)$/);
   if (studio) {
     if (typeof adminPanel.canManageStudio !== 'function' || adminPanel.canManageStudio(interaction, studio[1])) return false;
