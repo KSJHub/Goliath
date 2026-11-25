@@ -182,6 +182,25 @@ router.get('/:guildId/records/:memberId', requireRecordsAccess, (req,res) => {
     return ok(res,{record,achievements:section.achievementHistory?.[memberId] || {},overrides:section.memberOverrides?.[memberId] || {}});
   } catch(error) { return fail(res,error); }
 });
+router.put('/:guildId/records/:memberId/overrides/:ruleId', requireRecordsAccess, async (req,res) => {
+  try {
+    const id=guildId(req), memberId=cleanDiscordId(req.params.memberId), target=await guild(req,id);
+    const member=target && await target.members.fetch(actor(req)).catch(()=>null);
+    if (!target || !(target.ownerId===actor(req) || member?.permissions.has(PermissionFlagsBits.Administrator))) return fail(res,new Error('Administrator permission required.'),403);
+    if (!memberId || !guildManager.getGuildSection(id,'membershipRecords',{}).members?.[memberId]) return fail(res,new Error('Membership record not found.'),404);
+    if (!timedRoles.getRule(id,req.params.ruleId)) return fail(res,new Error('Milestone not found.'),404);
+    const dates={};
+    for(const key of ['startAt','dueAt']) {
+      const value=req.body?.[key];
+      if(value==null || value===''){dates[key]=null;continue;}
+      if(typeof value!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10)!==value) throw new Error('Enter valid dates in YYYY-MM-DD format.');
+      dates[key]=value;
+    }
+    if(dates.startAt && dates.dueAt && dates.dueAt<dates.startAt) throw new Error('Due date cannot precede the starting date.');
+    timedRoles.setMemberMilestoneOverride(id,memberId,req.params.ruleId,dates,{actorId:actor(req)});
+    return ok(res,{overrides:timedRoles.getSection(id).memberOverrides?.[memberId] || {}});
+  } catch(error){return fail(res,error);}
+});
 router.get('/:guildId/audit', requireRecordsAccess, (req,res) => {
   try {
     const events = timedRoles.getSection(guildId(req)).operationalAudit || [];
