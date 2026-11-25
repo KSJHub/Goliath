@@ -51,8 +51,8 @@ function saveRule(guildId, input, meta = {}) {
   return base.saveRule(guildId, input, meta);
 }
 
-function desiredState(member, section, rules) {
-  const progression = base.getMemberProgression(member, rules);
+function desiredState(member, section, rules, context = {}) {
+  const progression = base.getMemberProgression(member, rules, context);
   const targetRules = section.settings.progressionMode === 'keep_all'
     ? progression.due
     : (progression.current ? [progression.current] : []);
@@ -119,14 +119,14 @@ async function announcePromotion(member, rule, role, settings, progression) {
   return true;
 }
 
-async function applyUnlocked(member, section = base.getSection(member.guild.id), rules = base.listRules(member.guild.id).filter((rule) => rule.enabled)) {
+async function applyUnlocked(member, section = base.getSection(member.guild.id), rules = base.listRules(member.guild.id).filter((rule) => rule.enabled), context = {}) {
   const guild = member.guild;
   if (!member?.joinedAt) return { status: 'skipped', awarded: [], removed: [], announced: 0 };
   if (member.user?.bot && section.settings.includeBots !== true) return { status: 'skipped', awarded: [], removed: [], announced: 0 };
   if(member.id===guild.ownerId || member.id===guild.members.me?.id || member.manageable===false)return {status:'skipped',awarded:[],removed:[],announced:0};
   assertManageableMember(guild, member);
 
-  const state = desiredState(member, section, rules);
+  const state = desiredState(member, section, rules, context);
   const targetRoles = [];
   const blocked=[];
   for (const rule of state.targetRules) {
@@ -213,13 +213,14 @@ async function applyProgressionToMember(member) {
 async function simulateGuild(guild) {
   const section = base.getSection(guild.id);
   const rules = base.listRules(guild.id).filter((rule) => rule.enabled);
+  const context = {membershipRecords:guildManager.getGuildSection(guild.id,'membershipRecords',{}).members || {},memberOverrides:section.memberOverrides || {}};
   const members = await guild.members.fetch();
   const result = { membersChecked: 0, awards: 0, removals: 0, unchanged: 0, failed: 0, changes: [] };
   for (const member of members.values()) {
     if (member.user?.bot && section.settings.includeBots !== true) continue;
     result.membersChecked += 1;
     try {
-      const state = desiredState(member, section, rules);
+      const state = desiredState(member, section, rules, context);
       const add = [...state.targetRoleIds].filter((roleId) => !member.roles.cache.has(roleId));
       const remove = [...state.cleanupRoleIds].filter((roleId) => member.roles.cache.has(roleId));
       if (add.length || remove.length) {
@@ -241,6 +242,7 @@ async function scanGuild(guild, meta = {}) {
     const section = base.getSection(guild.id);
     const rules = base.listRules(guild.id).filter((rule) => rule.enabled);
     if (!rules.length) return { guildId: guild.id, rules: 0, membersChecked: 0, awarded: 0, removed: 0, announced: 0, skipped: 0, failed: 0 };
+    const context = {membershipRecords:guildManager.getGuildSection(guild.id,'membershipRecords',{}).members || {},memberOverrides:section.memberOverrides || {}};
     const members = await guild.members.fetch();
     const result = { guildId: guild.id, rules: rules.length, membersChecked: 0, awarded: 0, removed: 0, announced: 0, skipped: 0, failed: 0 };
     const stats = new Map(rules.map((rule) => [rule.ruleId, { awarded: 0, error: null }]));
@@ -249,7 +251,7 @@ async function scanGuild(guild, meta = {}) {
       if (member.user?.bot && section.settings.includeBots !== true) continue;
       result.membersChecked += 1;
       try {
-        const applied = await applyUnlocked(member, section, rules);
+        const applied = await applyUnlocked(member, section, rules, context);
         result.awarded += applied.awarded.length;
         result.removed += applied.removed.length;
         result.announced += applied.announced;
@@ -259,7 +261,7 @@ async function scanGuild(guild, meta = {}) {
       } catch (error) {
         result.failed += 1;
         base.recordAudit(guild.id, 'member_progression_failed', { memberId: member.id, error: String(error.message).slice(0,500) }, meta);
-        const progression = base.getMemberProgression(member, rules);
+        const progression = base.getMemberProgression(member, rules, context);
         const affected = progression.current ? [progression.current] : [];
         for (const rule of affected) stats.get(rule.ruleId).error ||= error.message;
       }
