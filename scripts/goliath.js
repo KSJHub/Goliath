@@ -1788,16 +1788,17 @@ async function verificationLifecycleAudit() {
     contains(manager, 'm.guild.members.fetch({user:m.id,force:true})', 'confirm quarantine against fresh Discord member state');
     assert((manager.match(/m\.guild\.members\.fetch\(\{user:m\.id,force:true\}\)/g)||[]).length>=2, 'Quarantine and bypass completion must independently confirm fresh Discord roles.');
     const securityHome=panel.slice(panel.indexOf('function securityPage('),panel.indexOf('function securityMethodsPage('));
-    assert(/finalNav\(\)\s*\]\s*\}\s*;\s*\}/.test(securityHome), 'Verification Security home must end with shared navigation.');
-    for(const page of ['securityMethodsPage','securityPolicyPage','methodSettingsPage']){
+    assert(/finalNav\((?:'home')?\)\s*\]\s*\}\s*;\s*\}/.test(securityHome), 'Verification Security home must end with shared navigation.');
+    for(const control of ['securityBulk','flowSecurity','methodSettings']) contains(securityHome, 'admin:verification:'+control, 'Consolidated Security control '+control);
+    contains(panel, 'function securityMethodsPage(g,user){return securityPage(g,user);}', 'Legacy methods route returns consolidated Security');
+    for(const page of ['securityPolicyPage','methodSettingsPage']){
       const start=panel.indexOf('function '+page+'(');
       assert(start>=0,'Missing Verification page: '+page);
       const next=panel.indexOf('\nfunction ',start+1);
       const source=panel.slice(start,next<0?panel.length:next);
-      assert(/finalNav\('(security|securityMethods)'\)\s*\]/.test(source),'Missing shared final navigation: '+page);
+      assert(/finalNav\('security'\)\s*\]/.test(source),'Missing shared final navigation: '+page);
     }
-    
-    
+
     for (const state of ['new', 'pending', 'verifying', 'verified', 'quarantined', 'review', 'rejected']) {
       contains(store, `'${state}'`, `persistent lifecycle state ${state}`);
     }
