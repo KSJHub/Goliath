@@ -293,6 +293,10 @@ async function scanGuild(guild, meta = {}) {
         skipped: Number(current.analytics?.skipped || 0) + result.skipped,
         failed: Number(current.analytics?.failed || 0) + result.failed,
         lastScanAt: scannedAt,
+        lastScanFailed: result.failed,
+        lastScanSkipped: result.skipped,
+        lastScanAwarded: result.awarded,
+        lastScanRemoved: result.removed,
         celebrationBaselineAt: current.analytics?.celebrationBaselineAt || scannedAt,
       },
     }), { ...meta, action: meta.action || 'timed_roles_scan' });
