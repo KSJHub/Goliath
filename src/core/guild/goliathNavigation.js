@@ -18,6 +18,8 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } 
 
 // 1. Shared emojis and text labels
 const EMOJIS = Object.freeze({
+  AUDIT_UNBAN: '🕊️',
+  AUDIT_WEBHOOK: '🪝',
   // Shared dashboard labels and status glyphs (keep existing browser display unchanged).
   MEMBERS: '👥',
   ROLES: '🎭',

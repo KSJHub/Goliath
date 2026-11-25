@@ -131,19 +131,19 @@ function liveProbeStatus(result) {
   const collector = liveProbeCollectorLabel(result);
   const duration = Number.isFinite(Number(result?.durationMs)) ? ` • ${Math.max(0, Number(result.durationMs))}ms` : '';
   const lifecycle = result?.lifecycleStatus ? ` • ${String(result.lifecycleStatus).toUpperCase()}` : '';
-  if (result?.started) return `🟢 **Live event probe:** executed by **${collector}**${duration}${lifecycle} via temporary hidden channel \`${result.channelName || result.channelId}\`. Expect real **Channel Created** and **Channel Deleted** reports in Guild / System Events.`;
+  if (result?.started) return `${EMOJIS.ACTIVE} **Live event probe:** executed by **${collector}**${duration}${lifecycle} via temporary hidden channel \`${result.channelName || result.channelId}\`. Expect real **Channel Created** and **Channel Deleted** reports in Guild / System Events.`;
   switch (result?.reason) {
-    case 'remote-timeout': return `🟠 **Live event probe:** timed out waiting for **${collector}**${lifecycle}. The remote request did not reach a terminal result within the Command Center wait window; normal route delivery still ran.`;
-    case 'expired': return `🟠 **Live event probe:** request expired for **${collector}**${lifecycle} before a collector could complete it. Normal route delivery still ran.`;
-    case 'remote-failed': return `🔴 **Live event probe:** remote collector **${collector}** failed the probe${duration}${lifecycle}. Check the collector logs before retrying.`;
-    case 'registry-only': return `🟡 **Live event probe:** skipped by **${collector}**${duration}${lifecycle} — that collector does not have live access to this guild. The configured route test still ran normally.`;
-    case 'cooldown': return `🟡 **Live event probe:** skipped by **${collector}**${duration}${lifecycle} — the 15-second safety cooldown is active. Wait briefly before another live probe.`;
-    case 'missing-manage-channels': return `🔴 **Live event probe:** blocked on **${collector}**${duration}${lifecycle} — Goliath does not have **Manage Channels** in the source guild.`;
+    case 'remote-timeout': return `${EMOJIS.HEALTH_SLOW} **Live event probe:** timed out waiting for **${collector}**${lifecycle}. The remote request did not reach a terminal result within the Command Center wait window; normal route delivery still ran.`;
+    case 'expired': return `${EMOJIS.HEALTH_SLOW} **Live event probe:** request expired for **${collector}**${lifecycle} before a collector could complete it. Normal route delivery still ran.`;
+    case 'remote-failed': return `${EMOJIS.DISABLED} **Live event probe:** remote collector **${collector}** failed the probe${duration}${lifecycle}. Check the collector logs before retrying.`;
+    case 'registry-only': return `${EMOJIS.HEALTH_STABLE} **Live event probe:** skipped by **${collector}**${duration}${lifecycle} — that collector does not have live access to this guild. The configured route test still ran normally.`;
+    case 'cooldown': return `${EMOJIS.HEALTH_STABLE} **Live event probe:** skipped by **${collector}**${duration}${lifecycle} — the 15-second safety cooldown is active. Wait briefly before another live probe.`;
+    case 'missing-manage-channels': return `${EMOJIS.DISABLED} **Live event probe:** blocked on **${collector}**${duration}${lifecycle} — Goliath does not have **Manage Channels** in the source guild.`;
     case 'create-failed': return result?.remote
-      ? `🔴 **Live event probe:** remote collector **${collector}** failed to create the temporary verification channel${duration}${lifecycle}. Check its guild permissions and collector logs.`
-      : `🔴 **Live event probe:** failed on **${collector}**${duration}${lifecycle} — Goliath could not create the temporary hidden verification channel.`;
-    case 'invalid-guild': return `🔴 **Live event probe:** unavailable on **${collector}**${duration}${lifecycle} — the selected guild could not be resolved for live verification.`;
-    default: return `🟠 **Live event probe:** status unavailable from **${collector}**${duration}${lifecycle}. The normal route-delivery result below is still authoritative.`;
+      ? `${EMOJIS.DISABLED} **Live event probe:** remote collector **${collector}** failed to create the temporary verification channel${duration}${lifecycle}. Check its guild permissions and collector logs.`
+      : `${EMOJIS.DISABLED} **Live event probe:** failed on **${collector}**${duration}${lifecycle} — Goliath could not create the temporary hidden verification channel.`;
+    case 'invalid-guild': return `${EMOJIS.DISABLED} **Live event probe:** unavailable on **${collector}**${duration}${lifecycle} — the selected guild could not be resolved for live verification.`;
+    default: return `${EMOJIS.HEALTH_SLOW} **Live event probe:** status unavailable from **${collector}**${duration}${lifecycle}. The normal route-delivery result below is still authoritative.`;
   }
 }
 function sourceGuildSelect(customId, placeholder, sourceGuilds, selectedId) {
@@ -166,23 +166,23 @@ function routeSummary(config, sourceGuildId, destinationGuild) {
   const routes = config.guilds?.[String(sourceGuildId || '')]?.routes || {};
   return Object.keys(ROUTE_LABELS).map((key) => {
     const channelId = routes[key];
-    if (!channelId) return `⚪ **${ROUTE_LABELS[key]}:** Automatic / not provisioned yet`;
+    if (!channelId) return `${EMOJIS.INACTIVE} **${ROUTE_LABELS[key]}:** Automatic / not provisioned yet`;
     const channel = destinationGuild?.channels?.cache?.get(String(channelId)) || null;
-    if (!channel) return `🔴 **${ROUTE_LABELS[key]}:** <#${channelId}> • Missing channel`;
+    if (!channel) return `${EMOJIS.DISABLED} **${ROUTE_LABELS[key]}:** <#${channelId}> • Missing channel`;
     const member = destinationGuild?.members?.me || null;
     const permissions = member ? channel.permissionsFor(member) : null;
     const missing = [];
     if (!permissions?.has(PermissionFlagsBits.ViewChannel)) missing.push('View');
     if (!permissions?.has(PermissionFlagsBits.SendMessages)) missing.push('Send');
     if (!permissions?.has(PermissionFlagsBits.ReadMessageHistory)) missing.push('History');
-    return `${missing.length ? '🟠' : '🟢'} **${ROUTE_LABELS[key]}:** <#${channelId}>${missing.length ? ` • Missing: ${missing.join(', ')}` : ' • Healthy'}`;
+    return `${missing.length ? EMOJIS.HEALTH_SLOW : EMOJIS.ACTIVE} **${ROUTE_LABELS[key]}:** <#${channelId}>${missing.length ? ` • Missing: ${missing.join(', ')}` : ' • Healthy'}`;
   }).join('\n');
 }
 function monitoringSummary(config, sourceGuildId) {
   const guildConfig = config.guilds?.[String(sourceGuildId || '')] || {};
   const monitoring = guildConfig.monitoring && typeof guildConfig.monitoring === 'object' ? guildConfig.monitoring : {};
-  const lines = Object.entries(MONITOR_LABELS).map(([key, label]) => `${monitoring[key] === false ? '🔴' : '🟢'} **${label}**`);
-  return `${guildConfig.enabled === false ? '⏸️ **Guild monitoring paused**' : '▶️ **Guild monitoring active**'}\n\n${lines.join('\n')}`;
+  const lines = Object.entries(MONITOR_LABELS).map(([key, label]) => `${monitoring[key] === false ? EMOJIS.DISABLED : EMOJIS.ACTIVE} **${label}**`);
+  return `${guildConfig.enabled === false ? `${EMOJIS.PAUSE} **Guild monitoring paused**` : `${EMOJIS.PLAY} **Guild monitoring active**`}\n\n${lines.join('\n')}`;
 }
 function buildRoutingPanel(client, interaction) {
   const config = auditStore.getConfig();
@@ -191,14 +191,14 @@ function buildRoutingPanel(client, interaction) {
   const selectedGuild = registryGuild(client, session.sourceGuildId);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('📡 Audit Intelligence Routing')
+    .setTitle(`${EMOJIS.FEED} Audit Intelligence Routing`)
     .setDescription(selectedGuild ? `Configure where **${selectedGuild.name}** audit events are mirrored inside this private server. Individual user intelligence channels remain intact.` : 'Choose a source guild to configure.')
     .addFields(
       { name: 'Source Guild', value: selectedGuild ? `**${selectedGuild.name}**\n\`${selectedGuild.id}\`\n${guildEnvironmentLabel(selectedGuild)}` : 'Not selected', inline: true },
       { name: 'Route Type', value: ROUTE_LABELS[session.routeKey] || ROUTE_LABELS.default, inline: true },
       { name: 'Current Report Feeds', value: selectedGuild ? routeSummary(config, selectedGuild.id, interaction.guild) : 'Select a guild first.', inline: false },
     )
-    .setFooter({ text: 'Goliath Command Center • Routing • Owner only • 🟢 healthy • 🟠 permission issue • 🔴 missing • ⚪ automatic' });
+    .setFooter({ text: `Goliath Command Center • Routing • Owner only • ${EMOJIS.ACTIVE} healthy • ${EMOJIS.HEALTH_SLOW} permission issue • ${EMOJIS.DISABLED} missing • ${EMOJIS.INACTIVE} automatic` });
   const rows = [];
   if (sourceGuilds.length) rows.push(new ActionRowBuilder().addComponents(sourceGuildSelect('owner:commandcenter:routing:guild', '1. Select source guild', sourceGuilds, session.sourceGuildId)));
   if (selectedGuild) {
@@ -224,12 +224,12 @@ function buildMonitoringPanel(client, interaction) {
   const selectedEnabled = monitoring[session.family] !== false;
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('👁️ Audit Intelligence Monitoring')
+    .setTitle(`${EMOJIS.WELCOME_PREVIEW} Audit Intelligence Monitoring`)
     .setDescription(selectedGuild ? `Control which **${selectedGuild.name}** events are mirrored into your private Audit Intelligence server. Captured intelligence remains stored even when a mirror family is disabled.` : 'Choose a source guild to configure. All monitoring families default to enabled.')
     .addFields(
       { name: 'Source Guild', value: selectedGuild ? `**${selectedGuild.name}**\n\`${selectedGuild.id}\`\n${guildEnvironmentLabel(selectedGuild)}` : 'Not selected', inline: true },
       { name: 'Selected Family', value: MONITOR_LABELS[session.family] || MONITOR_LABELS.members, inline: true },
-      { name: 'Selected Status', value: selectedGuild ? (selectedEnabled ? '🟢 Mirroring enabled' : '🔴 Mirroring disabled') : 'Select a guild first.', inline: true },
+      { name: 'Selected Status', value: selectedGuild ? (selectedEnabled ? `${EMOJIS.ACTIVE} Mirroring enabled` : `${EMOJIS.DISABLED} Mirroring disabled`) : 'Select a guild first.', inline: true },
       { name: 'Monitoring Status', value: selectedGuild ? monitoringSummary(config, selectedGuild.id) : 'Select a guild first.', inline: false },
     )
     .setFooter({ text: 'Goliath Command Center • Monitoring • Owner only' });
@@ -252,11 +252,11 @@ function structureRepairSummary(result) {
   const afterIssues = Array.isArray(result.after.issues) ? result.after.issues : [];
   const repaired = beforeIssues.filter((issue) => !afterIssues.includes(issue));
   const lines = [
-    result.after.healthy ? '🟢 **Repair complete — structure is healthy.**' : '🟠 **Repair completed with manual attention still required.**',
+    result.after.healthy ? `${EMOJIS.ACTIVE} **Repair complete — structure is healthy.**` : `${EMOJIS.HEALTH_SLOW} **Repair completed with manual attention still required.**`,
     `Before: **${beforeIssues.length}** issue(s) • After: **${afterIssues.length}** issue(s)`,
   ];
-  if (repaired.length) lines.push('', '**Repaired automatically**', ...repaired.slice(0, 6).map((issue) => `✅ ${issue}`));
-  if (afterIssues.length) lines.push('', '**Still requires attention**', ...afterIssues.slice(0, 6).map((issue) => `⚠️ ${issue}`));
+  if (repaired.length) lines.push('', '**Repaired automatically**', ...repaired.slice(0, 6).map((issue) => `${EMOJIS.SUCCESS} ${issue}`));
+  if (afterIssues.length) lines.push('', '**Still requires attention**', ...afterIssues.slice(0, 6).map((issue) => `${EMOJIS.WARNING} ${issue}`));
   if (!repaired.length && !afterIssues.length) lines.push('', 'No faults remained after the repair/rescan.');
   return lines.join('\n').slice(0, 1024);
 }
@@ -266,14 +266,14 @@ async function buildStructurePanel(client, interaction) {
   const sourceGuilds = registryGuildOptions(client, config.commandCenter?.guildId);
   const selectedGuild = registryGuild(client, session.sourceGuildId);
   const report = selectedGuild ? await auditRouter.inspectStructure(client, selectedGuild) : null;
-  const status = !report ? 'Select a guild first.' : report.healthy ? '🟢 Healthy' : report.systemChannel ? '🟠 Attention required' : '⚪ Not provisioned';
+  const status = !report ? 'Select a guild first.' : report.healthy ? `${EMOJIS.ACTIVE} Healthy` : report.systemChannel ? `${EMOJIS.HEALTH_SLOW} Attention required` : `${EMOJIS.INACTIVE} Not provisioned`;
   const placement = !report?.systemChannel ? 'Not provisioned' : report.systemChannel.parentId ? `<#${report.systemChannel.id}> inside a category` : `<#${report.systemChannel.id}> uncategorised`;
   const issues = report?.issues?.length ? report.issues.map((issue) => `• ${issue}`).join('\n') : 'None';
   const categories = report?.categories?.length ? report.categories.map((category) => `• **${category.name}** — ${category.childCount} channel(s)`).join('\n') : 'None / owner-managed placement';
   const repairSummary = structureRepairSummary(session.repairResult);
   const embed = new EmbedBuilder()
     .setColor(report?.healthy ? 0x57F287 : report?.systemChannel ? 0xFEE75C : 0x5865F2)
-    .setTitle('📁 Audit Intelligence Structure')
+    .setTitle(`${EMOJIS.FOLDER} Audit Intelligence Structure`)
     .setDescription(selectedGuild ? `Inspect and safely provision/repair **${selectedGuild.name}**. Goliath identifies resources by internal markers, so renamed or moved channels remain valid.` : 'Choose a source guild to inspect or provision.')
     .addFields(
       { name: 'Source Guild', value: selectedGuild ? `**${selectedGuild.name}**\n\`${selectedGuild.id}\`\n${guildEnvironmentLabel(selectedGuild)}` : 'Not selected', inline: true },
@@ -333,13 +333,13 @@ async function buildIntelligencePanel(client, interaction) {
   const selectedEvidence = intelligenceMatchEvidence(selectedMatch);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🔎 User Intelligence Lookup')
+    .setTitle(`${EMOJIS.INVESTIGATE} User Intelligence Lookup`)
     .setDescription(sourceGuild
       ? `Search **${sourceGuild.name}** by Discord **user ID or username**. Goliath combines live Discord state when available with stored Audit Intelligence from every environment that has observed this guild.`
       : 'Choose the source guild that contains, or previously contained, the user you want to investigate.')
     .addFields(
       { name: 'Source Guild', value: sourceGuild ? `**${sourceGuild.name}**\n\`${sourceGuild.id}\`\n${guildEnvironmentLabel(sourceGuild)}` : 'Not selected', inline: true },
-      { name: 'Live Access', value: sourceGuild ? (liveGuild ? '🟢 DEV has live access' : '🟡 Registry / stored intelligence') : '—', inline: true },
+      { name: 'Live Access', value: sourceGuild ? (liveGuild ? `${EMOJIS.ACTIVE} DEV has live access` : `${EMOJIS.HEALTH_STABLE} Registry / stored intelligence`) : '—', inline: true },
       { name: 'Selected User', value: session.userId ? `<@${session.userId}>\n\`${session.userId}\`${selectedEvidence ? `\n${selectedEvidence}` : ''}` : 'Not selected', inline: true },
       { name: 'Search Results', value: session.matches?.length ? `${session.matches.length} matching user(s)` : 'None / not searched', inline: true },
     )
@@ -410,14 +410,14 @@ function healthRepairSummary(result) {
   const failedGuilds = (result.actions || []).filter((action) => action.type === 'guild-structure' && !action.repaired).length;
   const commandCenterAction = (result.actions || []).find((action) => action.type === 'command-center');
   const lines = [
-    result.after.healthy ? '🟢 **Health repair complete — all critical checks are passing.**' : result.improved ? '🟡 **Health repair improved the system, but attention is still required.**' : '🟠 **Health repair completed, but no measurable health improvement was confirmed.**',
+    result.after.healthy ? `${EMOJIS.ACTIVE} **Health repair complete — all critical checks are passing.**` : result.improved ? `${EMOJIS.HEALTH_STABLE} **Health repair improved the system, but attention is still required.**` : `${EMOJIS.HEALTH_SLOW} **Health repair completed, but no measurable health improvement was confirmed.**`,
     `Critical issues: **${beforeIssues.length} → ${afterIssues.length}**`,
     `Structural failures: **${result.before.counts?.structuralFailures || 0} → ${result.after.counts?.structuralFailures || 0}**`,
   ];
-  if (commandCenterAction) lines.push(`Command Center: ${commandCenterAction.repaired ? '✅ repaired' : '⚠️ repair attempted'}`);
+  if (commandCenterAction) lines.push(`Command Center: ${commandCenterAction.repaired ? `${EMOJIS.SUCCESS} repaired` : `${EMOJIS.WARNING} repair attempted`}`);
   if (repairedGuilds || failedGuilds) lines.push(`Guild structures: **${repairedGuilds} repaired**${failedGuilds ? ` • **${failedGuilds} still unhealthy**` : ''}`);
   const remaining = afterIssues.slice(0, 5);
-  if (remaining.length) lines.push('', '**Still requires attention**', ...remaining.map((issue) => `⚠️ ${issue}`));
+  if (remaining.length) lines.push('', '**Still requires attention**', ...remaining.map((issue) => `${EMOJIS.WARNING} ${issue}`));
   return lines.join('\n').slice(0, 1024);
 }
 async function buildHealthPanel(client, repairResult = null) {
@@ -433,22 +433,22 @@ async function buildHealthPanel(client, repairResult = null) {
   const repairSummary = healthRepairSummary(repairResult);
   const embed = new EmbedBuilder()
     .setColor(report.healthy ? 0x57F287 : 0xED4245)
-    .setTitle('🩺 Audit Intelligence Health')
+    .setTitle(`${EMOJIS.HEALTH} Audit Intelligence Health`)
     .setDescription(report.healthy ? 'All critical Audit Intelligence health checks are passing.' : 'One or more Audit Intelligence health checks need attention.')
     .addFields(
       { name: 'Environment', value: report.environment || 'Unknown', inline: true },
-      { name: 'Overall', value: report.healthy ? '🟢 Healthy' : '🔴 Attention required', inline: true },
+      { name: 'Overall', value: report.healthy ? `${EMOJIS.ACTIVE} Healthy` : `${EMOJIS.DISABLED} Attention required`, inline: true },
       { name: 'Destination', value: report.destination ? `**${report.destination.name}**\n\`${report.destination.id}\`` : 'Unavailable', inline: true },
       { name: 'Command Center', value: [
         `Channel: ${commandCenter.channelId ? `<#${commandCenter.channelId}>` : 'Missing'}`,
-        `Panel message: ${commandCenter.messagePresent ? '🟢 Present' : '🔴 Missing'}`,
-        `Owner access: ${permissions.owner ? '🟢' : '🔴'}`,
-        `Goliath access: ${permissions.bot ? '🟢' : '🔴'}`,
-        `@everyone hidden: ${permissions.everyone === false ? '🟢' : '🔴'}`,
+        `Panel message: ${commandCenter.messagePresent ? `${EMOJIS.ACTIVE} Present` : `${EMOJIS.DISABLED} Missing`}`,
+        `Owner access: ${permissions.owner ? EMOJIS.ACTIVE : EMOJIS.DISABLED}`,
+        `Goliath access: ${permissions.bot ? EMOJIS.ACTIVE : EMOJIS.DISABLED}`,
+        `@everyone hidden: ${permissions.everyone === false ? EMOJIS.ACTIVE : EMOJIS.DISABLED}`,
       ].join('\n'), inline: false },
       { name: '/commandcenter Privacy', value: [
-        `Private registration: ${commandCenter.privateCommandRegistered ? '🟢 Present' : '🔴 Missing'}`,
-        `Global exposure: ${commandCenter.globalCommandLeaked ? '🔴 LEAKED' : '🟢 None'}`,
+        `Private registration: ${commandCenter.privateCommandRegistered ? `${EMOJIS.ACTIVE} Present` : `${EMOJIS.DISABLED} Missing`}`,
+        `Global exposure: ${commandCenter.globalCommandLeaked ? `${EMOJIS.DISABLED} LEAKED` : `${EMOJIS.ACTIVE} None`}`,
       ].join('\n'), inline: false },
       { name: 'Monitored Guilds', value: [
         `Configured: **${counts.configured || 0}**`,
@@ -528,31 +528,31 @@ async function handleCommandCenterInteraction(client, interaction) {
   if (!customId.startsWith('owner:commandcenter:')) return false;
   if (!commandCenterUiEnabled()) return false;
   if (!security.isBotOwner(interaction.user?.id)) {
-    if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Owner-only control.', flags: MessageFlags.Ephemeral }).catch(() => null);
+    if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${EMOJIS.ERROR} Owner-only control.`, flags: MessageFlags.Ephemeral }).catch(() => null);
     return true;
   }
   if (customId === 'owner:commandcenter:destination' && interaction.isStringSelectMenu?.()) {
     const guildId = String(interaction.values?.[0] || '');
     const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-    if (!guild) { await interaction.update({ content: '❌ That guild is no longer available to Goliath.', embeds: [], components: [] }).catch(() => null); return true; }
+    if (!guild) { await interaction.update({ content: `${EMOJIS.ERROR} That guild is no longer available to Goliath.`, embeds: [], components: [] }).catch(() => null); return true; }
     const ownerMember = await guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!ownerMember) { await interaction.update({ content: '❌ You must be a member of the selected private server.', embeds: [], components: [] }).catch(() => null); return true; }
+    if (!ownerMember) { await interaction.update({ content: `${EMOJIS.ERROR} You must be a member of the selected private server.`, embeds: [], components: [] }).catch(() => null); return true; }
     auditStore.updateConfig({ commandCenter: { guildId: guild.id, categoryId: null, channelId: null, messageId: null } });
     const context = await auditRouter.ensureCommandCenter(client, guild);
     const registered = await ensurePrivateCommandRegistration(client, guild.id);
     const link = context?.channel ? `https://discord.com/channels/${guild.id}/${context.channel.id}` : null;
-    await interaction.update({ content: registered ? `✅ **Goliath Command Center secured.**\n\nDestination: **${guild.name}**\n/commandcenter is registered **only** in that server.${link ? `\n\nOpen: ${link}` : ''}` : `⚠️ Command Center channels were prepared in **${guild.name}**, but private command registration needs attention.`, embeds: [], components: [] }).catch(() => null);
+    await interaction.update({ content: registered ? `${EMOJIS.SUCCESS} **Goliath Command Center secured.**\n\nDestination: **${guild.name}**\n/commandcenter is registered **only** in that server.${link ? `\n\nOpen: ${link}` : ''}` : `${EMOJIS.WARNING} Command Center channels were prepared in **${guild.name}**, but private command registration needs attention.`, embeds: [], components: [] }).catch(() => null);
     return true;
   }
   const config = auditStore.getConfig();
   if (!config.commandCenter?.guildId || String(interaction.guildId || '') !== String(config.commandCenter.guildId)) {
-    if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ This control is only valid inside your private Goliath Command Center server.', flags: MessageFlags.Ephemeral }).catch(() => null);
+    if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${EMOJIS.ERROR} This control is only valid inside your private Goliath Command Center server.`, flags: MessageFlags.Ephemeral }).catch(() => null);
     return true;
   }
   if (customId === 'owner:commandcenter:refresh' && interaction.isButton?.()) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
     const context = await auditRouter.ensureCommandCenter(client, interaction.guild);
-    await interaction.editReply({ content: context ? '✅ Command Center refreshed.' : '❌ Command Center refresh failed.' }).catch(() => null);
+    await interaction.editReply({ content: context ? `${EMOJIS.SUCCESS} Command Center refreshed.` : `${EMOJIS.ERROR} Command Center refresh failed.` }).catch(() => null);
     return true;
   }
   if (customId === 'owner:commandcenter:routing' && interaction.isButton?.()) {
@@ -570,29 +570,29 @@ async function handleCommandCenterInteraction(client, interaction) {
   if (customId === 'owner:commandcenter:routing:provision' && interaction.isButton?.()) {
     const session = getRoutingSession(interaction);
     const sourceGuild = registryGuild(client, session.sourceGuildId);
-    if (!sourceGuild) { await interaction.reply({ content: '❌ Select a source guild first.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+    if (!sourceGuild) { await interaction.reply({ content: `${EMOJIS.ERROR} Select a source guild first.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
     await interaction.deferUpdate().catch(() => null);
     const result = await auditRouter.ensureReportRoutes(client, sourceGuild).catch((error) => { console.warn('[Audit Intelligence] report channel provisioning failed:', error?.message || error); return null; });
-    if (!result) { await interaction.editReply({ content: '❌ Report channels could not be prepared.', embeds: [], components: [] }).catch(() => null); return true; }
+    if (!result) { await interaction.editReply({ content: `${EMOJIS.ERROR} Report channels could not be prepared.`, embeds: [], components: [] }).catch(() => null); return true; }
     await interaction.editReply(buildRoutingPanel(client, interaction)).catch(() => null);
     return true;
   }
   if (customId === 'owner:commandcenter:routing:test' && interaction.isButton?.()) {
     const session = getRoutingSession(interaction);
     const sourceGuild = registryGuild(client, session.sourceGuildId);
-    if (!sourceGuild) { await interaction.reply({ content: '❌ Select a source guild first.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+    if (!sourceGuild) { await interaction.reply({ content: `${EMOJIS.ERROR} Select a source guild first.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
     await auditRouter.ensureReportRoutes(client, sourceGuild).catch(() => null);
     const categoryByRoute = { guild: 'guild', members: 'member', moderation: 'moderation', security: 'security', messages: 'message', voice: 'voice', roles: 'role', goliath: 'goliath', default: 'guild' };
     const syntheticEvent = { type: `routing-check.${session.routeKey}`, category: categoryByRoute[session.routeKey] || 'guild' };
     const destination = await auditRouter.configuredRouteChannel(client, sourceGuild, syntheticEvent).catch(() => null);
-    if (!destination?.isTextBased?.()) { await interaction.editReply({ content: '❌ No usable destination exists for that report family. Use Create / Repair Report Channels first.' }).catch(() => null); return true; }
+    if (!destination?.isTextBased?.()) { await interaction.editReply({ content: `${EMOJIS.ERROR} No usable destination exists for that report family. Use Create / Repair Report Channels first.` }).catch(() => null); return true; }
     const probe = await auditRouter.runLiveEndToEndProbe(client, sourceGuild).catch((error) => { console.warn('[Audit Intelligence] live routing probe failed:', error?.message || error); return { started: false, reason: 'create-failed' }; });
     const probeStatus = liveProbeStatus(probe);
     const familyLabel = ROUTE_LABELS[session.routeKey] || ROUTE_LABELS.default;
     const testEmbed = new EmbedBuilder()
       .setColor(0x57F287)
-      .setTitle('🧪 Goliath Audit Feed Test')
+      .setTitle(`${EMOJIS.TEST} Goliath Audit Feed Test`)
       .setDescription('This is a live routing test from the private Goliath Command Center. No fake audit history was stored.')
       .addFields(
         { name: 'Source Guild', value: `**${sourceGuild.name || sourceGuild.id}**\n\`${sourceGuild.id}\``, inline: true },
@@ -601,14 +601,14 @@ async function handleCommandCenterInteraction(client, interaction) {
         { name: 'Requested By', value: `<@${interaction.user.id}>`, inline: true },
         { name: 'Environment Coverage', value: guildEnvironmentLabel(sourceGuild), inline: true },
         { name: 'Probe Collector', value: `**${liveProbeCollectorLabel(probe)}**${Number.isFinite(Number(probe?.durationMs)) ? `\n${Math.max(0, Number(probe.durationMs))}ms` : ''}`, inline: true },
-        { name: 'Route Status', value: '🟢 Route resolved', inline: true },
+        { name: 'Route Status', value: `${EMOJIS.ACTIVE} Route resolved`, inline: true },
         { name: 'Live End-to-End Probe', value: probeStatus, inline: false },
       )
       .setFooter({ text: 'Goliath Audit Intelligence • Test report only' })
       .setTimestamp();
     const sent = await destination.send({ embeds: [testEmbed], allowedMentions: { parse: [] } }).catch((error) => { console.warn('[Audit Intelligence] test report delivery failed:', error?.message || error); return null; });
     const link = sent ? `https://discord.com/channels/${interaction.guildId}/${destination.id}/${sent.id}` : null;
-    const deliveryStatus = sent ? `✅ **Normal route delivery:** test report delivered to <#${destination.id}>.${link ? `\n${link}` : ''}` : '❌ **Normal route delivery:** Goliath resolved the route but could not send into the destination channel.';
+    const deliveryStatus = sent ? `${EMOJIS.SUCCESS} **Normal route delivery:** test report delivered to <#${destination.id}>.${link ? `\n${link}` : ''}` : `${EMOJIS.ERROR} **Normal route delivery:** Goliath resolved the route but could not send into the destination channel.`;
     await interaction.editReply({ content: `${deliveryStatus}\n\n${probeStatus}` }).catch(() => null);
     return true;
   }
@@ -664,13 +664,13 @@ async function handleCommandCenterInteraction(client, interaction) {
   }
   if (customId === 'owner:commandcenter:intelligence:search' && interaction.isButton?.()) {
     const session = getIntelligenceSession(interaction);
-    if (!session.sourceGuildId) { await interaction.reply({ content: '❌ Select a source guild first.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+    if (!session.sourceGuildId) { await interaction.reply({ content: `${EMOJIS.ERROR} Select a source guild first.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
     await interaction.showModal(intelligenceSearchModal()).catch(() => null); return true;
   }
   if (customId === 'owner:commandcenter:intelligence:search-submit' && interaction.isModalSubmit?.()) {
     const session = getIntelligenceSession(interaction);
     const sourceGuild = registryGuild(client, session.sourceGuildId);
-    if (!sourceGuild) { await interaction.reply({ content: '❌ The selected source guild is no longer known to Goliath.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+    if (!sourceGuild) { await interaction.reply({ content: `${EMOJIS.ERROR} The selected source guild is no longer known to Goliath.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
     const query = interaction.fields.getTextInputValue('query');
     const matches = await searchIntelligenceUser(client, sourceGuild, query);
     const userId = matches.length === 1 ? matches[0].id : null;
@@ -699,7 +699,7 @@ async function handleCommandCenterInteraction(client, interaction) {
     };
     const channel = await auditRouter.ensureUserAuditChannel(client, sourceGuild, { user });
     const link = channel ? `https://discord.com/channels/${interaction.guildId}/${channel.id}` : null;
-    await interaction.reply({ content: link ? `✅ Intelligence channel ready: ${link}` : '❌ Intelligence channel could not be prepared.', flags: MessageFlags.Ephemeral }).catch(() => null); return true;
+    await interaction.reply({ content: link ? `${EMOJIS.SUCCESS} Intelligence channel ready: ${link}` : `${EMOJIS.ERROR} Intelligence channel could not be prepared.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true;
   }
   if (customId === 'owner:commandcenter:health' && interaction.isButton?.()) {
     await interaction.reply({ ...(await buildHealthPanel(client)), flags: MessageFlags.Ephemeral }).catch(() => null); return true;
@@ -713,7 +713,7 @@ async function handleCommandCenterInteraction(client, interaction) {
     await interaction.deferUpdate().catch(() => null);
     await interaction.editReply(await buildHealthPanel(client)).catch(() => null); return true;
   }
-  if (interaction.isButton?.()) { await interaction.reply({ content: 'ℹ️ This Command Center section is ready for the next build phase.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+  if (interaction.isButton?.()) { await interaction.reply({ content: `${EMOJIS.INFO} This Command Center section is ready for the next build phase.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
   return false;
 }
 
@@ -766,16 +766,16 @@ async function handleOwnerAuditInteraction(client, interaction) {
   const customId = String(interaction?.customId || '');
   if (!interaction?.isButton?.() || !customId.startsWith('owner:audit:')) return false;
   const ownerGuildId = auditRouter.getOwnerAuditGuildId();
-  if (!ownerGuildId || String(interaction.guildId || '') !== ownerGuildId) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ This control is only available in the private Goliath audit server.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
-  if (!security.isBotOwner(interaction.user?.id)) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Owner-only control.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+  if (!ownerGuildId || String(interaction.guildId || '') !== ownerGuildId) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${EMOJIS.ERROR} This control is only available in the private Goliath audit server.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+  if (!security.isBotOwner(interaction.user?.id)) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${EMOJIS.ERROR} Owner-only control.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
   const context = auditChannelContext(interaction.channel);
-  if (!context) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ This is not a Goliath user intelligence channel.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+  if (!context) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${EMOJIS.ERROR} This is not a Goliath user intelligence channel.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
   const sourceGuild = registryGuild(client, context.sourceGuildId);
-  if (!sourceGuild) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Source guild is no longer known to Goliath.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
+  if (!sourceGuild) { if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${EMOJIS.ERROR} Source guild is no longer known to Goliath.`, flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
   if (customId === 'owner:audit:refresh') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
     const refreshed = await auditRouter.refreshUserSummary(client, sourceGuild, interaction.channel, context.userId, true);
-    await interaction.editReply({ content: refreshed ? '✅ User Intelligence summary refreshed.' : '❌ Summary refresh failed.' }).catch(() => null);
+    await interaction.editReply({ content: refreshed ? `${EMOJIS.SUCCESS} User Intelligence summary refreshed.` : `${EMOJIS.ERROR} Summary refresh failed.` }).catch(() => null);
     return true;
   }
   const section = customId.slice('owner:audit:'.length);
@@ -836,7 +836,7 @@ function registerAuditEvents(client) {
   });
   client.on(Events.GuildMemberUpdate, (before, after) => captureMemberUpdate(client, before, after).catch((error) => console.warn('[Audit Intelligence] member update capture failed:', error?.message || error)));
   client.on(Events.GuildBanAdd, (ban) => audit.capture(client, { type: 'member.ban', category: 'moderation', action: 'create', title: 'Member Banned', icon: EMOJIS.BAN, guild: ban.guild, user: ban.user, target: { id: ban.user.id, label: ban.user.tag || ban.user.username }, reason: ban.reason || null }));
-  client.on(Events.GuildBanRemove, (ban) => audit.capture(client, { type: 'member.unban', category: 'moderation', action: 'delete', title: 'Member Unbanned', icon: '🕊️', guild: ban.guild, user: ban.user, target: { id: ban.user.id, label: ban.user.tag || ban.user.username } }));
+  client.on(Events.GuildBanRemove, (ban) => audit.capture(client, { type: 'member.unban', category: 'moderation', action: 'delete', title: 'Member Unbanned', icon: EMOJIS.AUDIT_UNBAN, guild: ban.guild, user: ban.user, target: { id: ban.user.id, label: ban.user.tag || ban.user.username } }));
   client.on(Events.GuildRoleCreate, (role) => audit.capture(client, { type: 'role.create', category: 'role', action: 'create', title: 'Role Created', icon: EMOJIS.ROLES, guild: role.guild, target: { id: role.id, label: role.name }, after: roleState(role) }));
   client.on(Events.GuildRoleUpdate, (before, after) => audit.capture(client, { type: 'role.update', category: 'role', action: 'update', title: 'Role Updated', icon: EMOJIS.ROLES, guild: after.guild, target: { id: after.id, label: after.name }, before: roleState(before), after: roleState(after) }));
   client.on(Events.GuildRoleDelete, (role) => audit.capture(client, { type: 'role.delete', category: 'role', action: 'delete', title: 'Role Deleted', icon: EMOJIS.DELETE, guild: role.guild, target: { id: role.id, label: role.name }, before: roleState(role) }));
@@ -867,7 +867,7 @@ function registerAuditEvents(client) {
   client.on(Events.GuildScheduledEventCreate, (event) => audit.capture(client, { type: 'scheduledEvent.create', category: 'scheduledEvent', action: 'create', title: 'Scheduled Event Created', icon: EMOJIS.DATE, guild: event.guild, target: { id: event.id, label: event.name }, after: scheduledEventState(event) }));
   client.on(Events.GuildScheduledEventUpdate, (before, after) => audit.capture(client, { type: 'scheduledEvent.update', category: 'scheduledEvent', action: 'update', title: 'Scheduled Event Updated', icon: EMOJIS.DATE, guild: after.guild, target: { id: after.id, label: after.name }, before: scheduledEventState(before), after: scheduledEventState(after) }));
   client.on(Events.GuildScheduledEventDelete, (event) => audit.capture(client, { type: 'scheduledEvent.delete', category: 'scheduledEvent', action: 'delete', title: 'Scheduled Event Deleted', icon: EMOJIS.DELETE, guild: event.guild, target: { id: event.id, label: event.name }, before: scheduledEventState(event) }));
-  client.on(Events.WebhooksUpdate, (channel) => channel.guild && audit.capture(client, { type: 'webhook.update', category: 'webhook', action: 'update', title: 'Webhook Configuration Changed', icon: '🪝', guild: channel.guild, channel, target: { id: channel.id, label: channel.name }, metadata: { note: 'Discord signals that one or more webhooks in this channel changed; exact webhook details depend on audit-log visibility.' } }));
+  client.on(Events.WebhooksUpdate, (channel) => channel.guild && audit.capture(client, { type: 'webhook.update', category: 'webhook', action: 'update', title: 'Webhook Configuration Changed', icon: EMOJIS.AUDIT_WEBHOOK, guild: channel.guild, channel, target: { id: channel.id, label: channel.name }, metadata: { note: 'Discord signals that one or more webhooks in this channel changed; exact webhook details depend on audit-log visibility.' } }));
   if (Events.AutoModerationRuleCreate) client.on(Events.AutoModerationRuleCreate, (rule) => audit.capture(client, { type: 'automod.ruleCreate', category: 'automod', action: 'create', title: 'AutoMod Rule Created', icon: EMOJIS.SECURITY, guild: rule.guild, target: { id: rule.id, label: rule.name }, after: { id: rule.id, name: rule.name, enabled: rule.enabled, eventType: rule.eventType, triggerType: rule.triggerType, actions: rule.actions } }));
   if (Events.AutoModerationRuleUpdate) client.on(Events.AutoModerationRuleUpdate, (before, after) => {
     const rule = after || before;
@@ -899,13 +899,13 @@ const commandCenterCommand = {
   privateGuildOnly: true,
   data: new SlashCommandBuilder().setName('commandcenter').setDescription('Open the private Goliath owner Command Center').setDMPermission(false),
   async execute(interaction) {
-    if (!commandCenterUiEnabled()) return interaction.reply({ content: '❌ /commandcenter is owned by the DEV control plane only.', flags: MessageFlags.Ephemeral }).catch(() => null);
-    if (!security.isBotOwner(interaction.user?.id)) return interaction.reply({ content: '❌ This command is restricted to the Goliath owner.', flags: MessageFlags.Ephemeral }).catch(() => null);
+    if (!commandCenterUiEnabled()) return interaction.reply({ content: `${EMOJIS.ERROR} /commandcenter is owned by the DEV control plane only.`, flags: MessageFlags.Ephemeral }).catch(() => null);
+    if (!security.isBotOwner(interaction.user?.id)) return interaction.reply({ content: `${EMOJIS.ERROR} This command is restricted to the Goliath owner.`, flags: MessageFlags.Ephemeral }).catch(() => null);
     const config = auditStore.getConfig();
-    if (!config.commandCenter?.guildId || String(interaction.guildId || '') !== String(config.commandCenter.guildId)) return interaction.reply({ content: '❌ /commandcenter is only valid inside your private Goliath Command Center server.', flags: MessageFlags.Ephemeral }).catch(() => null);
+    if (!config.commandCenter?.guildId || String(interaction.guildId || '') !== String(config.commandCenter.guildId)) return interaction.reply({ content: `${EMOJIS.ERROR} /commandcenter is only valid inside your private Goliath Command Center server.`, flags: MessageFlags.Ephemeral }).catch(() => null);
     const context = await auditRouter.ensureCommandCenter(interaction.client, interaction.guild);
     const link = context?.channel ? `https://discord.com/channels/${interaction.guildId}/${context.channel.id}` : null;
-    return interaction.reply({ content: context ? `✅ Command Center ready.${link ? `\n${link}` : ''}` : '❌ Command Center could not be prepared.', flags: MessageFlags.Ephemeral }).catch(() => null);
+    return interaction.reply({ content: context ? `${EMOJIS.SUCCESS} Command Center ready.${link ? `\n${link}` : ''}` : `${EMOJIS.ERROR} Command Center could not be prepared.`, flags: MessageFlags.Ephemeral }).catch(() => null);
   },
 };
 
