@@ -71,6 +71,7 @@ async function buildTimedRolesHealth(guild) {
     }
   }
 
+  if (Number(section.analytics?.lastScanFailed || 0) > 0) warnings.push(`Latest scan failed for ${section.analytics.lastScanFailed} member(s). Review Audit History for details.`);
   const uniqueIssues = [...new Set(issues)];
   const uniqueWarnings = [...new Set(warnings)];
   return {
