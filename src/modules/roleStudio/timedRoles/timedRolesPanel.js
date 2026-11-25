@@ -793,8 +793,21 @@ async function handleTimedRolesInteraction(interaction) {
     }
     if (customId === `${PREFIX}:scan`) {
       await interaction.deferUpdate();
-      await timedRoles.scanGuild(interaction.guild, { actorId: interaction.user.id });
-      return refresh(interaction);
+      const result = await timedRoles.scanGuild(interaction.guild, { actorId: interaction.user.id });
+      return refresh(interaction, {
+        embeds:[new EmbedBuilder().setColor(result.failed || result.disabled ? 0xFAA61A : 0x57F287)
+          .setTitle('Timed Roles Scan Results')
+          .setDescription(result.disabled ? 'Module is disabled. No changes were applied.' : 'Scan completed. Review the actual results below.')
+          .addFields({name:'Results',value:[
+            '**Members checked:** '+result.membersChecked,
+            '**Roles awarded:** '+result.awarded,
+            '**Roles removed:** '+result.removed,
+            '**Celebrations sent:** '+result.announced,
+            '**Skipped or unchanged:** '+result.skipped,
+            '**Failures:** '+result.failed
+          ].join('\n')})],
+        components:[row(button(PREFIX+':auditPage:0',emojiLabel('HISTORY','Audit History')),button(PREFIX+':simulate',emojiLabel('TEST_SEND','Simulate'))),goliathNavigation(PREFIX,PREFIX+':settings')]
+      });
     }
     if (customId.startsWith(`${PREFIX}:applyMember:`)) {
       await interaction.deferUpdate();
