@@ -19,7 +19,6 @@ const {
   UserSelectMenuBuilder,
 } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
-const { variablesForModule } = require('../../../core/guild/guildVariables');
 const {
   buildRolePicker,
   mergeRolePickerSelection,
@@ -244,51 +243,55 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
 }
 
 function buildSettingsPanel(guildId) {
-  const section = timedRoles.getSection(guildId);
-  const highestOnly = section.settings.progressionMode === 'highest_only';
+  const s = timedRoles.getSection(guildId).settings;
+  const enabled = guildManager.isModuleEnabled(guildId,'timedRoles');
+  const highestOnly = s.progressionMode === 'highest_only';
+  const logging = s.logging || {};
+  const access = s.recordsAccess || {};
+  const state = value => value ? 'Enabled' : 'Disabled';
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle(emojiLabel('SETTINGS', 'Timed Roles Settings'))
-      .setDescription([
-        `**Progression mode:** ${highestOnly ? 'Highest milestone only' : 'Keep all earned milestones'}`,
-        `**Include bots:** ${section.settings.includeBots ? 'Yes' : 'No'}`,
-        `**Scan interval:** ${section.settings.scanIntervalMinutes} minutes`,
-        `**Announcements:** ${section.settings.announcePromotions ? 'Enabled' : 'Disabled'}`,
-        `**Announcement channel:** ${section.settings.announcementChannelId ? `<#${section.settings.announcementChannelId}>` : 'Not selected'}`,
-        '',
-        '**Message placeholders**',
-        '`{member}` • `{username}` • `{milestone}` • `{role}` • `{duration}` • `{server}` • `{joined}` • `{achieved}` • `{nextMilestone}` • `{nextDue}`',
-        variablesForModule('timedRoles').map((entry) => `\`${entry.token}\``).join(' • ').slice(0, 900),
-        '',
-        `**Current message**\n${section.settings.announcementMessage}`,
-      ].join('\n').slice(0, 4096))],
+      .setTitle(emojiLabel('SETTINGS','Timed Roles Settings'))
+      .setDescription('Manage automatic milestone rewards, celebrations and membership records. Choose a setting below.')
+      .addFields(
+        {name:'Module & progression',value:[
+          '**Module:** ' + state(enabled),
+          '**Reward policy:** ' + (highestOnly ? 'Highest earned milestone only' : 'Keep all earned milestones'),
+          '**Scan interval:** ' + s.scanIntervalMinutes + ' minutes',
+          '**Include bots:** ' + (s.includeBots ? 'Yes' : 'No')
+        ].join('\n')},
+        {name:'Celebrations',value:[
+          '**Status:** ' + state(s.announcePromotions),
+          '**Channel:** ' + (s.announcementChannelId ? '<#'+s.announcementChannelId+'>' : 'Not configured'),
+          '**Format:** ' + (s.celebrationEmbed === false ? 'Message' : 'Embed'),
+          '**Mentions:** Member only'
+        ].join('\n')},
+        {name:'Records & logging',value:[
+          '**Record access:** Owner' + (access.allowAdministrators !== false ? ' + administrators' : '') + ' + ' + (Array.isArray(access.roleIds) ? access.roleIds.length : 0) + ' custom roles',
+          '**Logging:** ' + (logging.mode === 'thread' ? 'Thread' : logging.mode === 'channel' ? 'Channel' : 'Off'),
+          '**Membership tracking:** Always retained'
+        ].join('\n')}
+      )],
     components: [
-      row(new ChannelSelectMenuBuilder()
-        .setCustomId(`${PREFIX}:announcementChannel`)
-        .setPlaceholder('Choose promotion announcement channel')
-        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setMinValues(0).setMaxValues(1)),
       row(
-        button(`${PREFIX}:toggleMode`, highestOnly ? emojiLabel('ACHIEVEMENT', 'Use Keep All') : emojiLabel('ROLE_GOLD_MEDAL', 'Use Highest Only'), ButtonStyle.Primary),
-        button(`${PREFIX}:toggleAnnouncements`, section.settings.announcePromotions ? emojiLabel('WELCOME_MUTED', 'Disable Announcements') : emojiLabel('WELCOME_CHANNEL', 'Enable Announcements')),
-        button(`${PREFIX}:toggleBots`, emojiLabel('AUTOMOD', 'Include Bots')),
+        button(PREFIX + ':toggleMode',highestOnly ? emojiLabel('ACHIEVEMENT','Keep All Roles') : emojiLabel('ROLE_GOLD_MEDAL','Highest Role Only'),ButtonStyle.Primary),
+        button(PREFIX + ':interval',emojiLabel('ROLE_CLOCK','Scan Interval')),
+        button(PREFIX + ':toggleBots',emojiLabel('AUTOMOD',s.includeBots ? 'Exclude Bots' : 'Include Bots'))
       ),
       row(
-        button(`${PREFIX}:interval`, emojiLabel('ROLE_CLOCK', 'Scan Interval')),
-        button(`${PREFIX}:message`, emojiLabel('USER_FEEDBACK', 'Promotion Message')),
-        button(`${PREFIX}:recordsAccess`, emojiLabel('PERMISSIONS','Records Access')),
-        button(`${PREFIX}:celebrations`, emojiLabel('ACHIEVEMENT','Celebrations')),
-        button(`${PREFIX}:logging`, emojiLabel('SCROLL','Logging')),
+        button(PREFIX + ':celebrations',emojiLabel('ACHIEVEMENT','Celebrations'),ButtonStyle.Primary),
+        button(PREFIX + ':recordsAccess',emojiLabel('PERMISSIONS','Records Access')),
+        button(PREFIX + ':logging',emojiLabel('SCROLL','Logging')),
+        button(PREFIX + ':auditPage:0',emojiLabel('HISTORY','Audit History'))
       ),
       row(
-        button(PREFIX + (guildManager.isModuleEnabled(guildId,'timedRoles') ? ':disable' : ':enable'), guildManager.isModuleEnabled(guildId,'timedRoles') ? emojiLabel('USER_PAUSE','Disable') : emojiLabel('USER_PLAY','Enable')),
+        button(PREFIX + (enabled ? ':disable' : ':enable'),emojiLabel(enabled ? 'USER_PAUSE' : 'USER_PLAY',enabled ? 'Disable Module' : 'Enable Module'),enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(PREFIX + ':repair',emojiLabel('REPAIR','Repair')),
-        button(PREFIX + ':export',emojiLabel('MOD_EXPORT','Export')),
-        button(PREFIX + ':auditPage:0',emojiLabel('HISTORY','Audit History')),
+        button(PREFIX + ':export',emojiLabel('MOD_EXPORT','Export'))
       ),
-      row(button(PREFIX, emojiLabel('BACK', 'Back'))),
-    ],
+      row(button(PREFIX,emojiLabel('BACK','Back')))
+    ]
   };
 }
 
@@ -331,11 +334,14 @@ function buildCelebrationPanel(guildId) {
       'Format: ' + (s.celebrationEmbed !== false ? 'Embed' : 'Message'),
       'Mentions: Individual member only',
       'Historical awards: ' + (s.celebrateRetroactive ? 'Celebrations allowed' : 'Silent'),
-      'Template preview below (placeholders are not resolved).'
+      'Edit the template to personalise milestone celebrations. The preview below shows the saved template.',
+      '',
+      '**Available placeholders**',
+      '`{member}` • `{username}` • `{milestone}` • `{role}` • `{duration}` • `{server}` • `{joined}` • `{achieved}` • `{nextMilestone}` • `{nextDue}`'
     ].join('\n')), embed],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':celebrationChannel').setPlaceholder('Celebration channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-      row(button(PREFIX + ':celebrationToggle', s.announcePromotions ? 'Disable' : 'Enable'), button(PREFIX + ':celebrationFormat', 'Switch Format'), button(PREFIX + ':celebrationEdit', emojiLabel('EDIT','Edit Template'))),
+      row(button(PREFIX + ':celebrationToggle', emojiLabel(s.announcePromotions ? 'WELCOME_MUTED' : 'WELCOME_CHANNEL',s.announcePromotions ? 'Disable Announcements' : 'Enable Announcements'),s.announcePromotions ? ButtonStyle.Secondary : ButtonStyle.Success), button(PREFIX + ':celebrationFormat', s.celebrationEmbed === false ? 'Use Embed' : 'Use Message'), button(PREFIX + ':celebrationEdit', emojiLabel('EDIT','Edit Template'))),
       row(button(PREFIX + ':settings', emojiLabel('BACK', 'Back'))),
     ],
   };
