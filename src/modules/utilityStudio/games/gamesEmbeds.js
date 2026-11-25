@@ -4,8 +4,8 @@ const { STORES, TYPES, safeUrl } = require('./gamesProviders');
 const NEW_MS = 24 * 3600_000;
 const ENDING_MS = 48 * 3600_000;
 const SECTIONS = [
-  { title: '🎁 Free Games', types: ['game'], color: 0xfbbf24 },
-  { title: '🧩 Free DLC & Add-ons', types: ['dlc'], color: 0xa78bfa },
+  { title: `${EMOJIS.GAME_GIFT} Free Games`, types: ['game'], color: 0xfbbf24 },
+  { title: `${EMOJIS.SYSTEM} Free DLC & Add-ons`, types: ['dlc'], color: 0xa78bfa },
   { title: `${EMOJIS.GAMEPAD} Loot, Betas & Other Offers`, types: ['loot', 'beta', 'demo', 'weekend'], color: 0x38bdf8 },
 ];
 function escape(value) { return String(value).replace(/[\\`*_{}\[\]()<>~|]/g, '\\$&').replace(/@/g, '@\u200b').replace(/[\r\n]/g, ' '); }
