@@ -133,9 +133,11 @@ function updateSettings(guildId, settings = {}, meta = {}) {
 function saveRule(guildId, input, meta = {}) {
   const normalized = normalizeRule(input);
   if (!normalized.roleId) throw new Error('A valid Discord role is required.');
+  if (!Number.isInteger(normalized.value) || normalized.value < 1 || normalized.value > 1000000) throw new Error('Invalid milestone duration.');
   if (normalized.startMode === 'custom' && !normalized.customStartAt) throw new Error('A valid custom starting date is required.');
   return updateSection(guildId, section => {
     const previous = section.rules[normalized.ruleId];
+    if(Object.values(section.rules).some(rule=>rule.ruleId!==normalized.ruleId && rule.roleId===normalized.roleId))throw new Error('This reward role is already assigned to another milestone.');
     const next = { ...section, rules: { ...section.rules, [normalized.ruleId]: { ...previous, ...normalized } }, updatedAt: now() };
     const keys = Object.keys(normalized).filter(key => !['updatedAt','lastRunAt','lastAwarded','lastError'].includes(key) && JSON.stringify(previous?.[key]) !== JSON.stringify(normalized[key]));
     return keys.length ? appendAudit(next, previous ? 'milestone_updated' : 'milestone_created', { ruleId: normalized.ruleId, keys }, meta) : next;
@@ -157,8 +159,14 @@ function eligibleAt(joinedAt, rule) {
   if (rule.unit === 'minutes') date.setUTCMinutes(date.getUTCMinutes() + value);
   else if (rule.unit === 'hours') date.setUTCHours(date.getUTCHours() + value);
   else if (rule.unit === 'weeks') date.setUTCDate(date.getUTCDate() + (value * 7));
-  else if (rule.unit === 'months') date.setUTCMonth(date.getUTCMonth() + value);
-  else if (rule.unit === 'years') date.setUTCFullYear(date.getUTCFullYear() + value);
+  else if (rule.unit === 'months' || rule.unit === 'years') {
+    const day=date.getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + value * (rule.unit==='years'?12:1));
+    const end=new Date(date);
+    end.setUTCMonth(end.getUTCMonth()+1,0);
+    date.setUTCDate(Math.min(day,end.getUTCDate()));
+  }
   else date.setUTCDate(date.getUTCDate() + value);
   return date;
 }
