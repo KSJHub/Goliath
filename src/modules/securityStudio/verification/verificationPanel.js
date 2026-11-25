@@ -141,8 +141,8 @@ function resetMessagesConfirm(g,user){return{embeds:[emb(emojiLabel('WARNING', '
 function logsPage(g,user,st){
  const c=settings(g.id),threaded=c.threadLogging?.mode==='threaded',mode=threaded?'threads':'channels';
  const enabled=c.logEnabledCategories||LOG_TYPES;
- const type=LOG_TYPES.includes(st.logType)?st.logType:'join';
- const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:logType').setPlaceholder('Choose log category').addOptions(LOG_TYPES.map(x=>({label:title(x),value:x,default:x===type,emoji:enabled.includes(x)?EMOJIS.ENABLED:EMOJIS.INACTIVE})));
+ const type=LOG_TYPES.includes(st.logType)?st.logType:threaded?'join':'default';
+ const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:logType').setPlaceholder('Choose log category').addOptions([...(threaded?[]:[{label:'Default channel',value:'default',default:type==='default'}]),...LOG_TYPES.map(x=>({label:title(x),value:x,default:x===type,emoji:enabled.includes(x)?EMOJIS.ENABLED:EMOJIS.INACTIVE}))]);
  const channel=new ChannelSelectMenuBuilder().setCustomId(threaded?'admin:verification:threadChannel':`admin:verification:logChannel:${type}`).setPlaceholder(threaded?'Choose private Security Passport channel':'Choose destination for '+title(type)).setMinValues(0).setMaxValues(1).setChannelTypes(ChannelType.GuildText);
  const current=threaded?c.threadLogging?.channelId:c.logs?.[type+'ChannelId']||c.logChannelId;
  if(current&&g.channels.cache.has(current))channel.setDefaultChannels(current);
@@ -158,7 +158,7 @@ function logsPage(g,user,st){
  row(toggle('admin:verification:logMode:standard','Channel Logs',!threaded),toggle('admin:verification:logMode:threaded','Thread Logs',threaded)),
  row(menu),
  row(channel),
- row(toggle('admin:verification:logCategoryToggle:'+type,title(type)+' logs',enabled.includes(type)),button('admin:verification:logPingSettings',`${EMOJIS.BELL} Role Notifications`)),
+ row(toggle('admin:verification:logCategoryToggle:'+type,title(type)+' logs',enabled.includes(type)).setDisabled(type==='default'),button('admin:verification:logPingSettings',`${EMOJIS.BELL} Role Notifications`)),
  finalNav('home',button('admin:verification:clearEveryLog',emojiLabel('CLOSE_X','Clear All'),ButtonStyle.Danger))]};
 }
 function logPingPage(g,user){
@@ -324,10 +324,10 @@ async function handleVerificationAdminInteraction(i){const id=String(i.customId|
  if(id==='admin:verification:threadChannel'){const cid=i.values?.[0]||null;const ch=cid?await i.guild.channels.fetch(cid):null;if(cid&&(!ch||ch.type!==ChannelType.GuildText||ch.permissionsFor(i.guild.roles.everyone)?.has('ViewChannel')!==false))throw new Error('Select a staff-only text channel.');t.channelId=cid;}
  else if(id.startsWith('admin:verification:threadOption:')){const key=id.split(':').pop(),value=i.values?.[0];const allowed={mode:['standard','threaded'],naming:['both','username','id']};if(!allowed[key]?.includes(value))throw new Error('Invalid thread setting.');t[key]=value;}
  else{const key=id.split(':').pop();if(!['archiveOnSuccess','lockOnSuccess','archiveOnFailure','archiveOnQuarantine'].includes(key))throw new Error('Invalid thread toggle.');t[key]=key==='archiveOnSuccess'?t[key]===false:!t[key];}
- save(i.guildId,{threadLogging:t},i.user.id);await respond(i,id.startsWith('admin:verification:threadToggle:')?threadPoliciesPage(i.guild,user):threadSettingsPage(i.guild,user));return true;}
+ save(i.guildId,{threadLogging:t},i.user.id);await respond(i,id==='admin:verification:threadChannel'?logsPage(i.guild,user,st):id.startsWith('admin:verification:threadToggle:')?threadPoliciesPage(i.guild,user):threadSettingsPage(i.guild,user));return true;}
  if(id==='admin:verification:logType'){st.logType=i.values?.[0]||'join';await respond(i,logsPage(i.guild,user,st));return true;}
- if(id==='admin:verification:clearEveryLog'){await respond(i,{embeds:[emb(emojiLabel('WARNING','Verification · Clear Log Destinations'),['**Confirmation required**','Removes the default channel and every category override. Existing Discord messages and channels are preserved. Thread settings are separate.','**Confirm Clear All:** Clear standard destinations.','**Cancel or Back:** Keep current routing.'],user,0xED4245)],components:[row(button('admin:verification:confirmClearEveryLog','Confirm Clear All',ButtonStyle.Danger),button('admin:verification:page:logs','Cancel')),finalNav('logs')]});return true;}
- if(id==='admin:verification:confirmClearEveryLog'){const c=settings(i.guildId);save(i.guildId,{logChannelId:null,logs:{...(c.logs||{}),...Object.fromEntries(LOG_TYPES.map(key=>[key+'ChannelId',null]))}},i.user.id);await respond(i,logsPage(i.guild,user,st));return true;}
+ if(id==='admin:verification:clearEveryLog'){await respond(i,{embeds:[emb(emojiLabel('WARNING','Verification · Clear Log Destinations'),['**Confirmation required**','Clears destinations for the active logging mode only. Existing Discord messages and channels are preserved.','**Confirm Clear All:** Clear active destinations.','**Cancel or Back:** Keep current routing.'],user,0xED4245)],components:[row(button('admin:verification:confirmClearEveryLog','Confirm Clear All',ButtonStyle.Danger),button('admin:verification:page:logs','Cancel')),finalNav('logs')]});return true;}
+ if(id==='admin:verification:confirmClearEveryLog'){const c=settings(i.guildId);save(i.guildId,c.threadLogging?.mode==='threaded'?{threadLogging:{...c.threadLogging,channelId:null}}:{logChannelId:null,logs:{...(c.logs||{}),...Object.fromEntries(LOG_TYPES.map(key=>[key+'ChannelId',null]))}},i.user.id);await respond(i,logsPage(i.guild,user,st));return true;}
  if(id.startsWith('admin:verification:logChannel:')){const type=id.slice('admin:verification:logChannel:'.length);if(!['default','all',...LOG_TYPES].includes(type))throw new Error('Unknown log category.');await i.deferUpdate();const c=settings(i.guildId),channelId=i.values?.[0]||null;if(type==='default')save(i.guildId,{logChannelId:channelId},i.user.id);else if(type==='all'){if(!channelId)throw new Error('Choose a channel.');save(i.guildId,{logChannelId:channelId,logs:{...(c.logs||{}),...Object.fromEntries(LOG_TYPES.map(x=>[x+'ChannelId',channelId]))}},i.user.id);}else save(i.guildId,{logs:{...(c.logs||{}),[type+'ChannelId']:channelId}},i.user.id);st.logType=type;await respond(i,logsPage(i.guild,user,st));return true;}
  if(id==='admin:verification:enable'||id==='admin:verification:disable'){guildManager.setModuleEnabled(i.guildId,'verification',id.endsWith(':enable'),{actorId:i.user.id,action:'verification_admin_toggle'});await respond(i,settingsGeneralPage(i.guild,user));return true;}
  if(id==='admin:verification:settings:raidLimits'){await i.showModal(raidLimitsModal(i.guildId));return true;}
