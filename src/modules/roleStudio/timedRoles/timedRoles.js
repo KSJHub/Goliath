@@ -198,11 +198,11 @@ function setMemberMilestoneOverride(guildId, memberId, ruleId, input, meta = {})
   }, meta);
 }
 
-function getMemberProgression(member, rules = listRules(member.guild.id)) {
-  const record = guildManager.getGuildSection(member.guild.id, 'membershipRecords', {}).members?.[member.id];
+function getMemberProgression(member, rules = listRules(member.guild.id), context = {}) {
+  const record = (context.membershipRecords || guildManager.getGuildSection(member.guild.id, 'membershipRecords', {}).members || {})[member.id];
   const joinedAt = record?.firstJoinedAt || member.joinedAt;
   const timestamp = Date.now();
-  const overrides = getSection(member.guild.id).memberOverrides?.[member.id] || {};
+  const overrides = (context.memberOverrides || getSection(member.guild.id).memberOverrides || {})[member.id] || {};
   const entries = rules.filter(rule => rule.enabled).map(rule => {
     const start = rule.startMode === 'custom' ? rule.customStartAt
       : rule.startMode === 'continuous' ? member.joinedAt : joinedAt;
