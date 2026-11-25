@@ -315,6 +315,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         </details>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={saveRule} disabled={saving === 'rule' || !draft.roleId} style={buttonStyle(theme, 'success')}>{saving === 'rule' ? 'Saving...' : editingRuleId ? 'Save Changes' : 'Create Milestone'}</button>
+          {!editingRuleId && <button type="button" disabled={!!saving || !draft.name.trim() || !Number.isInteger(draft.value) || draft.value<1 || draft.value>1000000 || (draft.startMode==='custom' && !draft.customStartAt)} style={buttonStyle(theme,'primary')} onClick={async()=>{if(draft.celebration?.celebrationGif && !/^https:\/\//i.test(draft.celebration.celebrationGif)){setError('Use an HTTPS image URL.');return;}if(!await goliathDialog.confirm('Create a new Discord reward role named '+draft.name+' with no additional permissions?',{title:'Create milestone and reward role',confirmLabel:'Create both'}))return;const result=await runAction('rule',()=>api.request('/api/timed-roles/'+guildId+'/rules/create-with-role',{method:'POST',body:JSON.stringify(draft)}),'Milestone and reward role created.');if(result)setDraft(emptyDraft);}}>Create Milestone and New Role</button>}
           {editingRuleId ? <button type="button" onClick={() => { setEditingRuleId(''); setDraft(emptyDraft); }} style={buttonStyle(theme)}>Cancel</button> : null}
         </div>
       </section>
