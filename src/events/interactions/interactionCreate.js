@@ -301,7 +301,7 @@ module.exports={
       if(startsWith(interaction,'social:creator:')){if(!await callHandler(socialCreatorActionCompat,'handle',interaction))throw new Error(`Social creator controls did not handle ${customId}.`);return;}
       if(startsWith(interaction,'admin:autoRoles')&&await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction))return;
       if(startsWith(interaction,'admin:temporaryRoles')&&await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction))return;
-      if(startsWith(interaction,'admin:timedRoles')&&await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction))return;
+      if(startsWith(interaction,'admin:timedRoles')){if(typeof timedRolesPanel?.handleTimedRolesInteraction!=='function')throw new Error('Timed Roles handler unavailable.');await timedRolesPanel.handleTimedRolesInteraction(interaction);return;}
       if(startsWith(interaction,'admin:welcome')&&await callHandler(welcomePanel,'handleWelcomeInteraction',interaction))return;
       if(startsWith(interaction,'admin:goodbye')&&await callHandler(goodbyePanel,'handleGoodbyeInteraction',interaction))return;
       if(startsWith(interaction,'admin:reactionRoles')&&await callHandler(reactionRolesAdminPanel,'handleReactionRolesAdminInteraction',interaction))return;
