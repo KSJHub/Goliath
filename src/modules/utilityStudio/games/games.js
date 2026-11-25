@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/ui/emojis');
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const { STORES, TYPES, CURRENCIES } = require('./gamesProviders');
@@ -114,7 +115,7 @@ const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Sourc
 function componentRow(...components) { return { type: 1, components }; }
 function panelButton(action, label, style = 2, disabled = false) {
   // Discord renders component emojis separately from button labels.
-  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶', '🩺'];
+  const icons = [`${EMOJIS.DIRECT_MESSAGE}`, `${EMOJIS.GAMEPAD}`, '💱', `${EMOJIS.DESIGN}`, '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶', `${EMOJIS.HEALTH}`];
   const leading = icons.find(icon => label.startsWith(icon + ' '));
   const trailing = label.endsWith(' ▶') ? '▶' : null;
   const emoji = leading || trailing;
@@ -136,34 +137,34 @@ function statusTime(value) { return value ? '<t:' + Math.floor(value / 1000) + '
 function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.id)) {
   const { escape, SECTIONS } = require('./gamesEmbeds');
   const back = gamesNavigation(page === 'home' ? 'studio' : page === 'settings' ? 'home' : 'settings', 'settings');
-  const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
-    panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
-  const embed = { title: page === 'home' ? '🎮 Games' : '🎮 Games · Free Games', color: SECTIONS[0].color,
+  const nav = componentRow(panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`),
+    panelButton('pricing', '💱 Currency'), panelButton('display', `${EMOJIS.DESIGN} Display`));
+  const embed = { title: page === 'home' ? `${EMOJIS.GAMEPAD} Games` : `${EMOJIS.GAMEPAD} Games · Free Games`, color: SECTIONS[0].color,
     description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
     fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
   let controls = [];
   if (page === 'settings') {
-    embed.title = '⚙️ Games · Settings';
+    embed.title = `${EMOJIS.SETTINGS} Games · Settings`;
     embed.description = [notice && escape(notice), 'Manage module availability, delivery and diagnostics. Changes sync with the dashboard.'].filter(Boolean).join('\n\n');
     const updates = getGameUpdates(guild.id);
     embed.fields = [
-      { name: '🎁 Free Games', value: c.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
+      { name: `${EMOJIS.GAME_GIFT} Free Games`, value: c.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
       { name: '📰 Game Updates', value: updates.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
-      { name: '🩺 Health', value: [
-        'Delivery: ' + (c.channelId ? '<#' + c.channelId + '>' : '⚠️ Channel not set'),
+      { name: `${EMOJIS.HEALTH} Health`, value: [
+        'Delivery: ' + (c.channelId ? '<#' + c.channelId + '>' : `${EMOJIS.WARNING} Channel not set`),
         'Last success: ' + statusTime(c.state.lastSuccess),
         'Last check: ' + statusTime(c.state.lastCheck),
         'Offers: ' + c.state.offerCount + ' · Published messages: ' + c.state.deliveries.length,
-        c.state.error ? '❌ Error: ' + escape(String(c.state.error)).slice(0, 400) : c.state.warning ? '⚠️ Warning: ' + escape(String(c.state.warning)).slice(0, 400) : 'No reported provider error',
+        c.state.error ? `${EMOJIS.ERROR} Error: ` + escape(String(c.state.error)).slice(0, 400) : c.state.warning ? `${EMOJIS.WARNING} Warning: ` + escape(String(c.state.warning)).slice(0, 400) : 'No reported provider error',
       ].join('\n'), inline: false },
     ];
     controls = [
       componentRow(panelButton('enabled', c.enabled ? '⏸ Disable Free Games' : '▶ Enable Free Games', c.enabled ? 2 : 3),
-        panelButton('updates:home:0', '📰 Game Updates'), panelButton('delivery', '📨 Delivery')),
-      componentRow(panelButton('health', '🩺 Health'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+        panelButton('updates:home:0', '📰 Game Updates'), panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`)),
+      componentRow(panelButton('health', `${EMOJIS.HEALTH} Health`), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
     ];
   } else if (page === 'health') {
-    embed.title = '🩺 Games · Health';
+    embed.title = `${EMOJIS.HEALTH} Games · Health`;
     const updates = getGameUpdates(guild.id);
     embed.description = [notice && escape(notice), '**Free Games:** ' + (c.enabled ? 'Enabled' : 'Disabled'), '**Game Updates:** ' + (updates.enabled ? 'Enabled' : 'Disabled')].filter(Boolean).join('\n');
     embed.fields = [
@@ -200,7 +201,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     const id = page.slice(6);
     const route = effectiveDestinations(c).find(item => item.channelId === id);
     if (!route) throw new Error('Destination not found.');
-    embed.title = '📨 Free Games · Channel Rules';
+    embed.title = `${EMOJIS.DIRECT_MESSAGE} Free Games · Channel Rules`;
     embed.description = '<#' + id + '> · Configure this destination independently.';
     embed.fields = [
       { name: 'Status', value: route.enabled ? 'Enabled' : 'Paused', inline: true },
@@ -246,17 +247,17 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   } else {
     embed.description = [
       notice && escape(notice),
-      '**🎁 Free Games** ' + (c.enabled ? '🟢 On' : '⏸ Off') + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? '🟢 On' : '⏸ Off'),
-      '**📨 Delivery** ' + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
-      '**🎮 Catalogue** ' + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
+      `**${EMOJIS.GAME_GIFT} Free Games** ` + (c.enabled ? '🟢 On' : '⏸ Off') + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? '🟢 On' : '⏸ Off'),
+      `**${EMOJIS.DIRECT_MESSAGE} Delivery** ` + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
+      `**${EMOJIS.GAMEPAD} Catalogue** ` + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
       '**🕒 Synced** ' + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
     ].filter(Boolean).join('\n');
     embed.fields = [];
     if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
     controls = [
       componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', '👁 Preview'),
-        panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'), panelButton('pricing', '💱 Currency')),
-      componentRow(panelButton('display', '🎨 Display'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+        panelButton('delivery', `${EMOJIS.DIRECT_MESSAGE} Delivery`), panelButton('filters', `${EMOJIS.GAMEPAD} Offers`), panelButton('pricing', '💱 Currency')),
+      componentRow(panelButton('display', `${EMOJIS.DESIGN} Display`), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
       gamesNavigation('studio', 'settings'),
     ];
   }
@@ -280,7 +281,7 @@ async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
   const totalPages = Math.max(1, Math.ceil(candidates.length / 25));
   const page = Math.min(Math.max(0, requestedPage), totalPages - 1);
   const payload = buildAdminPanel(guild, 'display', notice, c);
-  payload.embeds[0].title = '🎁 Free Games · Featured main game';
+  payload.embeds[0].title = `${EMOJIS.GAME_GIFT} Free Games · Featured main game`;
   payload.embeds[0].description = [notice && escape(notice),
     'One main game above the compact list, in the same embed. Automatic selection follows GamerPower’s popularity order among full games on the selected major stores. DLC, loot, demos and trials are excluded.',
     selected ? '**Current feature:** ' + escape(shortTitle(selected.title)) : 'No eligible main game is available.',
