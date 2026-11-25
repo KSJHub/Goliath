@@ -5207,6 +5207,7 @@ async function freeGamesAudit() {
       if (name.endsWith('/security/protection/core')) return { isBotOwner: () => false };
       if (name.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
       if (name === 'discord.js') return require('discord.js');
+      if (name === '../../../core/ui/emojis') return require('../src/core/ui/emojis');
       throw new Error('Unexpected Free Games panel dependency: ' + name);
     };
     const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/games.js', 'utf8');
