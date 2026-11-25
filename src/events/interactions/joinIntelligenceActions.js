@@ -36,7 +36,7 @@ async function refreshJoinReport(interaction, watched, cleared = false) {
   const message = interaction.message;
   if (!message?.edit || !message.embeds?.length) return;
   const original = message.embeds[0];
-  if (!String(original.title || '').startsWith('🧠 Join Intelligence')) return;
+  if (!String(original.title || '').startsWith(`${EMOJIS.BRAIN} Join Intelligence`)) return;
   const embed = EmbedBuilder.from(original);
   const fields = (original.fields || []).map(field => ({ ...field }));
   const risk = fields.find(field => field.name?.includes('Risk'));
@@ -53,7 +53,7 @@ async function refreshJoinReport(interaction, watched, cleared = false) {
   }
   embed.setFields(fields);
   if (cleared) {
-    embed.setDescription(String(original.description || '').replace(/[^\n]*\*\*Decision: [^\n]+/, '🟢 **Decision: CLEAR**'));
+    embed.setDescription(String(original.description || '').replace(/[^\n]*\*\*Decision: [^\n]+/, `${EMOJIS.ACTIVE} **Decision: CLEAR**`));
     embed.setColor(0x57F287);
   }
   const rows = (message.components || []).map(row => {
@@ -98,7 +98,7 @@ async function buildEphemeralIntelligence(interaction, target) {
 
   const embed = new EmbedBuilder()
     .setColor(decision.color)
-    .setTitle(`🧠 Member Intelligence • ${target.user.tag || target.user.username}`)
+    .setTitle(`${EMOJIS.BRAIN} Member Intelligence • ${target.user.tag || target.user.username}`)
     .setDescription([
       `**Target:** ${target.user} • \`${target.id}\``,
       `${decision.emoji} **${decision.label}** • Risk **${assessment.riskScore}/100**`,
@@ -107,29 +107,29 @@ async function buildEphemeralIntelligence(interaction, target) {
     ].join('\n'))
     .addFields(
       {
-        name: '🚦 Risk Breakdown',
-        value: [`**${context.risk?.score || 0}/100 • ${context.risk?.label || '🟢 Low'}**`, riskFactorLines(context)].join('\n').slice(0, 1024),
+        name: `${EMOJIS.STATUS} Risk Breakdown`,
+        value: [`**${context.risk?.score || 0}/100 • ${context.risk?.label || `${EMOJIS.ACTIVE} Low`}**`, riskFactorLines(context)].join('\n').slice(0, 1024),
         inline: false,
       },
       {
-        name: '⚖️ Moderation',
+        name: `${EMOJIS.JUSTICE} Moderation`,
         value: `Local cases **${local.caseCount}** • Active **${local.activeCases}** • Warnings **${local.warningCount}** • Timeouts **${local.timeouts}** • Bans **${local.bans}**`,
         inline: false,
       },
       {
-        name: '🌐 Network',
+        name: `${EMOJIS.NETWORK} Network`,
         value: `Observed guilds **${history.length}** • Cross-guild cases **${context.network?.caseCount || 0}** • Cross-guild bans **${context.network?.banCount || 0}** • External records **${externalCount}**`,
         inline: false,
       },
       {
-        name: '🔗 Correlation',
+        name: `${EMOJIS.LINK} Correlation`,
         value: correlation
           ? `Highest current heuristic match **${correlation.score}%** with ${correlation.member.user}\n${correlation.signals.slice(0, 5).map((signal) => `• ${signal}`).join('\n')}\n\n*Correlation is an investigation aid, not proof of shared ownership.*`
           : 'No heuristic account correlations found in the current guild cache.',
         inline: false,
       },
       {
-        name: '👁️ Investigation State',
+        name: `${EMOJIS.WELCOME_PREVIEW} Investigation State`,
         value: `Investigation Watch **${watchOn ? 'ON' : 'OFF'}** • Global watch state **${String(context.watch?.state || 'clear').toUpperCase()}**`,
         inline: false,
       },
@@ -161,14 +161,14 @@ module.exports = {
       await interaction.deferReply({ flags: 64 });
       const [, action, guildId, userId] = id.split(':');
       if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\d{15,25}$/.test(userId || '')) {
-        await interaction.editReply({ content: '❌ That intelligence action is no longer valid.' });
+        await interaction.editReply({ content: `${EMOJIS.ERROR} That intelligence action is no longer valid.` });
         return;
       }
 
       const allowed = canUseModAction(interaction.member, interaction.guild, 'scan_run', interaction)
         || canUseModAction(interaction.member, interaction.guild, 'view_case_detail', interaction);
       if (!allowed) {
-        await interaction.editReply({ content: '❌ You do not have permission to manage Member Intelligence.' });
+        await interaction.editReply({ content: `${EMOJIS.ERROR} You do not have permission to manage Member Intelligence.` });
         return;
       }
 
@@ -177,7 +177,7 @@ module.exports = {
       if (action === 'clear') {
         const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
         await interaction.editReply({
-          content: `✅ <@${userId}> has been reviewed and marked **CLEAR** in Member Intelligence. This does not erase moderation history or watchlist evidence.`,
+          content: `${EMOJIS.SUCCESS} <@${userId}> has been reviewed and marked **CLEAR** in Member Intelligence. This does not erase moderation history or watchlist evidence.`,
           allowedMentions: { parse: [] },
         });
         console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
@@ -187,7 +187,7 @@ module.exports = {
 
       const target = await resolveTarget(interaction, userId);
       if (!target) {
-        await interaction.editReply({ content: '❌ That member is no longer available in this server.' }).catch(() => null);
+        await interaction.editReply({ content: `${EMOJIS.ERROR} That member is no longer available in this server.` }).catch(() => null);
         return;
       }
 
@@ -210,13 +210,13 @@ module.exports = {
           metadata: { targetId: userId, source: 'join_intelligence_report' },
         });
         if (!audit) {
-          await interaction.editReply({ content: '❌ Investigation Watch could not be saved. The report was not changed; please try again.' });
+          await interaction.editReply({ content: `${EMOJIS.ERROR} Investigation Watch could not be saved. The report was not changed; please try again.` });
           return;
         }
         await interaction.editReply({
           content: before
-            ? `👁️ ${target.user} has been **removed** from Investigation Watch.`
-            : `👁️ ${target.user} is now on **Investigation Watch**.`,
+            ? `${EMOJIS.WELCOME_PREVIEW} ${target.user} has been **removed** from Investigation Watch.`
+            : `${EMOJIS.WELCOME_PREVIEW} ${target.user} is now on **Investigation Watch**.`,
         });
         await refreshJoinReport(interaction, !before).catch(error => console.error('[Join Intelligence] Report refresh failed:', error));
         return;
