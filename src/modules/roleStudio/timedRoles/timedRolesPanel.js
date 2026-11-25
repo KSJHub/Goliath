@@ -221,6 +221,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       .setDescription([
         `**Award role:** ${guild.roles.cache.has(rule.roleId) ? `<@&${rule.roleId}>` : 'Missing — create a replacement role below.'}`,
         `**Required tenure:** ${formatDuration(rule)}`,
+        `**Starting point:** ${rule.startMode==='custom' ? displayInputDate(rule.customStartAt) : rule.startMode==='continuous' ? 'Continuous membership' : 'Original membership'}`,
         `**Status:** ${rule.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.USER_PAUSE}`}`,
         `**Additional roles removed:** ${rule.removeRoleIds.length ? rule.removeRoleIds.map((id) => `<@&${id}>`).join(', ') : '`None`'}`,
         `**Last scan:** ${formatTimestamp(rule.lastRunAt)}`,
@@ -229,7 +230,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       ].filter(Boolean).join('\n'))],
     components: [
       ...cleanupPicker.rows,
-      ...(!guild.roles.cache.has(rule.roleId) ? [row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:replaceReward:${rule.ruleId}`).setPlaceholder('Select existing replacement role').setMinValues(1).setMaxValues(1))] : []),
+      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:replaceReward:${rule.ruleId}`).setPlaceholder('Choose milestone reward role').setMinValues(1).setMaxValues(1)),
       row(
         button(`${PREFIX}:edit:${rule.ruleId}`, emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary),
         ...(guild.roles.cache.has(rule.roleId) ? [] : [button(`${PREFIX}:recoverRole:${rule.ruleId}`, 'Create Reward Role', ButtonStyle.Primary)]),
@@ -339,12 +340,22 @@ function buildCelebrationPanel(guildId) {
     ],
   };
 }
+function displayInputDate(value) {
+  const iso=String(value || '').slice(0,10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('-') : '';
+}
+function parseInputDate(value) {
+  if(!value)return null;
+  const iso=/^\d{2}-\d{2}-\d{4}$/.test(value) ? value.split('-').reverse().join('-') : '';
+  if(!iso || !Number.isFinite(Date.parse(iso)) || new Date(iso).toISOString().slice(0,10)!==iso)throw new Error('Enter a valid date in DD-MM-YYYY format.');
+  return iso;
+}
 function readStartingPoint(interaction) {
-  const startMode = interaction.fields.getStringSelectValues('startMode')[0];
-  const date = interaction.fields.getTextInputValue('customStartAt').trim();
-  if (!['original', 'continuous', 'custom'].includes(startMode)) throw new Error('Choose original, continuous or custom.');
-  if (startMode === 'custom' && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw new Error('Enter a valid custom date in YYYY-MM-DD format.');
-  return { startMode, customStartAt: startMode === 'custom' ? date : null };
+  const selected = interaction.fields.getStringSelectValues('startMode')[0];
+  const date = parseInputDate(interaction.fields.getTextInputValue('customStartAt').trim());
+  if (!['original','continuous','custom'].includes(selected)) throw new Error('Choose original, continuous or custom.');
+  if(selected==='custom' && !date)throw new Error('Enter a custom start date in DD-MM-YYYY format.');
+  return {startMode:date?'custom':selected,customStartAt:date};
 }
 function buildRuleModal(customId, title, rule = {}) {
   const field = (label, input) => new LabelBuilder().setLabel(label).setTextInputComponent(input);
@@ -357,7 +368,7 @@ function buildRuleModal(customId, title, rule = {}) {
     field('Time value', new TextInputBuilder().setCustomId('value').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(6).setValue(String(rule.value || 1))),
     select('Time unit', 'unit', ['minutes','hours','days','weeks','months','years'].map(unit => [unit, unit[0].toUpperCase() + unit.slice(1)]), rule.unit || 'months'),
     select('Starting point', 'startMode', [['original','Original membership'],['continuous','Continuous membership'],['custom','Custom date']], rule.startMode || 'original'),
-    field('Custom start date (YYYY-MM-DD)', new TextInputBuilder().setCustomId('customStartAt').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10).setValue(rule.customStartAt?.slice(0, 10) || '')),
+    field('Custom start date (DD-MM-YYYY)', new TextInputBuilder().setCustomId('customStartAt').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10).setValue(displayInputDate(rule.customStartAt))),
   );
 }
 function buildIntervalModal(current) {
@@ -509,17 +520,17 @@ async function handleTimedRolesInteraction(interaction) {
         const current = timedRoles.getSection(interaction.guild.id).memberOverrides?.[memberId]?.[ruleId] || {};
         const dateField = (id, label) => {
           const input = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10);
-          if (current[id]) input.setValue(current[id].slice(0,10));
+          if (current[id]) input.setValue(displayInputDate(current[id]));
           return row(input);
         };
-        return interaction.showModal(new ModalBuilder().setCustomId(PREFIX + ':overrideSubmit:' + memberId + ':' + ruleId).setTitle('Individual milestone schedule').addComponents(dateField('startAt','Start date (YYYY-MM-DD)'),dateField('dueAt','Due date (YYYY-MM-DD)')));
+        return interaction.showModal(new ModalBuilder().setCustomId(PREFIX + ':overrideSubmit:' + memberId + ':' + ruleId).setTitle('Individual milestone schedule').addComponents(dateField('startAt','Start date (DD-MM-YYYY)'),dateField('dueAt','Due date (DD-MM-YYYY)')));
       }
       const dates = {};
       for (const key of ['startAt','dueAt']) {
         const value = interaction.fields.getTextInputValue(key).trim();
-        if (value && (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10) !== value)) throw new Error('Enter valid dates in YYYY-MM-DD format.');
-        dates[key] = value || null;
+        dates[key] = parseInputDate(value);
       }
+      if(dates.startAt && dates.dueAt && dates.dueAt<dates.startAt)throw new Error('Due date cannot precede start date.');
       timedRoles.setMemberMilestoneOverride(interaction.guild.id, memberId, ruleId, dates, { actorId: interaction.user.id });
       return refresh(interaction, buildMembershipRecordPanel(interaction.guild, memberId, true));
     }
@@ -535,11 +546,11 @@ async function handleTimedRolesInteraction(interaction) {
           const rule = timedRoles.getRule(guild.id, customId.split(':').pop());
           if (!rule) throw new Error('Milestone no longer exists.');
           const roles = await guild.roles.fetch();
-          if (roles.has(rule.roleId)) throw new Error('The original reward role still exists.');
+          if (interaction.values[0] === rule.roleId) return;
           const role = roles.get(interaction.values[0]);
           if (!role || role.id === guild.id || role.managed || role.position >= guild.members.me.roles.highest.position) throw new Error('Choose a manageable reward role.');
           if (timedRoles.listRules(guild.id).some(other => other.ruleId !== rule.ruleId && other.roleId === role.id)) throw new Error('This role is already assigned to a milestone.');
-          timedRoles.saveRule(guild.id, { ...rule, roleId: role.id }, { actorId: interaction.user.id });
+          timedRoles.saveRule(guild.id, { ...rule, roleId: role.id, removeRoleIds:rule.removeRoleIds.filter(id=>id!==role.id), lastError:null }, { actorId: interaction.user.id });
           return;
         }
         const name = interaction.fields.getTextInputValue('name').trim();
@@ -556,7 +567,7 @@ async function handleTimedRolesInteraction(interaction) {
           throw new Error('Role created (' + role.id + ') but milestone save failed. Select the existing role to retry: ' + error.message);
         }
       });
-      return refresh(interaction);
+      return refresh(interaction, customId.startsWith(PREFIX + ':replaceReward:') ? buildRulePanel(interaction.guild,customId.split(':').pop()) : null);
     }
     if (customId.startsWith(PREFIX + ':recoverRole:')) {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
