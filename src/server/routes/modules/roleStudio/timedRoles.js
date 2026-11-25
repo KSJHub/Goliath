@@ -104,6 +104,11 @@ router.patch('/:guildId/settings', async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(patch,'recordsAccess')) {
       const target = await guild(req,id);
       if (!target || target.ownerId !== actor(req)) return fail(res,new Error('Only the guild owner may change membership record access.'),403);
+      const access=patch.recordsAccess;
+      if(!access || typeof access.allowAdministrators!=='boolean' || !Array.isArray(access.roleIds) || access.roleIds.length>10)throw new Error('Invalid membership access settings.');
+      const roles=await target.roles.fetch();
+      if(access.roleIds.some(roleId=>typeof roleId!=='string' || roleId===id || !roles.has(roleId)))throw new Error('Select valid guild access roles other than @everyone.');
+      patch.recordsAccess={allowAdministrators:access.allowAdministrators,roleIds:[...new Set(access.roleIds)]};
     }
     timedRoles.updateSettings(id, patch, { actorId: actor(req), action: 'timed_roles_dashboard_settings' });
     return ok(res, await overview(req, id));
@@ -227,7 +232,9 @@ async function requireRecordsAccess(req,res,next) {
     const target = await guild(req,id);
     const userId = cleanDiscordId(req.session?.user?.id);
     if(!userId)return res.status(401).json({success:false,error:'Authentication required.'});
-    const member = target && await target.members.fetch(userId).catch(() => null);
+    const member = target && await target.members.fetch({user:userId,force:true}).catch(() => null);
+    if(!target || !member)return fail(res,new Error('Membership record access denied.'),403);
+    req.timedRolesActorId=userId;
     const access = timedRoles.getSection(id).settings.recordsAccess || {};
     if (!target || !(target.ownerId === userId || (access.allowAdministrators !== false && member?.permissions.has(PermissionFlagsBits.Administrator)) || (Array.isArray(access.roleIds) ? access.roleIds : []).some(roleId => roleId !== id && member?.roles.cache.has(roleId)))) return fail(res,new Error('Membership record access denied.'),403);
     res.setHeader('Cache-Control','no-store');
