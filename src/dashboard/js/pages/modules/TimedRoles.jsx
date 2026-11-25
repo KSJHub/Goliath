@@ -7,6 +7,21 @@ import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
 import { ChannelSelect, RoleSelect } from '../../ui/DiscordResourceSelects.jsx';
 
+function ukDate(value) {
+  const iso=String(value || '').slice(0,10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso)?iso.split('-').reverse().join('-'):'';
+}
+function isoDate(value) {
+  if(!value)return '';
+  const iso=/^\d{2}-\d{2}-\d{4}$/.test(value)?value.split('-').reverse().join('-'):'';
+  if(!iso || !Number.isFinite(Date.parse(iso)) || new Date(iso).toISOString().slice(0,10)!==iso)throw new Error('Enter a valid date in DD-MM-YYYY format.');
+  return iso;
+}
+function rulePayload(draft) {
+  const customStartAt=isoDate(draft.customStartAt);
+  if(draft.startMode==='custom'&&!customStartAt)throw new Error('Enter a custom start date.');
+  return {...draft,startMode:customStartAt?'custom':draft.startMode,customStartAt:customStartAt||null};
+}
 function getGuildId(selectedGuild, selectedGuildData) {
   return String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '').split(':').pop().trim();
 }
@@ -81,7 +96,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     const requestedGuild=guildId, memberId=record?.memberId;
     if(!memberId || !schedule.ruleId)return;
     setRecordBusy(true);setRecordError('');
-    try {const result=await api.request('/api/timed-roles/'+requestedGuild+'/records/'+memberId+'/overrides/'+encodeURIComponent(schedule.ruleId),{method:'PUT',body:JSON.stringify({startAt:schedule.startAt,dueAt:schedule.dueAt})});if(activeGuild.current===requestedGuild)setRecord(current=>current?.memberId===memberId?{...current,overrides:result.overrides}:current);}
+    try {const result=await api.request('/api/timed-roles/'+requestedGuild+'/records/'+memberId+'/overrides/'+encodeURIComponent(schedule.ruleId),{method:'PUT',body:JSON.stringify({startAt:isoDate(schedule.startAt),dueAt:isoDate(schedule.dueAt)})});if(activeGuild.current===requestedGuild)setRecord(current=>current?.memberId===memberId?{...current,overrides:result.overrides}:current);}
     catch(error){if(activeGuild.current===requestedGuild)setRecordError(error.message || 'Schedule update failed.');}
     finally{if(activeGuild.current===requestedGuild)setRecordBusy(false);}
   }
@@ -205,7 +220,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
       ? `/api/timed-roles/${guildId}/rules/${editingRuleId}`
       : `/api/timed-roles/${guildId}/rules`;
     const method = editingRuleId ? 'PUT' : 'POST';
-    const result = await runAction('rule', () => api.request(path, { method, body: JSON.stringify(draft) }), editingRuleId ? 'Milestone updated.' : 'Milestone created.');
+    const result = await runAction('rule', () => api.request(path, { method, body: JSON.stringify(rulePayload(draft)) }), editingRuleId ? 'Milestone updated.' : 'Milestone created.');
     if (result) {
       setDraft(emptyDraft);
       setEditingRuleId('');
@@ -220,7 +235,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
       value: rule.value,
       unit: rule.unit,
       startMode: rule.startMode || 'original',
-      customStartAt: rule.customStartAt?.slice(0,10) || '',
+      customStartAt: ukDate(rule.customStartAt),
       removeRoleIds: rule.removeRoleIds || [],
       enabled: rule.enabled !== false,
       celebration: {...(rule.celebration || {})},
@@ -305,7 +320,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
           <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Unit<ThemedSelect theme={theme} value={draft.unit} onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))} style={fieldStyle(theme)}>{['minutes', 'hours', 'days', 'weeks', 'months', 'years'].map((unit) => <option key={unit} value={unit}>{unit}</option>)}</ThemedSelect></label>
         </div>
         <label>Starting point <ThemedSelect theme={theme} value={draft.startMode} onChange={event=>setDraft(current=>({...current,startMode:event.target.value}))} style={fieldStyle(theme)}><option value="original">Original known guild join</option><option value="continuous">Latest guild join</option><option value="custom">Custom date</option></ThemedSelect></label>
-        {draft.startMode === 'custom' && <label>Custom start date<input type="date" value={draft.customStartAt} onChange={event=>setDraft(current=>({...current,customStartAt:event.target.value}))} style={fieldStyle(theme)} /></label>}
+        {draft.startMode === 'custom' && <label>Custom start date (DD-MM-YYYY)<input type="text" placeholder="DD-MM-YYYY" maxLength={10} value={draft.customStartAt} onChange={event=>setDraft(current=>({...current,customStartAt:event.target.value}))} style={fieldStyle(theme)} /></label>}
         <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Cleanup roles (optional)
           <ThemedSelect theme={theme} multiple size={Math.min(6, Math.max(3, cleanupRoles.length))} value={draft.removeRoleIds} onChange={(event) => setDraft((current) => ({ ...current, removeRoleIds: Array.from(event.target.selectedOptions, (option) => option.value) }))} style={fieldStyle(theme)}>
             {cleanupRoles.map((role) => <option key={role.id} value={role.id}>{role.name || role.id}</option>)}
@@ -325,7 +340,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         </details>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={saveRule} disabled={saving === 'rule' || !draft.roleId} style={buttonStyle(theme, 'success')}>{saving === 'rule' ? 'Saving...' : editingRuleId ? 'Save Changes' : 'Create Milestone'}</button>
-          {!editingRuleId && <button type="button" disabled={!!saving || !draft.name.trim() || !Number.isInteger(draft.value) || draft.value<1 || draft.value>1000000 || (draft.startMode==='custom' && !draft.customStartAt)} style={buttonStyle(theme,'primary')} onClick={async()=>{if(draft.celebration?.celebrationGif && !/^https:\/\//i.test(draft.celebration.celebrationGif)){setError('Use an HTTPS image URL.');return;}if(!await goliathDialog.confirm('Create a new Discord reward role named '+draft.name+' with no additional permissions?',{title:'Create milestone and reward role',confirmLabel:'Create both'}))return;const result=await runAction('rule',()=>api.request('/api/timed-roles/'+guildId+'/rules/create-with-role',{method:'POST',body:JSON.stringify(draft)}),'Milestone and reward role created.');if(result)setDraft(emptyDraft);}}>Create Milestone and New Role</button>}
+          {!editingRuleId && <button type="button" disabled={!!saving || !draft.name.trim() || !Number.isInteger(draft.value) || draft.value<1 || draft.value>1000000 || (draft.startMode==='custom' && !draft.customStartAt)} style={buttonStyle(theme,'primary')} onClick={async()=>{if(draft.celebration?.celebrationGif && !/^https:\/\//i.test(draft.celebration.celebrationGif)){setError('Use an HTTPS image URL.');return;}if(!await goliathDialog.confirm('Create a new Discord reward role named '+draft.name+' with no additional permissions?',{title:'Create milestone and reward role',confirmLabel:'Create both'}))return;const result=await runAction('rule',()=>api.request('/api/timed-roles/'+guildId+'/rules/create-with-role',{method:'POST',body:JSON.stringify(rulePayload(draft))}),'Milestone and reward role created.');if(result)setDraft(emptyDraft);}}>Create Milestone and New Role</button>}
           {editingRuleId ? <button type="button" onClick={() => { setEditingRuleId(''); setDraft(emptyDraft); }} style={buttonStyle(theme)}>Cancel</button> : null}
         </div>
       </section>
@@ -356,7 +371,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         </div>
         {recordError && <p role="alert">{recordError}</p>}
         {records && <div><p>{records.total} records · Page {records.page+1}</p>{records.records.map(item=><div key={item.id} style={{padding:8}}><button style={buttonStyle(theme)} disabled={recordBusy} onClick={()=>loadRecords(0,item.id)}>{item.id}</button> {item.active===true?'Active':item.active===false?'Departed':'Unknown'} · {item.firstJoinedAt || 'Unknown join'}</div>)}<button style={buttonStyle(theme)} disabled={recordBusy || records.page===0} onClick={()=>loadRecords(records.page-1)}>Previous</button> <button style={buttonStyle(theme)} disabled={recordBusy || (records.page+1)*25>=records.total} onClick={()=>loadRecords(records.page+1)}>Next</button></div>}
-        {record && <div><h3>Member details</h3><p>Original join: {record.record.firstJoinedAt || 'Unknown'}</p><p>Latest join: {record.record.lastJoinedAt || 'Unknown'}</p><p>Last departure: {record.record.lastLeftAt || 'Unknown'}</p><h3>Achievements</h3>{Object.entries(record.achievements || {}).map(([id,item])=><p key={id}>{item.milestoneName || config?.rules?.[id]?.name || id} · {item.achievedAt} · {item.celebration}</p>)}<h3>Individual schedules</h3><div style={{display:'grid',gap:8}}><label>Milestone<ThemedSelect theme={theme} value={schedule.ruleId} onChange={e=>{const ruleId=e.target.value,item=record.overrides?.[ruleId];setSchedule({ruleId,startAt:item?.startAt?.slice(0,10)||'',dueAt:item?.dueAt?.slice(0,10)||''});}} style={fieldStyle(theme)}><option value="">Select milestone</option>{rules.map(rule=><option key={rule.ruleId} value={rule.ruleId}>{rule.name}</option>)}</ThemedSelect></label><label>Custom starting date<input type="date" value={schedule.startAt} onChange={e=>setSchedule(current=>({...current,startAt:e.target.value}))} style={fieldStyle(theme)}/></label><label>Custom due date<input type="date" value={schedule.dueAt} onChange={e=>setSchedule(current=>({...current,dueAt:e.target.value}))} style={fieldStyle(theme)}/></label><p>Blank dates restore the default milestone schedule. Administrator access required to save.</p><button type="button" disabled={recordBusy || !schedule.ruleId} onClick={saveSchedule} style={buttonStyle(theme,'primary')}>Save individual schedule</button></div>{Object.entries(record.overrides || {}).map(([id,item])=><p key={id}>{config?.rules?.[id]?.name || id} · {item.startAt || 'Default start'} · {item.dueAt || 'Calculated due date'}</p>)}</div>}
+        {record && <div><h3>Member details</h3><p>Original join: {record.record.firstJoinedAt || 'Unknown'}</p><p>Latest join: {record.record.lastJoinedAt || 'Unknown'}</p><p>Last departure: {record.record.lastLeftAt || 'Unknown'}</p><h3>Achievements</h3>{Object.entries(record.achievements || {}).map(([id,item])=><p key={id}>{item.milestoneName || config?.rules?.[id]?.name || id} · {item.achievedAt} · {item.celebration}</p>)}<h3>Individual schedules</h3><div style={{display:'grid',gap:8}}><label>Milestone<ThemedSelect theme={theme} value={schedule.ruleId} onChange={e=>{const ruleId=e.target.value,item=record.overrides?.[ruleId];setSchedule({ruleId,startAt:ukDate(item?.startAt),dueAt:ukDate(item?.dueAt)});}} style={fieldStyle(theme)}><option value="">Select milestone</option>{rules.map(rule=><option key={rule.ruleId} value={rule.ruleId}>{rule.name}</option>)}</ThemedSelect></label><label>Custom starting date (DD-MM-YYYY)<input type="text" placeholder="DD-MM-YYYY" maxLength={10} value={schedule.startAt} onChange={e=>setSchedule(current=>({...current,startAt:e.target.value}))} style={fieldStyle(theme)}/></label><label>Custom due date (DD-MM-YYYY)<input type="text" placeholder="DD-MM-YYYY" maxLength={10} value={schedule.dueAt} onChange={e=>setSchedule(current=>({...current,dueAt:e.target.value}))} style={fieldStyle(theme)}/></label><p>Blank dates restore the default milestone schedule. Administrator access required to save.</p><button type="button" disabled={recordBusy || !schedule.ruleId} onClick={saveSchedule} style={buttonStyle(theme,'primary')}>Save individual schedule</button></div>{Object.entries(record.overrides || {}).map(([id,item])=><p key={id}>{config?.rules?.[id]?.name || id} · {item.startAt || 'Default start'} · {item.dueAt || 'Calculated due date'}</p>)}</div>}
       </section>
       <section style={{...cardStyle,padding:22,display:'grid',gap:12}}>
         <h2 style={{margin:0}}>Audit History</h2>
