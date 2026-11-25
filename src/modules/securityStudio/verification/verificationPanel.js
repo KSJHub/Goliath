@@ -20,7 +20,7 @@ const MESSAGE_TYPES=['start','success','failed','retry','cooldown','screeningReq
 const sessions=new Map();
 const row=(...x)=>new ActionRowBuilder().addComponents(...x.filter(Boolean));
 const button=(id,label,style=ButtonStyle.Secondary,disabled=false)=>navigationButton(id,label,style,disabled);
-const toggle=(id,label,on)=>button(id,`${on ? EMOJIS.ENABLED : EMOJIS.DISABLED} ${label}`,on?ButtonStyle.Success:ButtonStyle.Danger);
+const toggle=(id,label,on)=>button(id,`${on ? EMOJIS.ENABLED : EMOJIS.DISABLED} ${label}`,ButtonStyle.Secondary);
 const title=s=>s[0].toUpperCase()+s.slice(1).replace(/([A-Z])/g,' $1');
 const who=i=>i.member?.displayName||i.user?.displayName||i.user?.username||'Unknown User';
 function state(i){const k=`${i.guildId}:${i.user.id}`,v=sessions.get(k)||{roleType:'pending',logType:'default',messageType:'start',rolePage:0};sessions.set(k,v);return v;}
@@ -148,17 +148,17 @@ function logsPage(g,user,st){
  if(current&&g.channels.cache.has(current))channel.setDefaultChannels(current);
  const roles=new RoleSelectMenuBuilder().setCustomId('admin:verification:logPingRoles').setPlaceholder('Select roles to notify').setMinValues(0).setMaxValues(10);
  if(c.logPingRoles?.length)roles.setDefaultRoles(...c.logPingRoles.filter(id=>g.roles.cache.has(id)).slice(0,10));
- const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Logs'),['Select one logging mode. The other automatically switches off. Category choices are shared between both modes.'],user).addFields(
- {name:'1 · Logging mode',value:`**Channel Logs:** ${threaded?`${EMOJIS.DISABLED} Off`:`${EMOJIS.ENABLED} On`}   ·   **Thread Logs:** ${threaded?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}`,inline:false},
- {name:'2 · Destination',value:threaded?'**Security Passports:** '+channelText(c.threadLogging?.channelId)+'\\nAll enabled categories go to a single private member thread.':'**Default:** '+channelText(c.logChannelId)+'\\nCategory destinations apply only in Channel Logs mode.',inline:false},
- {name:'3 · Enabled categories',value:LOG_TYPES.map(x=>`${enabled.includes(x)?EMOJIS.ENABLED:EMOJIS.INACTIVE} **${title(x)}**${!threaded&&c.logs?.[x+'ChannelId']?' → '+channelText(c.logs[x+'ChannelId']):''}`).join('\\n'),inline:false},
- {name:'4 · Editing: '+title(type),value:`**Status:** ${enabled.includes(type)?'Enabled':'Disabled'}\\n**Destination:** ${channelText(current)}`,inline:false},
- {name:'5 · Role notifications',value:`**Roles:** ${roleText(g,c.logPingRoles||[])}\\n**New thread:** ${c.logPingOnThread?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}   ·   **New post:** ${c.logPingOnPost?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}\\nOnly selected roles should be mentioned. Discord permissions still apply.`,inline:false});
+ const embed=emb(emojiLabel('INCIDENT_AUDIT','Verification · Logs'),['Configure channel and Security Passport logging.','Only one logging mode can be active at a time.'],user,guildManager.isModuleEnabled(g.id,'verification')?0x57F287:0x5865F2).addFields(
+ {name:`1 · ${EMOJIS.SETTINGS} Logging mode`,value:`**Channel Logs:** ${threaded?`${EMOJIS.DISABLED} Off`:`${EMOJIS.ENABLED} On`}   ·   **Thread Logs:** ${threaded?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}`,inline:false},
+ {name:`2 · ${EMOJIS.DOCUMENT} Destination`,value:threaded?'**Security Passports:** '+channelText(c.threadLogging?.channelId)+'\nAll enabled categories go to a single private member thread. Guild-wide events stay in the staff-only parent.':'**Default:** '+channelText(c.logChannelId)+'\nCategory destinations apply only in Channel Logs mode.',inline:false},
+ {name:`3 · ${EMOJIS.INCIDENT_AUDIT} Log categories`,value:LOG_TYPES.map(x=>`${enabled.includes(x)?EMOJIS.ENABLED:EMOJIS.INACTIVE} **${title(x)}**${!threaded&&c.logs?.[x+'ChannelId']?' → '+channelText(c.logs[x+'ChannelId']):''}`).join('\n'),inline:false},
+ {name:`4 · ${EMOJIS.SETTINGS} ${type==='default'?'Default channel':title(type)}`,value:`${type==='default'?'**Routing:** Used when no category override is set.':`**Status:** ${enabled.includes(type)?'Enabled':'Disabled'}`}\n**Destination:** ${channelText(current)}`,inline:false},
+ {name:`5 · ${EMOJIS.BELL} Role notifications`,value:`**Roles:** ${roleText(g,c.logPingRoles||[])}\n**New thread:** ${c.logPingOnThread?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}   ·   **New post:** ${c.logPingOnPost?`${EMOJIS.ENABLED} On`:`${EMOJIS.DISABLED} Off`}\nOnly selected roles should be mentioned. Discord permissions still apply.`,inline:false});
  return {embeds:[embed],components:[
  row(toggle('admin:verification:logMode:standard','Channel Logs',!threaded),toggle('admin:verification:logMode:threaded','Thread Logs',threaded)),
  row(menu),
  row(channel),
- row(toggle('admin:verification:logCategoryToggle:'+type,title(type)+' logs',enabled.includes(type)).setDisabled(type==='default'),button('admin:verification:logPingSettings',`${EMOJIS.BELL} Role Notifications`)),
+ row(toggle('admin:verification:logCategoryToggle:'+type,type==='default'?'Default channel':title(type)+' logs',enabled.includes(type)).setDisabled(type==='default'),button('admin:verification:logPingSettings',`${EMOJIS.BELL} Role Notifications`)),
  finalNav('home',button('admin:verification:clearEveryLog',emojiLabel('CLOSE_X','Clear All'),ButtonStyle.Danger))]};
 }
 function logPingPage(g,user){
