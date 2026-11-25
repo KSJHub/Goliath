@@ -86,6 +86,14 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     finally{if(activeGuild.current===requestedGuild)setRecordBusy(false);}
   }
   const [audit,setAudit]=useState(null);
+  const [celebrationPreview,setCelebrationPreview]=useState(null);
+  const [previewBusy,setPreviewBusy]=useState(false);
+  async function previewCelebration(){
+    const requestedGuild=guildId;setPreviewBusy(true);setCelebrationPreview(null);setError('');
+    try{const result=await api.request('/api/timed-roles/'+requestedGuild+'/celebration-preview',{method:'POST',body:JSON.stringify({...draft,ruleId:editingRuleId})});if(activeGuild.current===requestedGuild)setCelebrationPreview(result);}
+    catch(error){if(activeGuild.current===requestedGuild)setError(error.message || 'Preview unavailable.');}
+    finally{if(activeGuild.current===requestedGuild)setPreviewBusy(false);}
+  }
   const [auditError,setAuditError]=useState('');
   const [auditBusy,setAuditBusy]=useState(false);
   const activeGuild=React.useRef(guildId);
@@ -152,7 +160,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     }
   }
 
-  useEffect(() => { setAudit(null);setAuditError('');setAuditBusy(false);setRecords(null); setRecord(null); setRecordId(''); setRecordError(''); load(); }, [guildId]);
+  useEffect(() => { setCelebrationPreview(null);setPreviewBusy(false);setAudit(null);setAuditError('');setAuditBusy(false);setRecords(null); setRecord(null); setRecordId(''); setRecordError(''); load(); }, [guildId]);
 
   async function loadRecords(page = 0, id = '') {
     setRecordBusy(true); setRecordError(''); setRecord(null);
@@ -312,6 +320,8 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
           <ChannelSelect theme={theme} resources={channels} value={draft.celebration?.announcementChannelId || ''} onChange={value=>setDraft(current=>{const celebration={...current.celebration};if(value)celebration.announcementChannelId=value;else delete celebration.announcementChannelId;return {...current,celebration};})} label="Override announcement channel (empty inherits)" />
           {['celebrationTitle','announcementMessage','celebrationGif'].map(key=><label key={key} style={{display:'grid',gap:6}}>{({celebrationTitle:'Title',announcementMessage:'Message',celebrationGif:'HTTPS GIF or image URL'})[key]}<input value={draft.celebration?.[key] || ''} placeholder={settings[key] || 'Inherit default'} onChange={e=>setDraft(current=>{const celebration={...current.celebration};if(e.target.value)celebration[key]=e.target.value;else delete celebration[key];return {...current,celebration};})} style={fieldStyle(theme)} /></label>)}
           <button type="button" style={buttonStyle(theme)} onClick={()=>setDraft(current=>({...current,celebration:{}}))}>Restore inherited settings</button>
+          <button type="button" disabled={previewBusy} style={buttonStyle(theme,'primary')} onClick={previewCelebration}>{previewBusy?'Rendering…':'Preview celebration'}</button>
+          {celebrationPreview && <div style={{border:'1px solid '+theme.cardBorder,borderRadius:12,padding:16,marginTop:12,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}><p style={{color:theme.mutedText}}>Preview only — no Discord message sent. Mentions are displayed as raw tokens.</p>{celebrationPreview.embed && <h3>{celebrationPreview.title}</h3>}<p>{celebrationPreview.message}</p>{celebrationPreview.embed && celebrationPreview.gif && <a href={celebrationPreview.gif} target="_blank" rel="noopener noreferrer">Open configured celebration image</a>}</div>}
         </details>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={saveRule} disabled={saving === 'rule' || !draft.roleId} style={buttonStyle(theme, 'success')}>{saving === 'rule' ? 'Saving...' : editingRuleId ? 'Save Changes' : 'Create Milestone'}</button>
