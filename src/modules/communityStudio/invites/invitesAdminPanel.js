@@ -1,4 +1,5 @@
 'use strict';
+const { variableReference } = require('../../../core/ui/variableReference');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
@@ -315,6 +316,7 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:member-dm-variables') { await interaction.reply(variableReference('inviteDM', { title: 'Invites · Personal DM Variables', note: 'The referral link is also included automatically.' })); return true; }
   if (id === 'invites:member-dm-modal') {
     await interaction.showModal(panel.dmModal(interaction));
     return true;
