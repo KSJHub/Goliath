@@ -1,4 +1,5 @@
 'use strict';
+const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton, paginationButtons, emojiButton } = require('../../../core/guild/goliathNavigation');
 
@@ -514,7 +515,8 @@ let ticketSetupPanelApi;
     );
   }
 
-  function buildPanelEmbed(panel = DEFAULT_TICKET_PANEL) {
+  function buildPanelEmbed(panel = DEFAULT_TICKET_PANEL, guild = null) {
+    const render = (value, max) => (guild ? renderModuleTemplate(value, 'global', { guild }) : String(value ?? '')).slice(0, max);
     const appearance = panel.appearance || {};
 
     const limit = resolvePanelLimit(panel);
@@ -522,10 +524,9 @@ let ticketSetupPanelApi;
     const cooldownSeconds = Math.floor(cooldownMs / 1000);
 
     const embed = new EmbedBuilder()
-      .setTitle(appearance.title || 'Open a Ticket')
+      .setTitle(render(appearance.title || 'Open a Ticket', 256) || 'Open a Ticket')
       .setDescription(
-        appearance.description ||
-          'Need help? Open a ticket and our staff team will assist you.'
+        render(appearance.description || 'Need help? Open a ticket and our staff team will assist you.', 4096) || 'Open a ticket.'
       )
       .addFields(
         {
@@ -575,7 +576,7 @@ let ticketSetupPanelApi;
 
     if (appearance.footerText) {
       embed.setFooter({
-        text: appearance.footerText,
+        text: render(appearance.footerText, 2048) || 'Goliath Tickets',
       });
     }
 
@@ -626,7 +627,7 @@ let ticketSetupPanelApi;
       embeds: await emojis.resolveEmbeds(
         guild.client,
         guild.id,
-        [buildPanelEmbed(panel)]
+        [buildPanelEmbed(panel, guild)]
       ),
       components: buildPanelButtons(panel, buttonEmoji),
     };
