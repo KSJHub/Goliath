@@ -243,6 +243,7 @@ router.get('/:guildId/overview', async (req, res) => {
       variables: Object.fromEntries(Object.entries(verificationStore.defaultMessages()).map(([key, template]) => [key, require('../../../../core/guild/guildVariables').verificationVariables(guild, template)])),
       panelTemplate: section.panelTemplate,
       defaultPanelTemplate: verificationStore.defaultPanelTemplate(),
+      panelVariables: require('../../../../core/guild/guildVariables').verificationVariables(guild),
       panels: Object.values(section.panels || {}),
       analytics: section.analytics || {},
       sessionSummary: Object.values(section.sessions || {}).reduce((counts, session) => {
