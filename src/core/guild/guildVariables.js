@@ -60,7 +60,7 @@ const SOCIAL_VARIABLES = Object.freeze([
   '{uploadTitle}', '{uploadDescription}', '{uploadThumbnail}', '{uploadUrl}', '{shortTitle}', '{shortThumbnail}', '{shortUrl}',
 ]);
 const MODULE_VARIABLES = Object.freeze({
-  global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
+  global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{guildCreatedAt}', '{guildCreatedTimestamp}', '{timestamp}'],
   timedRoles: ['{member}', '{username}', '{milestone}', '{role}', '{duration}', '{server}', '{joined}', '{achieved}', '{nextMilestone}', '{nextDue}'],
   inviteDM: ['{user}', '{invite}'],
   birthdayIndividual: ['{mention}', '{user}', '{age}'],
@@ -150,8 +150,12 @@ function renderModuleTemplate(value, moduleName, interaction, options = {}) {
   const map = buildVariableMap(interaction, false, {}, options);
   return String(value ?? '').replace(/\{[a-zA-Z][a-zA-Z0-9_.-]*\}/g, token => supported.has(token) && Object.hasOwn(map, token) ? String(map[token] ?? '') : token);
 }
+function statsCounterVariables(segmentCount) {
+  const count = Math.max(0, Math.min(4, Math.floor(Number(segmentCount) || 0)));
+  return [...Array.from({length: count}, (_, index) => '{'+(index+1)+'}'), ...(count === 1 ? ['{value}', '{count}', '{date}'] : [])];
+}
 function verificationVariables(guild, template = '') {
   const extra = Object.fromEntries((String(template).match(/\{\w+\}/g) || []).map(token => [token.slice(1,-1), '']));
   return Object.keys(buildVerificationVariableMap(null, guild, extra)).filter(key => /^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(key)).map(key => '{'+key+'}').sort();
 }
-module.exports = { verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
+module.exports = { statsCounterVariables, verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
