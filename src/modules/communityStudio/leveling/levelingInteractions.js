@@ -1,4 +1,5 @@
 'use strict';
+const { variableReference } = require('../../../core/ui/variableReference');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const leveling = require('./leveling');
@@ -696,6 +697,7 @@ async function handleLevelingInteraction(interaction) {
       await interaction.showModal(panel.buildEditRewardModal(reward));
       return true;
     }
+    if (customId === 'admin:leveling:variables') { await interaction.reply(variableReference('global', { title: 'Leveling · XP Description Variables', note: 'Use in Message XP and Voice XP descriptions.' })); return true; }
     if (customId === 'admin:leveling:configureMessage' && interaction.isButton?.()) {
       await interaction.showModal(panel.buildMessageXpModal(leveling.getSection(interaction.guildId)));
       return true;
