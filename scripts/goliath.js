@@ -691,6 +691,13 @@ function guildVariableSourceAudit() {
     assert.deepEqual(registry.statsCounterVariables(1), ['{1}', '{value}', '{count}', '{date}']);
     assert.deepEqual(registry.statsCounterVariables(4), ['{1}', '{2}', '{3}', '{4}']);
     assert(registry.verificationVariables(guild, '{attemptsRemaining}').includes('{attemptsRemaining}'));
+    const panelTokens = registry.verificationPanelVariables(guild);
+    assert(panelTokens.includes('{server}'));
+    assert(!panelTokens.includes('{userMention}'));
+    assert(!panelTokens.includes('{attemptsRemaining}'));
+    assert.equal(registry.renderVerificationTemplate('{server}|{memberCount}', null, guild, {}, options), 'Audit Guild|42');
+    assert.equal(registry.renderVerificationTemplate('{attemptsRemaining}', null, guild, {attemptsRemaining:3}, options), '3');
+    assert.equal(registry.renderVerificationTemplate('{userMention}', null, guild, {}, options), '{userMention}');
     const scheduled = require(path.join(SRC, 'modules/messageStudio/welcome/scheduledWelcomeMessage.js'));
     const output = scheduled.renderMessage('{members}|{memberNames}|{memberCount}|{server}', guild, [{ id: '789', displayName: 'Audit Member' }]);
     assert.equal(output, 'our newest arrival|Audit Member|1|Audit Guild');
