@@ -1,4 +1,5 @@
 'use strict';
+const { variableReference } = require('../../../core/ui/variableReference');
 
 const { AttachmentBuilder, MessageFlags } = require('discord.js');
 const polls = require('./polls');
@@ -23,6 +24,7 @@ async function handlePollsInteraction(interaction) {
   const memberDisplayName = getMemberDisplayName(interaction);
   const actorId = interaction.user?.id || null;
   try {
+    if (customId === 'admin:polls:variables') { await interaction.reply(variableReference('global', { title: 'Polls · Description Variables', note: 'Variables are supported in poll descriptions only. Questions and voting options remain literal.' })); return true; }
     if (customId === 'admin:polls:create') {
       if (!isModuleEnabled(interaction.guild.id, 'polls')) throw new Error('Polls are disabled.');
       await interaction.showModal(panel.buildCreateModal());
