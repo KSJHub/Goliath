@@ -150,4 +150,8 @@ function renderModuleTemplate(value, moduleName, interaction, options = {}) {
   const map = buildVariableMap(interaction, false, {}, options);
   return String(value ?? '').replace(/\{[a-zA-Z][a-zA-Z0-9_.-]*\}/g, token => supported.has(token) && Object.hasOwn(map, token) ? String(map[token] ?? '') : token);
 }
-module.exports = { renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
+function verificationVariables(guild, template = '') {
+  const extra = Object.fromEntries((String(template).match(/\{\w+\}/g) || []).map(token => [token.slice(1,-1), '']));
+  return Object.keys(buildVerificationVariableMap(null, guild, extra)).filter(key => /^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(key)).map(key => '{'+key+'}').sort();
+}
+module.exports = { verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
