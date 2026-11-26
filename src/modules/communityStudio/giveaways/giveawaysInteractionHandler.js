@@ -1,4 +1,5 @@
 'use strict';
+const { variableReference } = require('../../../core/ui/variableReference');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const { MessageFlags } = require('discord.js');
@@ -25,6 +26,7 @@ async function handleGiveawaysAdminInteraction(interaction) {
   const memberDisplayName = getMemberDisplayName(interaction);
   try {
     if (customId === 'admin:giveaways') return safeUpdate(interaction, giveawaysPanel.buildGiveawaysAdminPanel(interaction.guild, memberDisplayName));
+    if (customId === 'admin:giveaways:variables') { await interaction.reply(variableReference('global', { title: 'Giveaways · Announcement Variables', note: 'Supported in giveaway announcement descriptions. Prize names remain literal.' })); return true; }
     if (customId === 'admin:giveaways:levelingEligibility') {
       return safeUpdate(interaction, giveawaysPanel.buildLevelingEligibilityPanel(interaction.guild, memberDisplayName));
     }
