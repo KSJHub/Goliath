@@ -240,6 +240,7 @@ router.get('/:guildId/overview', async (req, res) => {
       activePanelId: section.activePanelId,
       messages: section.messages,
       defaultMessages: verificationStore.defaultMessages(),
+      variables: Object.fromEntries(Object.entries(verificationStore.defaultMessages()).map(([key, template]) => [key, require('../../../../core/guild/guildVariables').verificationVariables(guild, template)])),
       panelTemplate: section.panelTemplate,
       defaultPanelTemplate: verificationStore.defaultPanelTemplate(),
       panels: Object.values(section.panels || {}),
