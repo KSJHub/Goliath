@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 
+export function appendVariable(value, token, limit) {
+  const current = String(value ?? '');
+  return current.length + token.length <= limit ? current + token : current;
+}
+
 export default function VariableReference({ theme, tokens = [], onInsert, note }) {
   const [status, setStatus] = useState('');
   const [manualCopy, setManualCopy] = useState('');
