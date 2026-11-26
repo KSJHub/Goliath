@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton } = require('../../../core/ui/variableReference');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton, actionButton } = require('../../../core/guild/goliathNavigation');
 
@@ -188,6 +189,7 @@ function adminView(interaction) {
       components.push(row(
         button('invites:member-enabled', memberEnabled ? emojiLabel('MOD_STAFF', 'Member Invites: On') : emojiLabel('MOD_STAFF', 'Member Invites: Off')),
         button('invites:member-dm-modal', emojiLabel('EDIT', 'Edit Invite DM')),
+        variablesButton('invites:member-dm-variables'),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm',
           resetArmed ? emojiLabel('WARNING', 'Confirm Leaderboard Reset') : emojiLabel('MOD_TOP_STAFF', 'Reset Leaderboard')),
       ));
