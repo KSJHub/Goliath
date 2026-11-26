@@ -694,6 +694,22 @@ function guildVariableSourceAudit() {
     const scheduled = require(path.join(SRC, 'modules/messageStudio/welcome/scheduledWelcomeMessage.js'));
     const output = scheduled.renderMessage('{members}|{memberNames}|{memberCount}|{server}', guild, [{ id: '789', displayName: 'Audit Member' }]);
     assert.equal(output, 'our newest arrival|Audit Member|1|Audit Guild');
+    const custom = [{ key: 'auditCustomExample', value: 'custom value' }, { key: 'auditDisabledExample', value: 'disabled', enabled: false }];
+    assert(registry.variablesForModule('global', custom).includes('{auditCustomExample}'));
+    assert(!registry.variablesForModule('global', custom).includes('{auditDisabledExample}'));
+    assert.equal(registry.renderModuleTemplate('{auditCustomExample}|{auditDisabledExample}', 'global', context, { customVariables: custom }), 'custom value|{auditDisabledExample}');
+    assert.throws(() => registry.normalizeCustomVariable({ key: 'nextMilestone', value: 'collision' }));
+    const reference = require(path.join(SRC, 'core/ui/variableReference.js'));
+    const tokens = Array.from({ length: 500 }, (_, index) => '{auditVariable' + index + '}');
+    const payload = reference.variableReference('global', { tokens: [...tokens, tokens[0], 'invalid', '{' + 'x'.repeat(2000) + '}'] });
+    const embed = payload.embeds[0].toJSON();
+    assert.equal(payload.flags, 64);
+    assert.deepEqual(payload.allowedMentions.parse, []);
+    assert(embed.fields.length <= 4);
+    assert(embed.fields.every(field => field.value.length <= 1024));
+    assert.equal(payload.files[0].attachment.toString('utf8').split('\n').length, tokens.length);
+    assert(reference.variableReference('global', { tokens: [] }).embeds[0].toJSON().fields[0].value.includes('No variables'));
+    assert(reference.variableReference('global', { tokens: {} }).embeds[0].toJSON().fields[0].value.includes('No variables'));
     console.log('✅ Contextual variable rendering regression checks passed.');
   } catch (error) {
     console.error('❌ Contextual variable rendering regression failed:', error.message);
