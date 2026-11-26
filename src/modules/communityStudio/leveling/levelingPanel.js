@@ -252,12 +252,12 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
       row(
         button('admin:leveling:configureMessage', emojiLabel('USER_FEEDBACK', 'Message XP'), ButtonStyle.Primary),
         button('admin:leveling:configureVoice', emojiLabel('USER_TEMP_VOICE', 'Voice XP'), ButtonStyle.Primary),
-        variablesButton('admin:leveling:variables'),
         button('admin:leveling:multiplier', emojiLabel('THREAT', 'XP Event'), ButtonStyle.Primary),
         button('admin:leveling:ranks', emojiLabel('USER_ROLES', 'Rank Rewards'), ButtonStyle.Primary),
         button('admin:leveling:leaderboard', emojiLabel('ANALYTICS', 'Analytics'), ButtonStyle.Primary),
       ),
       row(
+        variablesButton('admin:leveling:variables'),
         button('admin:leveling:xpmanage', emojiLabel('WELCOME_CUSTOM', 'XP Manager'), ButtonStyle.Primary),
         button('admin:leveling:maintenance', emojiLabel('TOOLS', 'Maintenance'), ButtonStyle.Primary),
         button('admin:leveling:trackingRules', emojiLabel('AUTOMOD_SPAM', 'XP Exclusions'), ButtonStyle.Secondary),
