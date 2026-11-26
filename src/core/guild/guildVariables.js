@@ -95,7 +95,7 @@ function normalizeCustomVariable(input = {}) {
   const key = variableKey(input.key || input.name || input.token);
   if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(key)) throw new Error('Variable name must start with a letter and contain only letters, numbers, dot, dash or underscore.');
   const token = `{${key}}`;
-  if (SYSTEM_VARIABLES.some((item) => item.toLowerCase() === token.toLowerCase())) throw new Error(`${token} is a protected system variable.`);
+  if ([...SYSTEM_VARIABLES, ...Object.values(MODULE_VARIABLES).flat(), ...statsCounterVariables(1)].some((item) => item.toLowerCase() === token.toLowerCase())) throw new Error(`${token} is a protected system variable.`);
   return { key, token, value: String(input.value ?? ''), category: String(input.category || 'Custom').trim().slice(0, 40) || 'Custom', description: String(input.description || '').trim().slice(0, 240), enabled: input.enabled !== false };
 }
 function normalizeCustomVariables(input) {
