@@ -279,7 +279,7 @@ export default function TicketsWorkflowEnhanced(props) {
         </section>
       ) : null}
 
-      <TicketPanelBuilder
+      <TicketPanelBuilder variables={overview?.variables}
         theme={theme}
         channels={channels}
         roles={roles}
