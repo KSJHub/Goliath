@@ -61,6 +61,7 @@ const SOCIAL_VARIABLES = Object.freeze([
 ]);
 const MODULE_VARIABLES = Object.freeze({
   global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
+  timedRoles: ['{member}', '{username}', '{milestone}', '{role}', '{duration}', '{server}', '{joined}', '{achieved}', '{nextMilestone}', '{nextDue}'],
   sticky: ['{channelId}', '{channelName}', '{channelMention}'],
   welcome: [...MEMBER_VARIABLES, '{joinedAt}'],
   goodbye: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
