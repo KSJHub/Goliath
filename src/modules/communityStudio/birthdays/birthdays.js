@@ -2,7 +2,7 @@
 
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
-const { replaceVars } = require('../../../core/guild/guildVariables');
+const { replaceVars, renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
 const emojis = require('../../utilityStudio/emojis/emojis');
@@ -375,7 +375,8 @@ function resolvedCardImage(settings) {
   return DEFAULT_CARD_IMAGE_URL;
 }
 function birthdayEmbed(guild, section, members, year, today, test = false) {
-  const embed = new EmbedBuilder().setColor(colorInt(section.settings.cardColor)).setTitle(test ? `🧪 TEST · ${section.settings.cardTitle}` : section.settings.cardTitle);
+  const title = renderModuleTemplate(section.settings.cardTitle, 'global', { guild }) || 'Happy Birthday!';
+  const embed = new EmbedBuilder().setColor(colorInt(section.settings.cardColor)).setTitle((test ? `🧪 TEST · ${title}` : title).slice(0,256));
   const description = members.length > 1
     ? renderGroupTemplate(pickGroupTemplate(section.settings, members, today), guild, members)
     : renderTemplate(pickTemplate(section.settings, members[0], today), guild, members[0], year);
