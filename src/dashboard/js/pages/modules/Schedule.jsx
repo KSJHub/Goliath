@@ -1,3 +1,4 @@
+import VariableReference from '../../shared/VariableReference.jsx';
 import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
@@ -70,6 +71,7 @@ function parseNotifications(text) {
 
 export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
+  const [variables,setVariables]=useState({});
   const [config, setConfig] = useState(null);
   const [events, setEvents] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -91,7 +93,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
       const [payload, healthPayload, channelPayload, rolePayload] = await Promise.all([
         api.request(`/api/schedule/${guildId}`), api.request(`/api/schedule/${guildId}/health`), api.getGuildChannels(guildId), api.getGuildRoles(guildId),
       ]);
-      setConfig(payload.config || {}); setEvents(payload.events || []); setTemplates(payload.templates || []); setHealth(healthPayload.health || null);
+      setVariables(payload.variables || {}); setConfig(payload.config || {}); setEvents(payload.events || []); setTemplates(payload.templates || []); setHealth(healthPayload.health || null);
       setChannels(normalizeList(channelPayload, 'channels')); setRoles(normalizeList(rolePayload, 'roles'));
       if (!editingId && payload.config?.settings?.defaultTimezone) setDraft((current) => ({ ...current, timezone: current.timezone || payload.config.settings.defaultTimezone }));
     } catch (loadError) { setError(loadError.message || 'Failed to load Schedule.'); }
@@ -188,7 +190,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
           <label>Location<input style={fieldStyle(theme)} value={draft.location || ''} onChange={(e) => setDraft({ ...draft, location: e.target.value })} /></label>
           <label>Embed colour<input style={fieldStyle(theme)} type="color" value={`#${Number(draft.color || 0x5865F2).toString(16).padStart(6,'0')}`} onChange={(e) => setDraft({ ...draft, color: parseInt(e.target.value.slice(1),16) })} /></label>
         </div>
-        <TextAreaField theme={theme} label="Description" value={draft.description} onChange={(description) => setDraft({ ...draft, description })} rows={4} />
+        <TextAreaField theme={theme} label="Description" value={draft.description} onChange={(description) => setDraft({ ...draft, description })} rows={4} /><VariableReference theme={theme} tokens={variables.global} onInsert={token=>setDraft(old=>({...old,description:(old.description||'')+token}))} />
         <MultiRoleSelect theme={theme} label="Roles to mention on deployment" roles={roles} value={draft.mentionRoleIds} onChange={(mentionRoleIds) => setDraft({ ...draft, mentionRoleIds })} />
       </>}
 
@@ -213,7 +215,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
           <label><input type="checkbox" checked={draft.recurrence?.autoJoinNextAllowed !== false} onChange={(e) => setDraft({ ...draft, recurrence: { ...draft.recurrence, autoJoinNextAllowed: e.target.checked } })} /> Allow attendees to Auto Join Next</label>
         </div>
         <label>Channel reminder minutes<input style={fieldStyle(theme)} value={(draft.reminderMinutes || []).join(', ')} onChange={(e) => setDraft({ ...draft, reminderMinutes: e.target.value.split(',').map((v) => Number(v.trim())).filter((n) => Number.isFinite(n) && n >= 0) })} /></label>
-        <TextAreaField theme={theme} label="Custom event notifications" value={notificationsText(draft.notifications)} onChange={(text) => setDraft({ ...draft, notifications: parseNotifications(text) })} placeholder="30|Starting Soon|{event} starts {relative}." rows={5} />
+        <TextAreaField theme={theme} label="Custom event notifications" value={notificationsText(draft.notifications)} onChange={(text) => setDraft({ ...draft, notifications: parseNotifications(text) })} placeholder="30|Starting Soon|{event} starts {relative}." rows={5} /><VariableReference theme={theme} tokens={variables.scheduleNotification} note="Copy placeholders into the notification message column." />
       </>}
 
       {tab === 'advanced' && <div style={{ display: 'grid', gap: 12 }}>
