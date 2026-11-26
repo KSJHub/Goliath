@@ -61,6 +61,7 @@ async function overview(req, id) {
   })).sort((a, b) => `${String(a.month).padStart(2, '0')}-${String(a.day).padStart(2, '0')}`.localeCompare(`${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')}`));
   return {
     guildId: id,
+    variables: require('../../../../core/guild/guildVariables').variablesForModule('birthdayIndividual'),
     config: { ...config, members: Object.fromEntries(Object.entries(config.members || {}).map(([key, member]) => [key, safeMember(member)])), enabled },
     overview: {
       enabled,
