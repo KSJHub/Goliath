@@ -22,7 +22,7 @@ function assertScheduleEnabled(guildId) { if (!guildManager.isModuleEnabled(guil
 router.get('/:guildId', (req, res) => {
   try {
     const config = canonicalConfig(req.params.guildId);
-    return res.json({ success: true, guildId: req.params.guildId, config, events: schedule.listEvents(req.params.guildId), templates: schedule.listTemplates(req.params.guildId) });
+    return res.json({ success: true, guildId: req.params.guildId, config, variables: Object.fromEntries(['global','scheduleNotification','scheduleThread'].map(key=>[key,require('../../../../core/guild/guildVariables').variablesForModule(key)])), events: schedule.listEvents(req.params.guildId), templates: schedule.listTemplates(req.params.guildId) });
   } catch (error) { return fail(res, error); }
 });
 router.patch('/:guildId/enabled', (req, res) => {
