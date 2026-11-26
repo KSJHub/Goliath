@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
@@ -373,6 +374,7 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePag
         button('admin:forms:toggleStore', emojiLabel('PRESETS', 'Store'), ButtonStyle.Secondary)
       ),
       row(button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
+        variablesButton('admin:forms:variables'),
         button(`admin:forms:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
         button(`admin:forms:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
     ],
@@ -399,6 +401,7 @@ async function handleFormsAdminInteraction(interaction) {
   const memberDisplayName = getMemberDisplayName(interaction);
 
   try {
+    if (customId === 'admin:forms:variables') { await interaction.reply(variableReference('global', { title: 'Forms · Panel Variables', note: 'Supported in public panel title and descriptions. Submission-specific values are not available before submission.' })); return true; }
     if (customId === 'admin:forms') {
       return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
     }
