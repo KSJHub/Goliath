@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -116,7 +116,7 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
         row(new ChannelSelectMenuBuilder().setCustomId('admin:privateRooms:channel:request').setPlaceholder('New room request channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
         row(new ChannelSelectMenuBuilder().setCustomId('admin:privateRooms:channel:transcript').setPlaceholder('Transcript channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
         row(new ChannelSelectMenuBuilder().setCustomId('admin:privateRooms:channel:audit').setPlaceholder('Audit / log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-        row(button('admin:privateRooms', 'Back', ButtonStyle.Secondary, '⬅️')),
+        row(button('admin:privateRooms', 'Back', ButtonStyle.Secondary, EMOJIS.BACK)),
       ],
     };
   }
@@ -130,12 +130,12 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
           `**Managers:** ${formatRoles(section.settings.managerRoleIds)}`,
           `**Approvers:** ${formatRoles(section.settings.approverRoleIds)}`,
           '',
-          `**Users can request rooms:** ${section.settings.allowUserRoomRequests ? '✅' : '❌'}`,
-          `**User room approval required:** ${section.settings.requireUserRoomApproval ? '✅' : '❌'}`,
-          `**Participants can request people:** ${section.settings.allowParticipantAddRequests ? '✅' : '❌'}`,
-          `**Participant-add approval required:** ${section.settings.requireParticipantAddApproval ? '✅' : '❌'}`,
-          `**Transcripts:** ${section.settings.transcriptsEnabled ? '✅' : '❌'}`,
-          `**Live audit logging:** ${section.settings.auditEnabled ? '✅' : '❌'}`,
+          `**Users can request rooms:** ${section.settings.allowUserRoomRequests ? EMOJIS.SUCCESS : EMOJIS.ERROR}`,
+          `**User room approval required:** ${section.settings.requireUserRoomApproval ? EMOJIS.SUCCESS : EMOJIS.ERROR}`,
+          `**Participants can request people:** ${section.settings.allowParticipantAddRequests ? EMOJIS.SUCCESS : EMOJIS.ERROR}`,
+          `**Participant-add approval required:** ${section.settings.requireParticipantAddApproval ? EMOJIS.SUCCESS : EMOJIS.ERROR}`,
+          `**Transcripts:** ${section.settings.transcriptsEnabled ? EMOJIS.SUCCESS : EMOJIS.ERROR}`,
+          `**Live audit logging:** ${section.settings.auditEnabled ? EMOJIS.SUCCESS : EMOJIS.ERROR}`,
         ].join('\n'))
         .setFooter({ text: `Requested by ${requester}` })
         .setTimestamp()],
@@ -152,7 +152,7 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
           button('admin:privateRooms:toggle:transcripts', 'Transcripts', section.settings.transcriptsEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
           button('admin:privateRooms:toggle:audit', 'Audit', section.settings.auditEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
         ),
-        row(button('admin:privateRooms', 'Back', ButtonStyle.Secondary, '⬅️')),
+        row(button('admin:privateRooms', 'Back', ButtonStyle.Secondary, EMOJIS.BACK)),
       ],
     };
   }
@@ -163,7 +163,7 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
     .setDescription([
       'Temporary private conversation rooms for interviews, warnings, training, onboarding, mediation and informal two-way discussions.',
       '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Active Rooms:** ${active.length}`,
       `**Pending Requests:** ${pending.length}`,
       `**Request Channel:** ${formatChannel(section.settings.requestChannelId)}`,
@@ -179,17 +179,17 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
     embeds: [embed],
     components: [
       row(
-        button('privateRooms:staff:create', 'Create Room', ButtonStyle.Success, '➕'),
-        button('privateRooms:staff:active', 'Active Rooms', ButtonStyle.Primary, '🔒'),
-        button('privateRooms:staff:requests', 'Requests', ButtonStyle.Primary, '📨'),
+        button('privateRooms:staff:create', 'Create Room', ButtonStyle.Success, EMOJIS.ADD),
+        button('privateRooms:staff:active', 'Active Rooms', ButtonStyle.Primary, EMOJIS.LOCK),
+        button('privateRooms:staff:requests', 'Requests', ButtonStyle.Primary, EMOJIS.DIRECT_MESSAGE),
       ),
       row(
-        button('admin:privateRooms:page:channels', 'Channels', ButtonStyle.Secondary, '📁'),
-        button('admin:privateRooms:page:permissions', 'Permissions', ButtonStyle.Secondary, '🛡️'),
-        button('admin:privateRooms:health', 'Health', ButtonStyle.Secondary, '🩺'),
+        button('admin:privateRooms:page:channels', 'Channels', ButtonStyle.Secondary, EMOJIS.FOLDER),
+        button('admin:privateRooms:page:permissions', 'Permissions', ButtonStyle.Secondary, EMOJIS.SECURITY),
+        button('admin:privateRooms:health', 'Health', ButtonStyle.Secondary, EMOJIS.HEALTH),
       ),
       row(button(enabled ? 'admin:privateRooms:disable' : 'admin:privateRooms:enable', enabled ? 'Disable' : 'Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
-      row(button('admin:studio:utilityStudio', 'Back', ButtonStyle.Secondary, '⬅️')),
+      row(button('admin:studio:utilityStudio', 'Back', ButtonStyle.Secondary, EMOJIS.BACK)),
     ],
   };
 }
@@ -213,9 +213,9 @@ function buildStaffPanel(interaction) {
       .setFooter({ text: `Requested by ${memberName(interaction)}` })
       .setTimestamp()],
     components: [row(
-      button('privateRooms:staff:create', 'Create Room', ButtonStyle.Success, '➕'),
-      button('privateRooms:staff:active', 'Active Rooms', ButtonStyle.Primary, '🔒'),
-      button('privateRooms:staff:requests', 'Requests', ButtonStyle.Primary, '📨'),
+      button('privateRooms:staff:create', 'Create Room', ButtonStyle.Success, EMOJIS.ADD),
+      button('privateRooms:staff:active', 'Active Rooms', ButtonStyle.Primary, EMOJIS.LOCK),
+      button('privateRooms:staff:requests', 'Requests', ButtonStyle.Primary, EMOJIS.DIRECT_MESSAGE),
     )],
   };
 }
@@ -232,20 +232,20 @@ function buildUserPanel(interaction) {
       .setDescription([
         'Request a temporary private conversation with selected server members. Management approval is used when required by this server.',
         '',
-        `**Module:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+        `**Module:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
         `**My Active Rooms:** ${mine.length}`,
         `**My Requests:** ${requests.length}`,
-        `**Room Requests Allowed:** ${section.settings.allowUserRoomRequests ? 'Yes ✅' : 'No ❌'}`,
+        `**Room Requests Allowed:** ${section.settings.allowUserRoomRequests ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberName(interaction)}` })
       .setTimestamp()],
     components: [
       row(
-        button('user:privateRooms:request', 'Request a Room', ButtonStyle.Success, '➕', !enabled || !section.settings.allowUserRoomRequests),
-        button('user:privateRooms:rooms', 'My Rooms', ButtonStyle.Primary, '🔒'),
-        button('user:privateRooms:requests', 'My Requests', ButtonStyle.Secondary, '📨'),
+        button('user:privateRooms:request', 'Request a Room', ButtonStyle.Success, EMOJIS.ADD, !enabled || !section.settings.allowUserRoomRequests),
+        button('user:privateRooms:rooms', 'My Rooms', ButtonStyle.Primary, EMOJIS.LOCK),
+        button('user:privateRooms:requests', 'My Requests', ButtonStyle.Secondary, EMOJIS.DIRECT_MESSAGE),
       ),
-      row(button('user:category:utility', 'Back', ButtonStyle.Secondary, '⬅️')),
+      row(button('user:category:utility', 'Back', ButtonStyle.Secondary, EMOJIS.BACK)),
     ],
   };
 }
@@ -291,10 +291,10 @@ function buildWizard(interaction, mode) {
           { label: '7 days', value: '168', default: Number(session.expiryHours) === 168 },
         )),
       row(
-        button(`privateRooms:wizard:details:${mode}`, 'Reason / Details', ButtonStyle.Secondary, '📝'),
-        button(`privateRooms:wizard:submit:${mode}`, isUser ? 'Submit Request' : 'Create Room', ButtonStyle.Success, isUser ? '📨' : '✅'),
+        button(`privateRooms:wizard:details:${mode}`, 'Reason / Details', ButtonStyle.Secondary, EMOJIS.NOTE),
+        button(`privateRooms:wizard:submit:${mode}`, isUser ? 'Submit Request' : 'Create Room', ButtonStyle.Success, isUser ? EMOJIS.DIRECT_MESSAGE : EMOJIS.SUCCESS),
       ),
-      row(button(isUser ? 'user:module:privateRooms' : 'privateRooms:staff:home', 'Back', ButtonStyle.Secondary, '⬅️')),
+      row(button(isUser ? 'user:module:privateRooms' : 'privateRooms:staff:home', 'Back', ButtonStyle.Secondary, EMOJIS.BACK)),
     ],
   };
 }
@@ -329,7 +329,7 @@ function buildRoomControl(room) {
       .setTitle(emojiLabel('LOCKDOWN', 'Private Room'))
       .setDescription([
         `**Purpose:** ${room.purpose}`,
-        `**Status:** ${room.status === 'locked' ? 'Locked 🔐' : 'Open ✅'}`,
+        `**Status:** ${room.status === 'locked' ? `Locked ${EMOJIS.PERMISSIONS}` : `Open ${EMOJIS.SUCCESS}`}`,
         `**Participants:** ${participantText}`,
         room.reason ? `**Reason / Context:** ${room.reason}` : null,
         room.expiresAt ? `**Auto Close:** <t:${Math.floor(new Date(room.expiresAt).getTime() / 1000)}:R>` : '**Auto Close:** Manual',
@@ -339,11 +339,11 @@ function buildRoomControl(room) {
       .setFooter({ text: `Room ID: ${room.roomId}` })
       .setTimestamp()],
     components: [row(
-      button(`privateRooms:room:add:${room.roomId}`, 'Add Person', ButtonStyle.Success, '➕'),
-      button(`privateRooms:room:remove:${room.roomId}`, 'Remove Person', ButtonStyle.Secondary, '➖'),
-      button(`privateRooms:room:note:${room.roomId}`, 'Add Note', ButtonStyle.Secondary, '📝'),
-      button(`privateRooms:room:lock:${room.roomId}`, room.status === 'locked' ? 'Unlock' : 'Lock', ButtonStyle.Secondary, room.status === 'locked' ? '🔓' : '🔒'),
-      button(`privateRooms:room:close:${room.roomId}`, 'Close Room', ButtonStyle.Danger, '✅'),
+      button(`privateRooms:room:add:${room.roomId}`, 'Add Person', ButtonStyle.Success, EMOJIS.ADD),
+      button(`privateRooms:room:remove:${room.roomId}`, 'Remove Person', ButtonStyle.Secondary, EMOJIS.REMOVE),
+      button(`privateRooms:room:note:${room.roomId}`, 'Add Note', ButtonStyle.Secondary, EMOJIS.NOTE),
+      button(`privateRooms:room:lock:${room.roomId}`, room.status === 'locked' ? 'Unlock' : 'Lock', ButtonStyle.Secondary, room.status === 'locked' ? EMOJIS.UNLOCK : EMOJIS.LOCK),
+      button(`privateRooms:room:close:${room.roomId}`, 'Close Room', ButtonStyle.Danger, EMOJIS.SUCCESS),
     )],
   };
 }
@@ -366,13 +366,13 @@ async function refreshRoomControl(guild, roomId) {
 }
 
 function buildRequestCard(request) {
-  const statusEmoji = request.status === 'approved' ? '✅' : request.status === 'denied' ? '❌' : '📨';
+  const statusEmoji = request.status === 'approved' ? EMOJIS.SUCCESS : request.status === 'denied' ? EMOJIS.ERROR : EMOJIS.DIRECT_MESSAGE;
   const participants = request.participantIds.length ? request.participantIds.map((id) => `<@${id}>`).join(', ') : 'None';
   const title = request.type === 'add_participant' ? 'Participant Addition Request' : 'Private Room Request';
   const components = request.status === 'pending' ? [row(
-    button(`privateRooms:request:approve:${request.requestId}`, 'Approve', ButtonStyle.Success, '✅'),
-    button(`privateRooms:request:deny:${request.requestId}`, 'Deny', ButtonStyle.Danger, '❌'),
-    button(`privateRooms:request:edit:${request.requestId}`, 'Edit Participants', ButtonStyle.Secondary, '✏️'),
+    button(`privateRooms:request:approve:${request.requestId}`, 'Approve', ButtonStyle.Success, EMOJIS.SUCCESS),
+    button(`privateRooms:request:deny:${request.requestId}`, 'Deny', ButtonStyle.Danger, EMOJIS.ERROR),
+    button(`privateRooms:request:edit:${request.requestId}`, 'Edit Participants', ButtonStyle.Secondary, EMOJIS.EDIT),
   )] : [];
   return {
     embeds: [new EmbedBuilder()
@@ -436,7 +436,7 @@ function buildListPanel(interaction, kind, userOnly = false) {
   });
   return {
     embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle(title).setDescription(lines.length ? lines.join('\n') : 'Nothing to show yet.').setTimestamp()],
-    components: [row(button(userOnly ? 'user:module:privateRooms' : 'privateRooms:staff:home', 'Back', ButtonStyle.Secondary, '⬅️'))],
+    components: [row(button(userOnly ? 'user:module:privateRooms' : 'privateRooms:staff:home', 'Back', ButtonStyle.Secondary, EMOJIS.BACK))],
   };
 }
 
@@ -489,7 +489,7 @@ async function submitWizard(interaction, mode) {
     }, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_user_created' });
     await postRoomControl(interaction.guild, roomItem);
     clearSession(interaction, mode);
-    await ephemeral(interaction, `✅ Private Room created: <#${roomItem.channelId}>`);
+    await ephemeral(interaction, `${EMOJIS.SUCCESS} Private Room created: <#${roomItem.channelId}>`);
     return true;
   }
 
@@ -504,7 +504,7 @@ async function submitWizard(interaction, mode) {
   }, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_staff_created' });
   await postRoomControl(interaction.guild, roomItem);
   clearSession(interaction, mode);
-  await ephemeral(interaction, `✅ Private Room created: <#${roomItem.channelId}>`);
+  await ephemeral(interaction, `${EMOJIS.SUCCESS} Private Room created: <#${roomItem.channelId}>`);
   return true;
 }
 
@@ -525,7 +525,7 @@ async function approveRequest(interaction, requestId) {
     request = rooms.updateRequest(interaction.guildId, requestId, { roomId: roomItem.roomId }, { guildId: interaction.guildId, actorId: interaction.user.id });
     await postRoomControl(interaction.guild, roomItem);
     const requester = await interaction.guild.members.fetch(request.requesterId).catch(() => null);
-    await requester?.user?.send(`✅ Your Private Room request was approved in **${interaction.guild.name}**: <#${roomItem.channelId}>`).catch(() => null);
+    await requester?.user?.send(`${EMOJIS.SUCCESS} Your Private Room request was approved in **${interaction.guild.name}**: <#${roomItem.channelId}>`).catch(() => null);
   } else if (request.roomId) {
     await rooms.addParticipants(interaction.guild, request.roomId, request.participantIds, interaction.user.id, request.reason, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_participant_request_approved' });
     await refreshRoomControl(interaction.guild, request.roomId);
@@ -586,7 +586,7 @@ async function handleAdminInteraction(interaction) {
     return safePanelResponse(interaction, buildAdminPanel(interaction.guild, memberName(interaction), 'permissions'));
   } else if (id === 'admin:privateRooms:health') {
     const health = await rooms.buildHealth(interaction.guild);
-    return ephemeral(interaction, `${health.healthy ? '✅' : '❌'} Private Rooms health: **${health.healthy ? 'Healthy' : 'Needs attention'}**\nActive rooms: ${health.activeRooms}\nPending requests: ${health.pendingRequests}\nIssues: ${health.issues.map((item) => item.code).join(', ') || 'None'}\nWarnings: ${health.warnings.map((item) => item.code).join(', ') || 'None'}`);
+    return ephemeral(interaction, `${health.healthy ? EMOJIS.SUCCESS : EMOJIS.ERROR} Private Rooms health: **${health.healthy ? 'Healthy' : 'Needs attention'}**\nActive rooms: ${health.activeRooms}\nPending requests: ${health.pendingRequests}\nIssues: ${health.issues.map((item) => item.code).join(', ') || 'None'}\nWarnings: ${health.warnings.map((item) => item.code).join(', ') || 'None'}`);
   }
   return safePanelResponse(interaction, buildAdminPanel(interaction.guild, memberName(interaction)));
 }
@@ -686,7 +686,7 @@ async function handleInteraction(interaction) {
     const request = await rooms.reviewRequest(interaction.guild, requestId, 'deny', interaction.user.id, reason, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_request_denied' });
     await refreshRequestCard(interaction.guild, requestId);
     const requester = await interaction.guild.members.fetch(request.requesterId).catch(() => null);
-    await requester?.user?.send(`❌ Your Private Room request in **${interaction.guild.name}** was denied.${reason ? `\nReason: ${reason}` : ''}`).catch(() => null);
+    await requester?.user?.send(`${EMOJIS.ERROR} Your Private Room request in **${interaction.guild.name}** was denied.${reason ? `\nReason: ${reason}` : ''}`).catch(() => null);
     return interaction.reply({ content: emojiLabel('ERROR', 'Request denied.'), flags: MessageFlags.Ephemeral });
   }
 
