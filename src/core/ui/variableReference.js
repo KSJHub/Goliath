@@ -10,7 +10,7 @@ function variablesButton(customId) {
 
 function variableReference(moduleName, { title = 'Message Variables', tokens, note = 'Availability depends on the message context.' } = {}) {
   const source = tokens ?? guildVariables.variablesForModule(moduleName);
-  const list = [...new Set(source.filter(token => typeof token === 'string' && /^\{[a-zA-Z][a-zA-Z0-9_.-]*\}$/.test(token)))].sort();
+  const list = [...new Set(source.filter(token => typeof token === 'string' && /^\{(?:[a-zA-Z][a-zA-Z0-9_.-]*|[0-9]+)\}$/.test(token)))].sort();
   const chunks = [];
   let chunk = '';
   for (const token of list) {
