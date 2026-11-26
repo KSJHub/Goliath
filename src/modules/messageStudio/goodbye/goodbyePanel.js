@@ -14,6 +14,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const goodbye = require('./goodbye');
 const departureDm = require('./goodbyeDeparture');
 const embedTemplateManager = require('../embed/embedTemplates');
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 
 const buildGoodbyeDmPanel = (() => {
   const row = (...components) => new ActionRowBuilder().addComponents(...components);
@@ -197,6 +198,7 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
         button('admin:goodbye:test', emojiLabel('TEST_SEND', 'Preview Log'), ButtonStyle.Success),
         button('admin:goodbye:send', emojiLabel('USER_INVITES', 'Send Log Test'), ButtonStyle.Success),
         button('admin:goodbye:repair', emojiLabel('WELCOME_DIAGNOSTICS', 'Repair')),
+        variablesButton('admin:goodbye:variables'),
       ),
       row(
         button('admin:goodbye:reset', emojiLabel('UPDATE_PLAIN', 'Reset Module'), ButtonStyle.Danger),
@@ -227,6 +229,7 @@ async function handleGoodbyeInteraction(interaction) {
 
   try {
     if (customId === 'admin:goodbye') return updatePanel(interaction);
+    if (customId === 'admin:goodbye:variables') return interaction.reply(variableReference('goodbye', { title: 'Goodbye · Message Variables', note: 'Use these tokens in the assigned Embed Studio departure template.' }));
     if (customId === 'admin:goodbye:dm') {
       return updatePanel(interaction, buildGoodbyeDmPanel(interaction.guild, interaction.member?.displayName || interaction.user?.username));
     }
