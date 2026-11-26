@@ -1,3 +1,4 @@
+import VariableReference from '../../../shared/VariableReference.jsx';
 import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 import React, { useMemo, useState } from 'react';
@@ -96,7 +97,7 @@ function Preview({ theme, panel }) {
   );
 }
 
-export default function TicketPanelBuilder({ theme, channels = [], roles = [], selectedPanel = null, busy = false, onSave, onDeploy, onRefreshPanel }) {
+export default function TicketPanelBuilder({ variables = [], theme, channels = [], roles = [], selectedPanel = null, busy = false, onSave, onDeploy, onRefreshPanel }) {
   const [panel, setPanel] = useState(() => ({ ...DEFAULT_PANEL, ...(selectedPanel || {}), appearance: { ...DEFAULT_PANEL.appearance, ...(selectedPanel?.appearance || {}) } }));
   const textChannels = useMemo(() => safeArray(channels).filter((channel) => [0, 5, 'GuildText', 'GuildAnnouncement', 'text'].includes(channel.type)), [channels]);
   const categories = useMemo(() => safeArray(channels).filter((channel) => [4, 'GuildCategory', 'category'].includes(channel.type)), [channels]);
@@ -152,7 +153,7 @@ export default function TicketPanelBuilder({ theme, channels = [], roles = [], s
             <Field theme={theme} label="Colour"><input value={panel.appearance?.color || '#5865F2'} onChange={(event) => updateAppearance('color', event.target.value)} style={fieldStyle(theme)} /></Field>
           </div>
 
-          <Field theme={theme} label="Embed Description"><textarea rows={4} value={panel.appearance?.description || ''} onChange={(event) => updateAppearance('description', event.target.value)} style={fieldStyle(theme)} /></Field>
+          <Field theme={theme} label="Embed Description"><textarea rows={4} value={panel.appearance?.description || ''} onChange={(event) => updateAppearance('description', event.target.value)} style={fieldStyle(theme)} /></Field><VariableReference theme={theme} tokens={variables} note="Copy placeholders into the public panel title, description or footer." />
           <Field theme={theme} label="Footer Text"><input value={panel.appearance?.footerText || ''} onChange={(event) => updateAppearance('footerText', event.target.value)} style={fieldStyle(theme)} /></Field>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 12 }}>
