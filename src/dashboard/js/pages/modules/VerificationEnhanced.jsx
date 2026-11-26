@@ -656,7 +656,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           <Field theme={theme} label="Thumbnail URL" value={draft.thumbnailUrl} onChange={(value) => setEditedPanelDraft((current) => ({ ...current, thumbnailUrl: value }))} />
         </div>
         <Field theme={theme} label="Description" value={draft.description} onChange={(value) => setEditedPanelDraft((current) => ({ ...current, description: value }))} multiline />
-        <VariableReference theme={theme} tokens={data?.panelVariables} remaining={4096-String(draft?.description??'').length} note="Select a variable to append to the description. Member-specific values depend on the rendering context." onInsert={token=>setEditedPanelDraft(current=>({...current,description:appendVariable(current.description,token,4096)}))} />
+        <VariableReference theme={theme} tokens={data?.panelVariables} remaining={4096-String(draft?.description??'').length} note="Select a variable to append to the description. Shared panels support server, status and custom variables." onInsert={token=>setEditedPanelDraft(current=>({...current,description:appendVariable(current.description,token,4096)}))} />
         <label style={{ display: 'grid', gap: 8, maxWidth: 320 }}>
           <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900 }}>BUTTON STYLE</span>
           <ThemedSelect theme={theme} value={draft.buttonStyle} onChange={(event) => setEditedPanelDraft((current) => ({ ...current, buttonStyle: event.target.value }))} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 14, padding: '12px 14px' }}>
