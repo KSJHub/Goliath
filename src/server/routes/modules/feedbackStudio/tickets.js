@@ -286,7 +286,7 @@ router.get("/:guildId/overview", async (req, res) => {
     const formTicketCount = tickets.filter(isFormTicket).length;
     const missingChannelRecordCount = tickets.filter(hasMissingChannelRecord).length;
 
-    return res.json({ success: true, guildId, overview: {
+    return res.json({ success: true, guildId, overview: { variables: require('../../../../core/guild/guildVariables').variablesForModule('global'),
       enabled: guildManager.isModuleEnabled(guildId, "tickets"),
       ticketCount: tickets.length,
       totalCount: tickets.length,
