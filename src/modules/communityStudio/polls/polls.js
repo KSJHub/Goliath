@@ -1,4 +1,5 @@
 'use strict';
+const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 
 const {
   ActionRowBuilder,
@@ -220,7 +221,8 @@ function summarizePoll(poll) {
     })),
   };
 }
-function buildPollEmbed(poll) {
+function buildPollEmbed(poll, guild = null) {
+  const description = guild ? renderModuleTemplate(poll.description, 'global', { guild }) : poll.description;
   const summary = summarizePoll(poll);
   const lines = summary.options.map((option, index) => {
     const bar = '█'.repeat(Math.max(0, Math.min(10, Math.round(option.percent / 10)))).padEnd(10, '░');
@@ -230,7 +232,7 @@ function buildPollEmbed(poll) {
   return new EmbedBuilder()
     .setColor(poll.status === 'closed' ? '#64748B' : '#3B82F6')
     .setTitle(`${poll.status === 'closed' ? 'Closed Poll' : 'Poll'} · ${poll.question}`.slice(0, 256))
-    .setDescription([poll.description, ...lines].filter(Boolean).join('\n\n').slice(0, 4096))
+    .setDescription([description, ...lines].filter(Boolean).join('\n\n').slice(0, 4096))
     .setFooter({ text: `Poll ID: ${poll.id} · ${summary.uniqueVoters} voter(s) · ${mode}` })
     .setTimestamp(new Date(poll.updatedAt || poll.createdAt || Date.now()));
 }
