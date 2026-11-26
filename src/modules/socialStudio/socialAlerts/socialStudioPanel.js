@@ -4,7 +4,7 @@ const { ActionRowBuilder, AttachmentBuilder, ButtonStyle, ChannelSelectMenuBuild
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
 const { goliathNavigation, navigationButton: btn, linkButton } = require('../../../core/guild/goliathNavigation');
-const { variablesForModule } = require('../../../core/guild/guildVariables');
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const store = require('./socialStudioStore');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
 const { providerInfo } = require('./socialStudioProviders');
@@ -734,32 +734,6 @@ function buildAccountManagePanel(i, config, creator) {
   ));
   return { embeds: [embed(config, emojiLabel('WELCOME_CUSTOM', 'Manage Account'), d, who(i), active ? platformColor(active.platform) : creatorAccent(linked))], components };
 }
-function variablesDescription() {
-  const variables = variablesForModule('socialStudio');
-  const lines = [`**${EMOJIS.PANELS} Available Variables**`];
-  let current = '';
-
-  for (const variable of variables) {
-    const token = `\`${variable}\``;
-    if (current && `${current} ${token}`.length > 90) {
-      lines.push(current);
-      current = token;
-    } else {
-      current = current ? `${current} ${token}` : token;
-    }
-  }
-
-  if (current) lines.push(current);
-
-  const note = '\n\n*Variables without context resolve to an empty value instead of breaking the message.*';
-  const description = lines.join('\n');
-  const maxLength = 4096 - note.length;
-
-  if (description.length <= maxLength) return description + note;
-
-  return `${description.slice(0, Math.max(0, maxLength - 80)).trimEnd()}\n… additional centrally managed variables are available.${note}`;
-}
-
 function buildTemplatePanel(i, config, type) {
   const current = resolveTemplate(config.templates, type);
   const defaults = config.templates?.defaults?.[type] || current;
@@ -788,7 +762,7 @@ function buildTemplatePanel(i, config, type) {
   return {
     embeds: [embed(config, `${ALERT_EMOJI[type] || EMOJIS.SOCIAL_ALERT_BELL} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
     components: [
-      row(btn(`${P}template:edit:${type}`, emojiLabel('NOTE', 'Edit Template'), ButtonStyle.Primary), btn(`${P}template:reset:${type}`, emojiLabel('REFRESH', 'Reset to Default'), ButtonStyle.Secondary, !changed)),
+      row(btn(`${P}template:edit:${type}`, emojiLabel('NOTE', 'Edit Template'), ButtonStyle.Primary), btn(`${P}template:reset:${type}`, emojiLabel('REFRESH', 'Reset to Default'), ButtonStyle.Secondary, !changed), variablesButton(`${P}variables`)),
       goliathNavigation(
       `${P}templates`,
       `${P}settings`,
@@ -832,24 +806,14 @@ if (name === 'templates') {
     const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(
       btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
-      btn(`${P}variables`, emojiLabel('PANELS', 'Variables'), ButtonStyle.Secondary),
+      variablesButton(`${P}variables`),
     )];
-    return { embeds: [embed(config, emojiLabel('DESIGN', 'Alert Templates'), 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **' + EMOJIS.PANELS + ' Variables** for the complete helper list.', who(i))], components: c };
+    return { embeds: [embed(config, emojiLabel('DESIGN', 'Alert Templates'), 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **' + EMOJIS.VARIABLES + ' Variables** for the complete helper list.', who(i))], components: c };
   }
-  if (name === 'variables') return { embeds: [embed(config, emojiLabel('PANELS', 'Template Variables'), variablesDescription(), who(i))], components: [
-      row(
-        btn(
-          `${P}templates`,
-          emojiLabel('BACK', 'Back'),
-          ButtonStyle.Secondary,
-        ),
-        btn(
-          `${P}settings`,
-          emojiLabel('SETTINGS', 'Settings'),
-          ButtonStyle.Secondary,
-        ),
-      ),
-    ] };
+  if (name === 'variables') {
+    const { embeds, files, allowedMentions } = variableReference('socialStudio', { title: 'Social Studio · Template Variables', note: 'Alert-specific values depend on the platform and event.' });
+    return { embeds, files, allowedMentions, components: [goliathNavigation(`${P}templates`, `${P}settings`)] };
+  }
   if (name === 'feeds') return buildSectionPanel(i, 'channels');
   if (name === 'alerts') {
     const settings = config.settings || {};
