@@ -1,4 +1,6 @@
 'use strict';
+const { variablesButton } = require('../../../core/ui/variableReference');
+const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
@@ -212,7 +214,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
       `**Level Up Announcements:** ${section.announceLevelUps !== false ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       '',
       '**XP Sources**',
-      ...Object.entries(section.xpSources).map(([id, source]) => sourceLine(id, source)),
+      ...Object.entries(section.xpSources).map(([id, source]) => sourceLine(id, source) + (source.description ? '\n' + renderModuleTemplate(source.description, 'global', { guild }).slice(0,150) : '')),
       '',
       '**XP Multiplier**',
       activeMultiplier
@@ -250,6 +252,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
       row(
         button('admin:leveling:configureMessage', emojiLabel('USER_FEEDBACK', 'Message XP'), ButtonStyle.Primary),
         button('admin:leveling:configureVoice', emojiLabel('USER_TEMP_VOICE', 'Voice XP'), ButtonStyle.Primary),
+        variablesButton('admin:leveling:variables'),
         button('admin:leveling:multiplier', emojiLabel('THREAT', 'XP Event'), ButtonStyle.Primary),
         button('admin:leveling:ranks', emojiLabel('USER_ROLES', 'Rank Rewards'), ButtonStyle.Primary),
         button('admin:leveling:leaderboard', emojiLabel('ANALYTICS', 'Analytics'), ButtonStyle.Primary),
