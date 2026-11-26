@@ -111,7 +111,7 @@ function normalPresetPanel(guild,userId,scope){
     row(menu),
     row(button(prefix+'load:'+scope,emojiLabel('MOD_CASE_OPEN','Load Message'),ButtonStyle.Primary,!has),button(prefix+'save:'+scope,emojiLabel('PRESETS','Save Active to Preset'),ButtonStyle.Success,!has),button(prefix+'editPreset-'+selected+':'+scope,emojiLabel('EDIT','Edit Preset'),ButtonStyle.Secondary,!has),button(prefix+'saveAs:'+scope,emojiLabel('ADD','Save As'),ButtonStyle.Success)),
     row(button(prefix+'rename:'+scope,emojiLabel('EDIT','Rename'),ButtonStyle.Secondary,!has),button(prefix+'duplicate:'+scope,emojiLabel('DOCUMENT','Duplicate'),ButtonStyle.Secondary,!has),button(prefix+'delete:'+scope,emojiLabel('DELETE','Delete'),ButtonStyle.Danger,!has)),
-    row(button(prefix+'default:'+scope,emojiLabel('USER_STARBOARD','Set Default'),ButtonStyle.Secondary,!has),button(prefix+'defaults:'+scope,'Manage Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,emojiLabel('WELCOME_EXPORT','Export'),ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),button(prefix+'variables:'+scope,emojiLabel('VARIABLES','Variables'),ButtonStyle.Secondary)),
+    row(button(prefix+'default:'+scope,emojiLabel('USER_STARBOARD','Set Default'),ButtonStyle.Secondary,!has),button(prefix+'defaults:'+scope,'Manage Default',ButtonStyle.Secondary),button(prefix+'export:'+scope,emojiLabel('WELCOME_EXPORT','Export'),ButtonStyle.Secondary),button(prefix+'import:'+scope,'Import',ButtonStyle.Secondary),require('../../../core/ui/variableReference').variablesButton(prefix+'variables:'+scope)),
     row(button(prefix+'prev:'+scope,'Previous',ButtonStyle.Secondary,page===0),button(prefix+'next:'+scope,'Next',ButtonStyle.Secondary,(page+1)*25>=entries.length),button('admin:welcome:'+(scope==='scheduled'?'scheduled':scope==='dm'?'dm':'instant'),emojiLabel('BACK','Back')))
   ]};
 }
@@ -418,10 +418,7 @@ if(/^admin:welcome:normal(?:Select|Name|):/.test(customId)){
   }
 
   if(action==='variables'){
-    const variables=require('../../../core/guild/guildVariables').variablesForModule('welcome');
-    const list=Array.isArray(variables)?variables.map(v=>typeof v==='string'?v:v?.key).filter(Boolean):Object.keys(variables||{});
-    const description=list.map(v=>'• `'+(v.startsWith('{')?v:'{'+v+'}')+'`').join('\n').slice(0,3500);
-    return interaction.reply({embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle('Welcome · Message Variables').setDescription('Use these placeholders in normal messages. They are resolved when the message is sent.\n\n'+(description||'No variables available.'))],ephemeral:true});
+    return interaction.reply(require('../../../core/ui/variableReference').variableReference('welcome',{title:'Welcome · Message Variables',note:'Use these placeholders in normal messages. They are resolved when the message is sent.'}));
   }
   if(action==='prev'||action==='next'){setSelection(guildId,userId,scope,{presetPage:Math.max(0,(state.presetPage||0)+(action==='next'?1:-1))});return updatePanel(interaction,panel());}
   if(action==='saveAs')return interaction.showModal(normalPresetNameModal(scope,action));
