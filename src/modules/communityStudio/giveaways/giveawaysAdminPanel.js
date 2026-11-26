@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton } = require('../../../core/ui/variableReference');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
@@ -91,7 +92,7 @@ function buildGiveawaysAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     row(new ChannelSelectMenuBuilder().setCustomId('admin:giveaways:logChannel').setPlaceholder('Log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:giveaways:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
     row(button('admin:giveaways:deployTest', emojiLabel('DEPLOY', 'Deploy Test Giveaway'), ButtonStyle.Success), button(enabled ? 'admin:giveaways:disable' : 'admin:giveaways:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary), button('admin:giveaways:toggleMultiple', emojiLabel('GIVEAWAY_TICKET', 'Multiple'), ButtonStyle.Secondary), button('admin:giveaways:toggleRequireRole', emojiLabel('LOCKDOWN', 'Role Req'), ButtonStyle.Secondary), button('admin:giveaways:togglePing', emojiLabel('USER_SOCIAL', 'Ping'), ButtonStyle.Secondary)),
-    row(button('admin:giveaways:levelingEligibility', emojiLabel('MOD_TOP_STAFF', 'XP Eligibility'), ButtonStyle.Primary), button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+    row(variablesButton('admin:giveaways:variables'), button('admin:giveaways:levelingEligibility', emojiLabel('MOD_TOP_STAFF', 'XP Eligibility'), ButtonStyle.Primary), button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       button(`admin:giveaways:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
       button(`admin:giveaways:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
   ] };
