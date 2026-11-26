@@ -42,6 +42,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
   const [voiceChannels, setVoiceChannels] = useState([]);
   const [categories, setCategories] = useState([]);
   const [config, setConfig] = useState(null);
+  const [variables, setVariables] = useState([]);
   const [overview, setOverview] = useState(null);
   const [hubDraft, setHubDraft] = useState(defaultHub);
   const [settingsDraft, setSettingsDraft] = useState({ defaultUserLimit: 0, deleteWhenEmpty: true, ownerPanelEnabled: true, allowOwnerRename: true, allowOwnerStatus: true, allowOwnerLock: true, allowOwnerHide: true, allowOwnerLimit: true, allowOwnerPermits: true, allowOwnerTransfer: true, allowOwnerDelete: true });
@@ -68,6 +69,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
       const nextConfig = data.config || {};
       const nextSettings = nextConfig.settings || {};
       setConfig(nextConfig);
+      setVariables(Array.isArray(data.variables) ? data.variables : []);
       setOverview(data.overview || {});
       setSettingsDraft({
         defaultUserLimit: nextSettings.defaultUserLimit || 0,
@@ -192,7 +194,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
             <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>New Hub Channel Name<input value={hubDraft.joinChannelName} onChange={(event) => setHubDraft({ ...hubDraft, joinChannelName: event.target.value })} style={fieldStyle(theme)} /></label>
             <ChannelSelect theme={theme} label="Existing Temp Category" value={hubDraft.categoryId} onChange={(value) => setHubDraft({ ...hubDraft, categoryId: value })} channels={categories} empty="Create or use automatic category" />
             <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>New Category Name<input value={hubDraft.categoryName} onChange={(event) => setHubDraft({ ...hubDraft, categoryName: event.target.value })} style={fieldStyle(theme)} /></label>
-            <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Temp Channel Name Template<input value={hubDraft.nameTemplate} onChange={(event) => setHubDraft({ ...hubDraft, nameTemplate: event.target.value })} style={fieldStyle(theme)} /></label>
+            <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Temp Channel Name Template<input value={hubDraft.nameTemplate} onChange={(event) => setHubDraft({ ...hubDraft, nameTemplate: event.target.value })} style={fieldStyle(theme)} /></label><details><summary style={{ cursor: 'pointer', fontWeight: 900 }}>Variables</summary><p>Copy a variable or select it to append it to the channel name template.</p><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{variables.map(token => <button type="button" key={token} onClick={() => setHubDraft(draft => ({ ...draft, nameTemplate: (draft.nameTemplate || '') + token }))} style={{ color: theme.cardText, background: theme.softBg, border: '1px solid ' + theme.cardBorder, borderRadius: 8, padding: 6, cursor: 'pointer' }}>{token}</button>)}</div>{!variables.length && <span>Variable list unavailable.</span>}</details>
             <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Default User Limit<input type="number" min="0" max="99" value={hubDraft.userLimit} onChange={(event) => setHubDraft({ ...hubDraft, userLimit: event.target.value })} style={fieldStyle(theme)} /></label>
             <label style={{ display: 'grid', gap: 8, fontWeight: 900 }}>Bitrate<input type="number" min="0" value={hubDraft.bitrate} onChange={(event) => setHubDraft({ ...hubDraft, bitrate: event.target.value })} style={fieldStyle(theme)} /></label>
             <div style={{ display: 'grid', gap: 8 }}>
