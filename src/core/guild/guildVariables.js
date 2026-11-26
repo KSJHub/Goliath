@@ -150,6 +150,19 @@ function renderModuleTemplate(value, moduleName, interaction, options = {}) {
   const map = buildVariableMap(interaction, false, {}, options);
   return String(value ?? '').replace(/\{[a-zA-Z][a-zA-Z0-9_.-]*\}/g, token => supported.has(token) && Object.hasOwn(map, token) ? String(map[token] ?? '') : token);
 }
+const VARIABLE_EXAMPLES = Object.freeze({
+  '{server}': 'Server name, e.g. My Community',
+  '{guildName}': 'Server name, e.g. My Community',
+  '{memberCount}': 'Member count, e.g. 250',
+  '{userMention}': 'Member mention when a member is available',
+  '{username}': 'Account username, e.g. ExampleUser',
+  '{channelMention}': 'Channel mention when a channel is available',
+  '{minimumAccountAgeDays}': 'Minimum account age in days, e.g. 7',
+  '{cooldownSeconds}': 'Retry cooldown in seconds, e.g. 10',
+  '{attemptsRemaining}': 'Remaining attempts when supplied by the verification event, e.g. 3',
+  '{guildCreatedAt}': 'Discord-formatted server creation date',
+});
+function variableExample(token) { return VARIABLE_EXAMPLES[token] || ''; }
 function statsCounterVariables(segmentCount) {
   const count = Math.max(0, Math.min(4, Math.floor(Number(segmentCount) || 0)));
   return [...Array.from({length: count}, (_, index) => '{'+(index+1)+'}'), ...(count === 1 ? ['{value}', '{count}', '{date}'] : [])];
@@ -158,4 +171,4 @@ function verificationVariables(guild, template = '') {
   const extra = Object.fromEntries((String(template).match(/\{\w+\}/g) || []).map(token => [token.slice(1,-1), '']));
   return Object.keys(buildVerificationVariableMap(null, guild, extra)).filter(key => /^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(key)).map(key => '{'+key+'}').sort();
 }
-module.exports = { statsCounterVariables, verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
+module.exports = { variableExample, statsCounterVariables, verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
