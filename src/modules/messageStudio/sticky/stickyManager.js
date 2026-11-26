@@ -2,6 +2,7 @@
 
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const stickyStore = require('./stickyStore');
+const guildVariables = require('../../../core/guild/guildVariables');
 const emojiPayload = require('../../utilityStudio/emojis/emojiPayload');
 
 const channelLocks = new Map();
@@ -68,26 +69,32 @@ function normaliseStickyInput(input = {}) {
   };
 }
 
-function buildStickyPayload(sticky) {
+function buildStickyPayload(sticky, channel = null) {
+  const render = value => {
+    if (!channel) return String(value ?? '');
+    const supported = new Set(guildVariables.variablesForModule('sticky'));
+    const map = guildVariables.buildVariableMap({ guild: channel.guild, channel, channelId: channel.id });
+    return String(value ?? '').replace(/\{[a-zA-Z][a-zA-Z0-9_.-]*\}/g, token => supported.has(token) && Object.hasOwn(map, token) ? String(map[token] ?? '') : token);
+  };
   if (sticky.type === 'embed') {
     const embedData = sticky.embed || {};
     const embed = new EmbedBuilder()
       .setColor(embedData.color || '#2b7cff')
-      .setTitle(embedData.title || 'Sticky Message')
-      .setDescription(embedData.description || sticky.content || 'No sticky content set.');
+      .setTitle(render(embedData.title || 'Sticky Message').slice(0, 256) || 'Sticky Message')
+      .setDescription(render(embedData.description || sticky.content || 'No sticky content set.').slice(0, 4096) || 'No sticky content set.');
 
-    if (embedData.footer) embed.setFooter({ text: String(embedData.footer).slice(0, 2048) });
-    return { content: sticky.content && embedData.description ? sticky.content : '', embeds: [embed] };
+    if (embedData.footer) embed.setFooter({ text: render(embedData.footer).slice(0, 2048) || ' ' });
+    return { content: sticky.content && embedData.description ? render(sticky.content).slice(0, 2000) : '', embeds: [embed] };
   }
 
-  return { content: sticky.content || 'No sticky content set.', embeds: [] };
+  return { content: render(sticky.content || 'No sticky content set.').slice(0, 2000) || 'No sticky content set.', embeds: [] };
 }
 
 async function resolveStickyPayload(channel, sticky) {
   return emojiPayload.resolveMessagePayload(
     channel.client,
     channel.guild.id,
-    buildStickyPayload(sticky),
+    { ...buildStickyPayload(sticky, channel), allowedMentions: { parse: [] } },
     'sticky',
   );
 }
