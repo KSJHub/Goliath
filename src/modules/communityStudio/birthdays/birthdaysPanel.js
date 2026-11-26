@@ -1,4 +1,5 @@
 'use strict';
+const { variableReference } = require('../../../core/ui/variableReference');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const guildManager = require('../../../core/guild/guildManager');
@@ -93,6 +94,7 @@ async function handleAdmin(interaction) {
   else if (id === 'admin:birthdays:manage') { await interaction.showModal(manageModal()); return true; }
   else if (id === 'admin:birthdays:import') { await interaction.showModal(importModal()); return true; }
   else if (id === 'admin:birthdays:combine') birthdays.updateSettings(interaction.guildId, { combineSameDay: !birthdays.getSection(interaction.guildId).settings.combineSameDay }, { ...actor, action: 'birthdays_combine_toggle' });
+  else if (['admin:birthdays:messages:individual:variables','admin:birthdays:messages:group:variables'].includes(id)) { await interaction.reply(variableReference(id.includes(':group:') ? 'birthdayGroup' : 'birthdayIndividual', { title: 'Birthdays · Celebration Variables', note: 'Age is only available when the member has chosen to share it.' })); return true; }
   else if (id === 'admin:birthdays:messages:individual:edit') { await interaction.showModal(messagesModal(birthdays.getSection(interaction.guildId), 'individual')); return true; }
   else if (id === 'admin:birthdays:messages:group:edit') { await interaction.showModal(messagesModal(birthdays.getSection(interaction.guildId), 'group')); return true; }
   else if (id === 'admin:birthdays:messages:individual:defaults') { birthdays.updateSettings(interaction.guildId, { messageTemplates: birthdays.DEFAULT_INDIVIDUAL_TEMPLATES }, { ...actor, action: 'birthdays_individual_messages_defaults' }); await respond(interaction, messagePoolPayload(interaction, 'individual')); return true; }
