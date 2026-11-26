@@ -406,7 +406,7 @@ async function sendSimulation(req, id, account, data) {
 
 router.use(requireManageAccess);
 
-router.get('/:guildId', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, config: getConfig(id) }); } catch (error) { return failure(res, error, 400); } });
+router.get('/:guildId', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, config: getConfig(id), variables: require('../../../../core/guild/guildVariables').variablesForModule('socialStudio') }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/overview', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, overview: overview(getConfig(id)) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/providers', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, providers: providerCatalog() }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/history', (req, res) => { try { const id = guildId(req); const limit = asNumber(req.query.limit, 100, 1, 500); return success(res, { guildId: id, history: getConfig(id).history.slice(-limit).reverse() }); } catch (error) { return failure(res, error, 400); } });
