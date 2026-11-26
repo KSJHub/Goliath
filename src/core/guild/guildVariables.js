@@ -62,6 +62,7 @@ const SOCIAL_VARIABLES = Object.freeze([
 const MODULE_VARIABLES = Object.freeze({
   global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
   timedRoles: ['{member}', '{username}', '{milestone}', '{role}', '{duration}', '{server}', '{joined}', '{achieved}', '{nextMilestone}', '{nextDue}'],
+  inviteDM: ['{user}', '{invite}'],
   birthdayIndividual: ['{mention}', '{user}', '{age}'],
   birthdayGroup: ['{mentions}', '{count}'],
   sticky: ['{channelId}', '{channelName}', '{channelMention}'],
