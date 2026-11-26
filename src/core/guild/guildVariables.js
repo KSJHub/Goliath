@@ -167,8 +167,13 @@ function statsCounterVariables(segmentCount) {
   const count = Math.max(0, Math.min(4, Math.floor(Number(segmentCount) || 0)));
   return [...Array.from({length: count}, (_, index) => '{'+(index+1)+'}'), ...(count === 1 ? ['{value}', '{count}', '{date}'] : [])];
 }
+function verificationPanelVariables(guild) {
+  const map = buildVerificationVariableMap(null, guild);
+  const supported = new Set(['guildId','guildName','server','serverId','guildIcon','serverIcon','guildBanner','guildMemberCount','memberCount','guildVanityCode','timestamp','nowTimestamp','successEmoji','warningEmoji','errorEmoji','proofVerifiedEmoji','successColor','warningColor','errorColor','proofVerifiedColor', ...loadPersistedCustomVariables().filter(item=>item.enabled).map(item=>item.key)]);
+  return Object.keys(map).filter(key=>supported.has(key)).map(key=>'{'+key+'}').sort();
+}
 function verificationVariables(guild, template = '') {
   const extra = Object.fromEntries((String(template).match(/\{\w+\}/g) || []).map(token => [token.slice(1,-1), '']));
   return Object.keys(buildVerificationVariableMap(null, guild, extra)).filter(key => /^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(key)).map(key => '{'+key+'}').sort();
 }
-module.exports = { variableExample, statsCounterVariables, verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
+module.exports = { verificationPanelVariables, variableExample, statsCounterVariables, verificationVariables, renderModuleTemplate, SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
