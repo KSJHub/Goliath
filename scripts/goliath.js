@@ -675,6 +675,30 @@ function guildVariableSourceAudit() {
     if (!guildVariables.includes(exportName)) { console.error(`❌ guildVariables.js must retain ${exportName}.`); return false; }
   }
   
+  try {
+    const registry = require(CENTRAL);
+    const assert = require('node:assert/strict');
+    const guild = { id: '123', name: 'Audit Guild', memberCount: 42, createdTimestamp: 1700000000000 };
+    const context = { guild, channel: { id: '456', name: 'audit-channel' } };
+    const options = { customVariables: [] };
+    const global = registry.variablesForModule('global', []);
+    const map = registry.buildVariableMap(context, false, {}, options);
+    for (const token of global) assert(Object.hasOwn(map, token), 'Missing global renderer: ' + token);
+    assert(!global.includes('{createdAt}'), 'Member creation date must not be advertised in server-only contexts');
+    assert.equal(registry.renderModuleTemplate('{guild}|{memberCount}|{unknown}', 'global', context, options), 'Audit Guild|42|{unknown}');
+    assert.equal(registry.renderModuleTemplate('{channelName}|{channelMention}', 'sticky', context, options), 'audit-channel|<#456>');
+    assert.equal(registry.renderModuleTemplate('{channelName}', 'global', context, options), '{channelName}');
+    assert.deepEqual(registry.statsCounterVariables(1), ['{1}', '{value}', '{count}', '{date}']);
+    assert.deepEqual(registry.statsCounterVariables(4), ['{1}', '{2}', '{3}', '{4}']);
+    assert(registry.verificationVariables(guild, '{attemptsRemaining}').includes('{attemptsRemaining}'));
+    const scheduled = require(path.join(SRC, 'modules/messageStudio/welcome/scheduledWelcomeMessage.js'));
+    const output = scheduled.renderMessage('{members}|{memberNames}|{memberCount}|{server}', guild, [{ id: '789', displayName: 'Audit Member' }]);
+    assert.equal(output, 'our newest arrival|Audit Member|1|Audit Guild');
+    console.log('✅ Contextual variable rendering regression checks passed.');
+  } catch (error) {
+    console.error('❌ Contextual variable rendering regression failed:', error.message);
+    return false;
+  }
   console.log(`✅ Central Guild Variables source-of-truth audit passed across ${files.length} source files.`);
   return true;
   
