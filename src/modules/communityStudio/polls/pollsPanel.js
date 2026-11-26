@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton } = require('../../../core/ui/variableReference');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { actionButton, navigationButton } = require('../../../core/guild/goliathNavigation');
 
@@ -47,7 +48,7 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
   return { embeds: [embed], components: [
-    row(button('admin:polls:create', emojiLabel('ADD', 'Create Poll'), ButtonStyle.Success), button('admin:polls:manage', emojiLabel('WORKSPACE', 'Manage Polls')), button(enabled ? 'admin:polls:disable' : 'admin:polls:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary)),
+    row(button('admin:polls:create', emojiLabel('ADD', 'Create Poll'), ButtonStyle.Success), variablesButton('admin:polls:variables'), button('admin:polls:manage', emojiLabel('WORKSPACE', 'Manage Polls')), button(enabled ? 'admin:polls:disable' : 'admin:polls:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary)),
     row(actionButton('admin:polls:settings', 'settings'), button('admin:polls:health', emojiLabel('WELCOME_DIAGNOSTICS', 'Health'), ButtonStyle.Secondary), button('admin:polls:repair', emojiLabel('WELCOME_CUSTOM', 'Repair')), button('admin:polls:export', emojiLabel('MOD_EXPORT', 'Export'), ButtonStyle.Secondary), button('admin:polls:reset', emojiLabel('DELETE', 'Reset'), ButtonStyle.Danger)),
     row(actionButton('admin:modules', 'back')),
   ] };
@@ -73,7 +74,7 @@ function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage 
 }
 function buildManagePanel(guild) {
   const pollList = Object.values(polls.getSection(guild.id).polls || {}).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 25);
-  if (!pollList.length) return { content: 'No polls exist yet. Create one first.', embeds: [], components: [row(button('admin:polls:create', emojiLabel('ADD', 'Create Poll'), ButtonStyle.Success), actionButton('admin:polls', 'back'))] };
+  if (!pollList.length) return { content: 'No polls exist yet. Create one first.', embeds: [], components: [row(button('admin:polls:create', emojiLabel('ADD', 'Create Poll'), ButtonStyle.Success), variablesButton('admin:polls:variables'), actionButton('admin:polls', 'back'))] };
   const selector = new StringSelectMenuBuilder().setCustomId('admin:polls:select').setPlaceholder('Select a poll to manage').addOptions(pollList.map((poll) => ({ label: String(poll.question).slice(0, 100), description: `${poll.status} · ${poll.options.length} options`.slice(0, 100), value: poll.id })));
   return { content: 'Select a poll to deploy, close, refresh or delete.', embeds: [], components: [row(selector), row(actionButton('admin:polls', 'back'))] };
 }
@@ -81,7 +82,7 @@ function buildPollDetailPanel(guild, pollId) {
   const poll = polls.getPoll(guild.id, pollId);
   if (!poll) throw new Error('Poll not found.');
   const summary = polls.summarizePoll(poll);
-  const embed = polls.buildPollEmbed(poll).addFields(
+  const embed = polls.buildPollEmbed(poll, guild).addFields(
     { name: 'Status', value: poll.status, inline: true },
     { name: 'Responses', value: String(summary.totalVotes || 0), inline: true },
     { name: 'Channel', value: formatChannel(poll.channelId), inline: true }
