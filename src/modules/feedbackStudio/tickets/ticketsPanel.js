@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton, paginationButtons, emojiButton } = require('../../../core/guild/goliathNavigation');
@@ -1865,7 +1866,8 @@ let ticketSetupPanelApi;
       ),
 
       new ActionRowBuilder().addComponents(
-        emojiButton(`ticket_setup:management:${panel.panelId}`, 'Back To Manage Ticket', EMOJIS.BACK)
+        emojiButton(`ticket_setup:management:${panel.panelId}`, 'Back To Manage Ticket', EMOJIS.BACK),
+        variablesButton(`ticket_setup:variables:${panel.panelId}`)
       ),
     ];
   }
@@ -2415,6 +2417,7 @@ let ticketSetupPanelApi;
       return true;
     }
 
+    if (action === 'variables') { await interaction.reply(variableReference('global', { title: 'Tickets · Panel Variables', note: 'Supported in public panel title, description and footer. Individual ticket values are not available before creation.' })); return true; }
     if (action === 'appearance') {
       await showAppearanceEditor(interaction, panelId);
       return true;
