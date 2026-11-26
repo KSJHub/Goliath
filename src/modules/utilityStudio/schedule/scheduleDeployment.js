@@ -13,7 +13,7 @@ const {
 } = require('discord.js');
 const { navigationButton, linkButton: sharedLinkButton } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
-const { replaceVars } = require('../../../core/guild/guildVariables');
+const { replaceVars, renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const emojiPayload = require('../emojis/emojiPayload');
 const { buildScheduleWaitlistPromotionNotice } = require('../../../core/ui/systemNotices');
 const schedule = require('./schedule');
@@ -59,7 +59,7 @@ function calendarUrl(event) {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-function buildEventPayload(event) {
+function buildEventPayload(event, guild = null) {
   const counts = schedule.rsvpCounts(event);
   const isOpen = schedule.isRsvpOpen(event);
   const capacity = event.capacity ? `${schedule.attendeeCount(event)}/${event.capacity}` : String(schedule.attendeeCount(event));
@@ -82,7 +82,7 @@ function buildEventPayload(event) {
   const embed = new EmbedBuilder()
     .setColor(event.color || STATUS_COLOURS[event.status] || STATUS_COLOURS.scheduled)
     .setTitle(event.title)
-    .setDescription(event.description || 'No description provided.')
+    .setDescription((guild ? renderModuleTemplate(event.description, 'global', { guild }) : event.description)?.slice(0, 4096) || 'No description provided.')
     .addFields(fields.slice(0, 25))
     .setFooter({ text: `Schedule · ${event.status.toUpperCase()} · ${event.eventId}` })
     .setTimestamp(new Date(event.updatedAt || Date.now()));
@@ -175,7 +175,7 @@ async function deploy(guild, eventId, channelId = null, meta = {}) {
   if (!event) throw new Error('Schedule event not found.');
   const channel = await resolveChannel(guild, event, channelId);
   const mentions = event.mentionRoleIds.map((id) => `<@&${id}>`).join(' ');
-  const payload = await resolveSchedulePayload(guild, { content: mentions || undefined, allowedMentions: { roles: event.mentionRoleIds }, ...buildEventPayload(event) });
+  const payload = await resolveSchedulePayload(guild, { content: mentions || undefined, allowedMentions: { roles: event.mentionRoleIds }, ...buildEventPayload(event, guild) });
   const message = await channel.send(payload);
   event = schedule.saveEvent(guild.id, { ...event, channelId: channel.id, messageId: message.id, lastError: null }, { ...meta, action: 'schedule_deploy' });
   await ensureEventThread(guild, event, message);
@@ -199,7 +199,7 @@ async function updateDeployment(guild, eventId) {
     await syncDiscordEvent(guild, event).catch(() => null);
     return { updated: false, reason: 'message_missing' };
   }
-  await message.edit(await resolveSchedulePayload(guild, buildEventPayload(event)));
+  await message.edit(await resolveSchedulePayload(guild, buildEventPayload(event, guild)));
   await syncDiscordEvent(guild, event).catch(() => null);
   return { updated: true, channelId: channel.id, messageId: message.id };
 }
@@ -327,7 +327,7 @@ async function handleMemberInteraction(interaction) {
   await syncAttendeeRole(member, event, result.previousStatus, action === 'remove' ? null : result.status);
   if (action !== 'remove' && schedule.isAttendeeStatus(event, result.status)) await addToThread(interaction.guild, event, member);
   if (result.promotedUserId) await syncPromotedMember(interaction.guild, event, result.promotedUserId);
-  await interaction.update(await resolveSchedulePayload(interaction.guild, buildEventPayload(event)));
+  await interaction.update(await resolveSchedulePayload(interaction.guild, buildEventPayload(event, interaction.guild)));
   const overlaps = schedule.getSection(interaction.guildId).settings.warnOverlaps && action !== 'remove' && schedule.isAttendeeStatus(event, result.status)
     ? schedule.findOverlaps(interaction.guildId, interaction.user.id, eventId)
     : [];
