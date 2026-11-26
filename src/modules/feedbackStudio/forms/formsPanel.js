@@ -1,4 +1,5 @@
 'use strict';
+const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
@@ -71,17 +72,18 @@ function buildFormsOverviewEmbed(guildId) {
     .setTimestamp(new Date());
 }
 
-function buildFormPanelEmbed(panel = {}, forms = []) {
+function buildFormPanelEmbed(panel = {}, forms = [], guild = null) {
+  const render = value => guild ? renderModuleTemplate(value, 'global', { guild }) : String(value ?? '');
   return new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle(panel.title || 'Forms')
+    .setTitle(render(panel.title || 'Forms').slice(0, 256) || 'Forms')
     .setDescription([
-      panel.description || 'Choose a form below.',
+      render(panel.description || 'Choose a form below.'),
       '',
       forms.length
-        ? forms.map((form) => `- **${form.name}** - ${form.description || 'Submit for staff review.'}`).join('\n')
+        ? forms.map((form) => `- **${form.name}** - ${render(form.description || 'Submit for staff review.')}`).join('\n')
         : 'No forms are currently available.',
-    ].join('\n'))
+    ].join('\n').slice(0, 4096))
     .setFooter({ text: 'Goliath Forms' })
     .setTimestamp(new Date());
 }
@@ -168,7 +170,7 @@ async function deployFormPanel(channel, panel, guildOrMeta = {}) {
   }, guildOrMeta);
 
   const message = await channel.send({
-    embeds: [buildFormPanelEmbed(savedPanel, panelForms)],
+    embeds: [buildFormPanelEmbed(savedPanel, panelForms, channel.guild)],
     components: buildFormPanelRows(savedPanel, panelForms),
   });
 
