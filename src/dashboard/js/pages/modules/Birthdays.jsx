@@ -1,3 +1,4 @@
+import VariableReference from '../../shared/VariableReference.jsx';
 import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
@@ -42,6 +43,7 @@ function formatBirthday(item) {
 
 export default function Birthdays({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
+  const [variables,setVariables]=useState([]);
   const [config, setConfig] = useState(null);
   const [overview, setOverview] = useState({});
   const [roles, setRoles] = useState([]);
@@ -76,7 +78,7 @@ export default function Birthdays({ theme, selectedGuild, selectedGuildData }) {
     setError('');
     try {
       const [payload, resources] = await Promise.all([api.request(`/api/birthdays/${guildId}/overview`), loadResources()]);
-      setConfig(payload.config || {});
+      setVariables(payload.variables || []); setConfig(payload.config || {});
       setOverview(payload.overview || {});
       setRoles(resources[0]);
       setChannels(resources[1]);
@@ -154,7 +156,7 @@ export default function Birthdays({ theme, selectedGuild, selectedGuildData }) {
         <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Role duration (hours)<input type="number" min="1" max="168" value={settings.roleDurationHours || 24} onChange={(event) => setConfig((current) => ({ ...current, settings: { ...(current?.settings || {}), roleDurationHours: Number(event.target.value) } }))} onBlur={(event) => saveSettings({ roleDurationHours: Number(event.target.value) })} style={fieldStyle(theme)} /></label>
         <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Leap-day handling<ThemedSelect theme={theme} value={settings.leapDayMode || 'feb28'} onChange={(event) => saveSettings({ leapDayMode: event.target.value })} style={fieldStyle(theme)}><option value="feb28">Celebrate on 28 February</option><option value="mar1">Celebrate on 1 March</option></ThemedSelect></label>
       </div>
-      <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Birthday message<textarea rows={4} value={settings.messageTemplate || ''} onChange={(event) => setConfig((current) => ({ ...current, settings: { ...(current?.settings || {}), messageTemplate: event.target.value } }))} onBlur={(event) => saveSettings({ messageTemplate: event.target.value })} style={{ ...fieldStyle(theme), resize: 'vertical' }} /><span style={{ fontSize: 12, fontWeight: 700 }}>Placeholders: {'{mention}'} · {'{user}'} · {'{server}'} · {'{age}'}</span></label>
+      <label style={{ display: 'grid', gap: 8, color: theme.mutedText, fontWeight: 850 }}>Birthday message<textarea rows={4} value={settings.messageTemplate || ''} onChange={(event) => setConfig((current) => ({ ...current, settings: { ...(current?.settings || {}), messageTemplate: event.target.value } }))} onBlur={(event) => saveSettings({ messageTemplate: event.target.value })} style={{ ...fieldStyle(theme), resize: 'vertical' }} /></label><VariableReference theme={theme} tokens={variables} note="Copy placeholders into the birthday message." />
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={settings.announceByDefault !== false} onChange={(event) => saveSettings({ announceByDefault: event.target.checked })} /> Announce birthdays by default</label>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={settings.showAgeByDefault === true} onChange={(event) => saveSettings({ showAgeByDefault: event.target.checked })} /> Show age by default</label>
