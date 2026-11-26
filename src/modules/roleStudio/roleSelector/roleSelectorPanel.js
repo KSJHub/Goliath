@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const { navigationButton, linkButton, goliathNavigation, EMOJIS, emojiLabel } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -867,7 +868,7 @@ function buildSelectorTemplates(guildId, group, page = 0) {
   const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:templateBind',group.id)).setPlaceholder('Select an individual template').setMinValues(1).setMaxValues(1);
   if (list.length) menu.addOptions(list.map(t=>({label:String(t.name || t.templateId).slice(0,100),value:t.templateId,default:bound?.templateId===t.templateId})));
   else menu.addOptions({label:'No templates available',value:'__none__'}).setDisabled(true);
-  return {embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('DESIGN','Selector Template')).setDescription(['**'+group.name+'**','Current: '+(bound ? (bound.name || bound.templateId) : 'Shared template / default'),'Choose a template from Embed Studio or restore the shared appearance.','Page '+(page+1)+' of '+(last+1)].join('\n'))],components:[row(menu),row(button(customId('admin:roleSelector:templatePage',group.id,page-1),'Previous',ButtonStyle.Secondary,page===0),button(customId('admin:roleSelector:templatePage',group.id,page+1),'Next',ButtonStyle.Secondary,page===last),button(customId('admin:roleSelector:templateReset',group.id),'Restore Shared',ButtonStyle.Secondary,!bound)),nav(customId('admin:roleSelector:groupOpen',group.id))]};
+  return {embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('DESIGN','Selector Template')).setDescription(['**'+group.name+'**','Current: '+(bound ? (bound.name || bound.templateId) : 'Shared template / default'),'Choose a template from Embed Studio or restore the shared appearance.','Page '+(page+1)+' of '+(last+1)].join('\n'))],components:[row(menu),row(button(customId('admin:roleSelector:templatePage',group.id,page-1),'Previous',ButtonStyle.Secondary,page===0),button(customId('admin:roleSelector:templatePage',group.id,page+1),'Next',ButtonStyle.Secondary,page===last),button(customId('admin:roleSelector:templateReset',group.id),'Restore Shared',ButtonStyle.Secondary,!bound),variablesButton('admin:roleSelector:variables')),nav(customId('admin:roleSelector:groupOpen',group.id))]};
 }
 
 async function handleRoleSelectorInteraction(i) {
@@ -881,6 +882,7 @@ async function handleRoleSelectorInteraction(i) {
     }
 
     if (id === 'admin:colourRoles' || id === 'admin:roleSelector' || id === 'admin:roleSelector:home') return respond(i, await buildAdminPanel(i.guild, actorName(i)));
+    if (id === 'admin:roleSelector:variables') { await i.reply(variableReference('roleSelector', { title: 'Role Selector · Template Variables', tokens: require('../../../core/guild/guildVariables').getVariables(), note: 'Member-specific values require a member context; shared deployed panels may not have one.' })); return true; }
     if (id === 'admin:roleSelector:settings') return respond(i, await buildSettingsPanel(i.guild));
     if (id === 'admin:roleSelector:enable' || id === 'admin:roleSelector:disable') {
       guildManager.setModuleEnabled(i.guildId, roleSelector.MODULE, id.endsWith(':enable'), { ...actor, action: id });
