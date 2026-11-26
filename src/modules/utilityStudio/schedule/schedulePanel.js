@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
@@ -129,7 +130,7 @@ function buildHome(interaction) {
   ).setFooter({ text: 'Goliath Schedule · /admin only' });
   return { embeds: [embed], components: [
     eventSelect(interaction.guildId, state),
-    row(button('admin:schedule:create', emojiLabel('ADD', 'Create Event'), ButtonStyle.Success), button('admin:schedule:planning', emojiLabel('VOTE', 'Plan Event'), ButtonStyle.Success), button('admin:schedule:edit', emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary, !event), button('admin:schedule:deploy', event?.messageId ? emojiLabel('USER_INVITES', 'Update Post') : emojiLabel('USER_INVITES', 'Deploy'), ButtonStyle.Primary, !event)),
+    row(button('admin:schedule:create', emojiLabel('ADD', 'Create Event'), ButtonStyle.Success), button('admin:schedule:planning', emojiLabel('VOTE', 'Plan Event'), ButtonStyle.Success), button('admin:schedule:edit', emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary, !event), button('admin:schedule:deploy', event?.messageId ? emojiLabel('USER_INVITES', 'Update Post') : emojiLabel('USER_INVITES', 'Deploy'), ButtonStyle.Primary, !event), variablesButton('admin:schedule:variables')),
     row(button('admin:schedule:setup', emojiLabel('MODERATION_DASHBOARD', 'Event Setup'), ButtonStyle.Primary, !event), button('admin:schedule:rsvp', emojiLabel('MOD_STAFF', 'RSVP & Roles'), ButtonStyle.Primary, !event), button('admin:schedule:timing', emojiLabel('REVERSED', 'Repeat & Reminders'), ButtonStyle.Primary, !event), button('admin:schedule:templates', emojiLabel('WORKSPACE', 'Templates'), ButtonStyle.Secondary)),
     row(button('admin:schedule:duplicate', emojiLabel('DOCUMENT', 'Duplicate'), ButtonStyle.Secondary, !event), button('admin:schedule:toggle', enabled ? emojiLabel('PAUSE_PLAIN', 'Disable') : emojiLabel('WELCOME_RUN', 'Enable'), enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('admin:schedule:cancel', emojiLabel('AUTOMOD_SPAM', 'Cancel Event'), ButtonStyle.Danger, !event || event.status !== 'scheduled'), button('admin:schedule:health', emojiLabel('WELCOME_DIAGNOSTICS', 'Health')), button('admin:schedule:refresh', emojiLabel('REFRESH', 'Refresh'))),
     row(button('admin:studio:utilityStudio', emojiLabel('BACK', 'Back to Utility Studio'))),
@@ -251,6 +252,7 @@ async function handleScheduleAdminInteraction(interaction) {
     if (id === 'admin:schedule:planCreateEvent') { const created = await createEventFromBest(interaction); return respond(interaction, { content: `✅ Created **${created.title}** from the strongest shared planning result.`, ...buildPanel(interaction) }); }
     if (id === 'admin:schedule:event') { state.eventId = interaction.values[0]; return respond(interaction, buildPanel(interaction)); }
     if (id === 'admin:schedule:template') { state.templateId = interaction.values[0]; return respond(interaction, buildPanel(interaction)); }
+    if (id === 'admin:schedule:variables') { await interaction.reply(variableReference('global', { title: 'Schedule · Event Description Variables', note: 'Global variables are supported in event descriptions. Notification and thread templates also support their existing event-specific placeholders.' })); return true; }
     if (id === 'admin:schedule:create') { await interaction.showModal(createModal()); return true; }
     if (id === 'admin:schedule:edit') { const event = schedule.getEvent(interaction.guildId, state.eventId); if (!event) throw new Error('Select an event first.'); await interaction.showModal(createModal(event)); return true; }
     if (id === 'admin:schedule:createModal' || id === 'admin:schedule:editModal') {
