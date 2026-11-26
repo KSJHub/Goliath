@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
@@ -166,6 +167,7 @@ function buildOverviewPanel(guild, memberName) {
       row(
         button('admin:suggestions:destinations', emojiLabel('SUGGESTION_INBOX', 'Outcomes & Logs'), ButtonStyle.Primary),
         button('admin:suggestions:settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
+        variablesButton('admin:suggestions:variables'),
       ),
       row(
         publishButton,
@@ -351,6 +353,7 @@ async function handleSuggestionsAdminInteraction(interaction) {
       if (rolePicker.kind === 'page' && interaction.isButton?.()) return safeUpdate(interaction, buildAdminPanel(interaction.guild, memberName, 'reviewers', rolePicker.page));
     }
     if (id === 'admin:suggestions' || id === 'admin:suggestions:overview') { await reconcileAdminState(interaction.guild); return safeUpdate(interaction, buildAdminPanel(interaction.guild, memberName, 'overview')); }
+    if (id === 'admin:suggestions:variables') { await interaction.reply(variableReference('suggestions', { title: 'Suggestions · Template Variables', note: 'Use these in assigned Embed Studio templates. Suggestion-specific values require a suggestion record.' })); return true; }
     if (id === 'admin:suggestions:settings') return safeUpdate(interaction, buildAdminPanel(interaction.guild, memberName, 'settings'));
     if (id === 'admin:suggestions:reviewers') { await refreshManagementRoleCache(interaction.guild); return safeUpdate(interaction, buildAdminPanel(interaction.guild, memberName, 'reviewers')); }
     if (id === 'admin:suggestions:destinations') return safeUpdate(interaction, buildAdminPanel(interaction.guild, memberName, 'destinations'));
