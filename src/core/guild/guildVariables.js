@@ -72,6 +72,7 @@ const MODULE_VARIABLES = Object.freeze({
   welcome: [...MEMBER_VARIABLES, '{joinedAt}'],
   goodbye: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
   leave: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
+  scheduledWelcome: ['{members}', '{memberNames}', '{memberCount}', '{server}', '{role}', '{date}'],
   dmWelcome: [...MEMBER_VARIABLES, '{joinedAt}'],
   tickets: ['{ticketId}', '{ticketDisplayId}', '{ticketType}', '{ticketPriority}', '{ticketCreator}', '{ticketChannel}', '{ticketStatus}'],
   forms: ['{formId}', '{formName}', '{submissionId}', '{submitter}', '{submissionStatus}', '{reviewer}'],
