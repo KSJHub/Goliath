@@ -1,4 +1,5 @@
 'use strict';
+const { renderModuleTemplate } = require('../../../core/guild/guildVariables');
 
 const {
   EmbedBuilder,
@@ -113,7 +114,8 @@ function filterEntriesByLevelingEligibility(guildId, entries = [], section = {})
   return uniqueEntries.filter((userId) => eligibleIds.has(String(userId)));
 }
 
-function buildGiveawayEmbed(giveaway, section = {}) {
+function buildGiveawayEmbed(giveaway, section = {}, guild = null) {
+  const description = guild ? renderModuleTemplate(giveaway.description, 'global', { guild }) : giveaway.description;
   const ended = giveaway.status === 'ended';
   const winners = giveaway.winners?.length
     ? giveaway.winners.map((id) => `<@${id}>`).join(', ')
@@ -123,7 +125,7 @@ function buildGiveawayEmbed(giveaway, section = {}) {
     .setColor(ended ? 0x57f287 : 0xfaa61a)
     .setTitle(`🎉 ${giveaway.prize}`)
     .setDescription([
-      giveaway.description || 'Click the button below or react with 🎉 to enter.',
+      String(description || '').slice(0, 2000) || 'Click the button below or react with 🎉 to enter.',
       '',
       `**Status:** ${giveaway.status}`,
       `**Entries:** ${giveaway.entries?.length || 0}`,
@@ -151,7 +153,7 @@ async function buildResolvedGiveawayPayload(guild, giveaway, section = {}) {
     embeds: await emojis.resolveEmbeds(
       guild.client,
       guild.id,
-      [buildGiveawayEmbed(giveaway, section)]
+      [buildGiveawayEmbed(giveaway, section, guild)]
     ),
     components: buildGiveawayRows(giveaway),
   };
