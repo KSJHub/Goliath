@@ -247,6 +247,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
         button(enabled ? 'admin:leveling:disable' : 'admin:leveling:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary),
         button('admin:leveling:toggleMessages', section.xpSources.message.enabled ? emojiLabel('USER_FEEDBACK', 'Messages On') : emojiLabel('USER_FEEDBACK', 'Messages Off'), ButtonStyle.Secondary),
         button('admin:leveling:toggleVoice', section.xpSources.voice.enabled ? emojiLabel('USER_TEMP_VOICE', 'Voice On') : emojiLabel('USER_TEMP_VOICE', 'Voice Off'), ButtonStyle.Secondary),
+        variablesButton('admin:leveling:variables'),
         button('admin:leveling:toggleAnnounce', section.announceLevelUps ? emojiLabel('USER_SOCIAL', 'Announce On') : emojiLabel('USER_SOCIAL', 'Announce Off'), ButtonStyle.Secondary),
       ),
       row(
@@ -257,13 +258,11 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
         button('admin:leveling:leaderboard', emojiLabel('ANALYTICS', 'Analytics'), ButtonStyle.Primary),
       ),
       row(
-        variablesButton('admin:leveling:variables'),
         button('admin:leveling:xpmanage', emojiLabel('WELCOME_CUSTOM', 'XP Manager'), ButtonStyle.Primary),
         button('admin:leveling:maintenance', emojiLabel('TOOLS', 'Maintenance'), ButtonStyle.Primary),
         button('admin:leveling:trackingRules', emojiLabel('AUTOMOD_SPAM', 'XP Exclusions'), ButtonStyle.Secondary),
         button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
-        button(`admin:leveling:managerPage:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
-        button(`admin:leveling:managerPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1),
+        button(`admin:leveling:managerPage:${(roleInfo.page + 1) % Math.max(1, roleInfo.pages)}`, `Roles ${roleInfo.page + 1}/${roleInfo.pages}`, ButtonStyle.Secondary, roleInfo.pages <= 1),
       ),
     ],
   };
