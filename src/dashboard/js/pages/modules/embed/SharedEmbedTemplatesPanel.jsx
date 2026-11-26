@@ -1,3 +1,4 @@
+import VariableReference from '../../../shared/VariableReference.jsx';
 import { ThemedSelect } from '../../../ui/DiscordResourceSelects.jsx';
 import React, { useMemo, useState } from 'react';
 
@@ -89,7 +90,7 @@ export default function SharedEmbedTemplatesPanel({ theme, payload = {}, busy = 
         <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.24)', borderRadius: 16, padding: 14, display: 'grid', gap: 12 }}><strong>Discord Preview</strong><div style={{ border: `1px solid ${theme.cardBorder}`, background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.76))', borderRadius: 16, padding: 16, borderLeft: `4px solid ${moduleKey === 'suggestions' ? '#FEE75C' : '#7c3aed'}`, display: 'grid', gap: 10 }}><strong>{selectedTemplate.embed?.title || selectedTemplate.title || labelFromKey(slot)}</strong><p style={{ margin: 0, color: theme.mutedText, lineHeight: 1.5 }}>{selectedTemplate.embed?.description || selectedTemplate.description || `Preview for ${labelFromKey(slot)}.`}</p></div></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 10 }}>{templates.length ? templates.map((template) => <TemplateCard key={template.templateId || template.id} theme={theme} template={template} active={String(template.templateId || template.id) === String(templateId)} />) : <TemplateCard theme={theme} template={selectedTemplate} active />}</div>
         <div style={{ borderTop: `1px solid ${theme.cardBorder}`, paddingTop: 12, display: 'grid', gap: 8 }}><strong>Current Bindings</strong>{Object.keys(bindings).length ? Object.entries(bindings).map(([moduleName, map]) => <div key={moduleName} style={{ color: theme.mutedText, fontSize: 13 }}>{moduleName}: {Object.entries(safeObject(map)).map(([slotName, id]) => `${slotName} → ${id}`).join(', ')}</div>) : <span style={{ color: theme.mutedText }}>No module bindings yet.</span>}</div>
-        <div style={{ borderTop: `1px solid ${theme.cardBorder}`, paddingTop: 12, display: 'grid', gap: 8 }}><strong>Supported Variables</strong><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{safeArray(variables[moduleKey] || variables.global || selectedTemplate.usedVariables).map((variable) => <span key={variable} style={{ color: theme.mutedText, border: `1px solid ${theme.cardBorder}`, borderRadius: 999, padding: '3px 7px', fontSize: 11 }}>{variable}</span>)}</div></div>
+        <VariableReference theme={theme} tokens={safeArray(variables[moduleKey] || variables.global || selectedTemplate.usedVariables)} note="Copy supported placeholders into the shared template editor." />
       </div>
     </div>
   </section>;
