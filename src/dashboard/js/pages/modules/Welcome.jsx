@@ -1,4 +1,4 @@
-import VariableReference from '../../shared/VariableReference.jsx';
+import VariableReference, { appendVariable } from '../../shared/VariableReference.jsx';
 import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
@@ -22,7 +22,7 @@ function CustomEditor({ theme, value, onChange, onSave, busy, variables = [], dm
   return <div style={{border: `1px solid ${theme.cardBorder}`,borderRadius:16,padding:14,display:'grid',gap:12}}>
     <strong>{E.BUILDER} {dm?'Custom DM Welcome':'Custom Public Welcome'}</strong>
     <div style={{color:theme.mutedText,fontSize:12}}>Normal Discord message. Manage embeds in Embed Studio.</div>
-    <textarea aria-label="Welcome message" rows={6} maxLength={2000} value={value.content} onChange={e=>onChange({content:e.target.value})} style={fieldStyle(theme)}/><VariableReference theme={theme} tokens={variables} onInsert={token=>onChange({content:(value.content+token).slice(0,2000)})}/>
+    <textarea aria-label="Welcome message" rows={6} maxLength={2000} value={value.content} onChange={e=>onChange({content:e.target.value})} style={fieldStyle(theme)}/><VariableReference theme={theme} tokens={variables} onInsert={token=>onChange({content:appendVariable(value.content,token,2000)})}/>
     <div style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{renderWelcomePreview(value.content)}</div>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span>{value.content.length}/2000</span><button type="button" disabled={busy||!value.content.trim()} onClick={onSave} style={buttonStyle(theme,'success')}>{busy?'Saving...':'Save Message'}</button></div>
   </div>;
@@ -48,7 +48,7 @@ function PresetLibrary({theme,config,scheduled,busy,variables={},onAction,onLoad
     <ThemedSelect theme={theme} aria-label="Workspace" style={fieldStyle(theme)} value={scope} onChange={e=>{setScope(e.target.value);setId('');setName('');setContent('');setJson('');setDefaultDraft(null);setImportError('');}}><option value="public">Instant Public</option><option value="dm">Instant DM</option><option value="scheduled">Scheduled Welcome</option></ThemedSelect>
     <ThemedSelect theme={theme} aria-label="Saved preset" style={fieldStyle(theme)} value={selected?id:''} onChange={e=>{const key=e.target.value;setId(key);setName(all[key]?.name||'');setContent(all[key]?.content||'');}}><option value="">Select a preset</option>{Object.entries(all).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([key,v])=><option key={key} value={key}>{v.content===config?.normalDefaults?.[scope]?'⭐ ':''}{v.name}</option>)}</ThemedSelect>
     <input aria-label="Preset name" placeholder="Preset name" maxLength={80} value={name} onChange={e=>setName(e.target.value)} style={fieldStyle(theme)}/>
-    <textarea aria-label="Preset message" rows={5} maxLength={limit} value={content} onChange={e=>setContent(e.target.value)} style={fieldStyle(theme)}/><VariableReference theme={theme} tokens={variables[scope]} onInsert={token=>setContent(old=>(old+token).slice(0,limit))}/>
+    <textarea aria-label="Preset message" rows={5} maxLength={limit} value={content} onChange={e=>setContent(e.target.value)} style={fieldStyle(theme)}/><VariableReference theme={theme} tokens={variables[scope]} onInsert={token=>setContent(old=>appendVariable(old,token,limit))}/>
     <div style={{whiteSpace:'pre-wrap'}}>{renderWelcomePreview(content)}</div>
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       {btn('Copy active message',()=>setContent(active||''))}
@@ -62,7 +62,7 @@ function PresetLibrary({theme,config,scheduled,busy,variables={},onAction,onLoad
 
     </div>
     <strong>Default Message</strong>
-    <textarea aria-label="Default message" rows={5} maxLength={limit} value={defaultDraft??savedDefault} onChange={e=>setDefaultDraft(e.target.value)} style={fieldStyle(theme)}/><VariableReference theme={theme} tokens={variables[scope]} onInsert={token=>setDefaultDraft(old=>((old??savedDefault)+token).slice(0,limit))}/>
+    <textarea aria-label="Default message" rows={5} maxLength={limit} value={defaultDraft??savedDefault} onChange={e=>setDefaultDraft(e.target.value)} style={fieldStyle(theme)}/><VariableReference theme={theme} tokens={variables[scope]} onInsert={token=>setDefaultDraft(old=>appendVariable(old??savedDefault,token,limit))}/>
     <div style={{whiteSpace:'pre-wrap'}}>{renderWelcomePreview(defaultDraft??savedDefault)}</div>
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       {btn('Save Default',async()=>{if(await onAction({scope,action:'editDefault',content:defaultDraft??savedDefault}))setDefaultDraft(null);},defaultDraft===null||!defaultDraft.trim(),'success')}
