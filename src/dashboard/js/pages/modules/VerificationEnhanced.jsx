@@ -1,3 +1,4 @@
+import VariableReference from '../../shared/VariableReference.jsx';
 import { ThemedSelect } from '../../ui/DiscordResourceSelects.jsx';
 import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
@@ -672,7 +673,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <h2 id="verification-section-9" tabIndex={-1} style={{margin:0,scrollMarginTop:96}}>9 · 📝 Message Templates</h2>
         <p style={{color:theme.mutedText}}>Edit the same templates used by Discord. Save advanced settings before changing messages. Keep template variables intact.</p>
         <label>Template <select value={messageKey} disabled={!!busy} onChange={e=>{setMessageKey(e.target.value);setMessageDraft(null);}}>{Object.keys(data?.defaultMessages || {}).map(key=><option key={key} value={key}>{key.replace(/([A-Z])/g,' $1')}</option>)}</select></label>
-        <textarea aria-label="Message content" rows={5} maxLength={1500} value={messageDraft ?? data?.messages?.[messageKey] ?? ''} onChange={e=>setMessageDraft(e.target.value)} />
+        <textarea aria-label="Message content" rows={5} maxLength={1500} value={messageDraft ?? data?.messages?.[messageKey] ?? ''} onChange={e=>setMessageDraft(e.target.value)} /><VariableReference theme={theme} tokens={data?.variables?.[messageKey]} onInsert={token=>setMessageDraft(old=>((old??data?.messages?.[messageKey]??'')+token).slice(0,1500))} />
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <button type="button" disabled={!!busy || advancedDirty.current || !messageDraft?.trim()} style={buttonStyle(theme,'success')} onClick={()=>saveMessages({[messageKey]:messageDraft})}>Save Message</button>
           <button type="button" disabled={!!busy || advancedDirty.current || !data?.defaultMessages?.[messageKey]} style={buttonStyle(theme)} onClick={async()=>{if(await goliathDialog.confirm('Restore the selected template to its default?',{title:'Reset Message',danger:true})) await saveMessages({[messageKey]:data.defaultMessages[messageKey]});}}>Reset Selected</button>
