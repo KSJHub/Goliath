@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton } = require('../../../core/ui/variableReference');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -105,9 +106,9 @@ function messagePoolPayload(interaction, type) {
   const section = birthdays.getSection(interaction.guildId);
   const group = type === 'group';
   const templates = group ? section.settings.groupMessageTemplates : section.settings.messageTemplates;
-  const variables = group ? '`{mentions}` · `{count}` · `{server}`' : '`{mention}` · `{user}` · `{server}` · `{age}`';
+
   const preview = templates.slice(0, 5).map((message, index) => `**${index + 1}.** ${message}`).join('\n\n');
-  return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(group ? '🎉 Group Birthday Messages' : '💬 Individual Birthday Messages').setDescription(`Active messages: **${templates.length}**\nVariables: ${variables}\n\n${preview || 'No messages configured.'}\n\nGoliath rotates through this pool automatically.`).setFooter({ text: 'Goliath Birthdays · Celebration Messages' }).setTimestamp()], components: [row(button(`admin:birthdays:messages:${type}:edit`, '✏️ Edit Messages', ButtonStyle.Primary), button(`admin:birthdays:messages:${type}:defaults`, '♻️ Restore Defaults')), row(button('admin:birthdays:celebration', '⬅️ Back'))] };
+  return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(group ? '🎉 Group Birthday Messages' : '💬 Individual Birthday Messages').setDescription(`Active messages: **${templates.length}**\nUse Variables to view available placeholders.\n\n${preview || 'No messages configured.'}\n\nGoliath rotates through this pool automatically.`).setFooter({ text: 'Goliath Birthdays · Celebration Messages' }).setTimestamp()], components: [row(button(`admin:birthdays:messages:${type}:edit`, '✏️ Edit Messages', ButtonStyle.Primary), variablesButton(`admin:birthdays:messages:${type}:variables`), button(`admin:birthdays:messages:${type}:defaults`, '♻️ Restore Defaults')), row(button('admin:birthdays:celebration', '⬅️ Back'))] };
 }
 function cardImageLabel(section) { if (section.settings.cardImageMode === 'none') return 'None'; if (section.settings.cardImageMode === 'custom') return section.settings.cardImageUrl ? 'Custom Image/GIF' : 'Custom — URL missing'; return 'Goliath Default GIF'; }
 function cardPayload(interaction) { const section = birthdays.getSection(interaction.guildId); const desc = [`Status: **${section.settings.useBirthdayEmbed ? 'Enabled' : 'Disabled'}**`, `Title: **${section.settings.cardTitle}**`, `Colour: **${section.settings.cardColor}**`, `Image: **${cardImageLabel(section)}**`].join('\n'); return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🎨 Birthday Card').setDescription(desc).setFooter({ text: 'Goliath Birthdays · Birthday Card' }).setTimestamp()], components: [row(button('admin:birthdays:card:toggle', section.settings.useBirthdayEmbed ? '🟢 Card: On' : '⚪ Card: Off', section.settings.useBirthdayEmbed ? ButtonStyle.Success : ButtonStyle.Secondary), button('admin:birthdays:card:text', '✏️ Card Title', ButtonStyle.Primary), button('admin:birthdays:card:color', '🎨 Colour'), button('admin:birthdays:card:image', '🖼️ Image / GIF')), row(button('admin:birthdays:card:preview', '👁️ Preview'), button('admin:birthdays:card:defaults', '♻️ Restore Defaults')), row(button('admin:birthdays:celebration', '⬅️ Back'))] }; }
