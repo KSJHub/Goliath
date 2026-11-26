@@ -67,6 +67,7 @@ const MODULE_VARIABLES = Object.freeze({
   birthdayGroup: ['{mentions}', '{count}'],
   scheduleThread: ['{event}', '{channelId}', '{channelName}', '{channelMention}'],
   scheduleNotification: ['{event}', '{relative}', '{time}', '{host}', '{channelId}', '{channelName}', '{channelMention}'],
+  tempVoice: ['{username}'],
   sticky: ['{channelId}', '{channelName}', '{channelMention}'],
   welcome: [...MEMBER_VARIABLES, '{joinedAt}'],
   goodbye: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
