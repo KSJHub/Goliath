@@ -1206,7 +1206,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
        */
       new ActionRowBuilder().addComponents(
         actionButton("embed:back", "back"),
-        emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
+        require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
         emojiButton("embed:reset", "Reset", EMOJIS.REFRESH, ButtonStyle.Danger),
       ),
     ],
@@ -1314,7 +1314,7 @@ function buildPanelsPanel(i, who) {
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
         actionButton("embed:settings", "settings"),
-        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+        require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
       ),
     ],
   };
@@ -1348,7 +1348,7 @@ function buildFieldsPanel(i, who) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+      require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
     )
   );
   return {
@@ -1476,7 +1476,7 @@ function buildFieldsManagerPanel(interaction) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+      require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
     ),
   );
 
@@ -1511,7 +1511,7 @@ function buildButtonsPanel(i, who) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+      require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
     )
   );
   return { embeds: [simplePanel(emojiLabel('SECURITY_RADIO', "Button Management"), `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
@@ -1617,7 +1617,7 @@ function buildButtonsManagerPanel(interaction) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+      require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
     ),
   );
   // Reserve Discord's final action row for navigation.
@@ -2171,24 +2171,20 @@ function buildSettingsPanel(interaction) {
 
       new ActionRowBuilder().addComponents(
         actionButton("embed:settings-back", "back"),
-        emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
+        require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
       )
     ]
   };
 }
 
 function buildHelpersPanel(i) {
-  const s = getSession(i);
-
+  const { variableReference } = require('../../../core/ui/variableReference');
+  const registry = require('../../../core/guild/guildVariables');
+  const reference = variableReference('embed', { title: 'Embed Variables', tokens: registry.getVariables(), note: 'Variables are resolved according to the delivery context.' });
   return {
-    embeds: [
-      simplePanel(
-        emojiLabel('VARIABLES', 'Embed Variables'),
-        HELPERS.map((h) => `\`${h}\``).join("\n"),
-        s,
-        memberName(i)
-      )
-    ],
+    embeds: reference.embeds,
+    files: reference.files,
+    allowedMentions: reference.allowedMentions,
     components: [
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
@@ -2470,7 +2466,7 @@ function buildContentManagerPanel(interaction) {
 
         actionButton("embed:settings", "settings"),
 
-        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+        require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
       ),
     ],
   };
@@ -2504,7 +2500,7 @@ function buildAppearancePanel(interaction) {
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
         actionButton("embed:settings", "settings"),
-        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+        require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
       ),
     ],
   };
@@ -2533,7 +2529,7 @@ function buildAppearanceIconPanel(interaction, kind) {
       ),
       new ActionRowBuilder().addComponents(
         actionButton("embed:content-back", "back"),
-        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
+        require("../../../core/ui/variableReference").variablesButton("embed:helpers"),
       ),
     ],
   };
