@@ -1,4 +1,5 @@
 'use strict';
+const { variablesButton, variableReference } = require('../../../core/ui/variableReference');
 const { navigationButton, goliathNavigation, emojiLabel, EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -197,7 +198,7 @@ function buildRuleCelebrationPanel(guild, ruleId) {
         {label:'Embed',value:'embed',default:own.celebrationEmbed === true},
         {label:'Message',value:'message',default:own.celebrationEmbed === false}
       ])),
-      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,emojiLabel('EDIT','Edit Template')), button(PREFIX + ':ruleCelebrationPreview:' + ruleId,emojiLabel('PREVIEW','Preview'))),
+      row(button(PREFIX + ':ruleCelebrationEdit:' + ruleId,emojiLabel('EDIT','Edit Template')), button(PREFIX + ':ruleCelebrationPreview:' + ruleId,emojiLabel('PREVIEW','Preview')), variablesButton(PREFIX + ':variables')),
       goliathNavigation(PREFIX + ':editBack:' + ruleId, PREFIX + ':settings')
     ]
   };
@@ -336,12 +337,11 @@ function buildCelebrationPanel(guildId) {
       'Historical awards: ' + (s.celebrateRetroactive ? 'Celebrations allowed' : 'Silent'),
       'Edit the template to personalise milestone celebrations. The preview below shows the saved template.',
       '',
-      '**Available placeholders**',
-      '`{member}` • `{username}` • `{milestone}` • `{role}` • `{duration}` • `{server}` • `{joined}` • `{achieved}` • `{nextMilestone}` • `{nextDue}`'
+      'Use Variables to view and copy available placeholders.'
     ].join('\n')), embed],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId(PREFIX + ':celebrationChannel').setPlaceholder('Celebration channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-      row(button(PREFIX + ':celebrationToggle', emojiLabel(s.announcePromotions ? 'WELCOME_MUTED' : 'WELCOME_CHANNEL',s.announcePromotions ? 'Disable Announcements' : 'Enable Announcements'),s.announcePromotions ? ButtonStyle.Secondary : ButtonStyle.Success), button(PREFIX + ':celebrationFormat', s.celebrationEmbed === false ? 'Use Embed' : 'Use Message'), button(PREFIX + ':celebrationEdit', emojiLabel('EDIT','Edit Template'))),
+      row(button(PREFIX + ':celebrationToggle', emojiLabel(s.announcePromotions ? 'WELCOME_MUTED' : 'WELCOME_CHANNEL',s.announcePromotions ? 'Disable Announcements' : 'Enable Announcements'),s.announcePromotions ? ButtonStyle.Secondary : ButtonStyle.Success), button(PREFIX + ':celebrationFormat', s.celebrationEmbed === false ? 'Use Embed' : 'Use Message'), button(PREFIX + ':celebrationEdit', emojiLabel('EDIT','Edit Template')), variablesButton(PREFIX + ':variables')),
       row(button(PREFIX + ':settings', emojiLabel('BACK', 'Back'))),
     ],
   };
@@ -450,6 +450,7 @@ async function handleTimedRolesInteraction(interaction) {
   if (!customId.startsWith(PREFIX)) return false;
   try {
     if (customId === PREFIX) return refresh(interaction);
+    if (customId === PREFIX + ':variables') return interaction.reply(variableReference('timedRoles', { title: 'Timed Roles · Celebration Variables', note: 'Milestone values are resolved for the promoted member.' }));
     if (customId.startsWith(PREFIX + ':rolePageNext:')) return refresh(interaction,null,Number(customId.split(':').pop()) || 0);
     if (customId.startsWith(PREFIX + ':auditPage:') || customId === PREFIX + ':auditExport') {
       if (interaction.user.id !== interaction.guild.ownerId && !interaction.memberPermissions?.has('Administrator')) throw new Error('Administrator access is required.');
