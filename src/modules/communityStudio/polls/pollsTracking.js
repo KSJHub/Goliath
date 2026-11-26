@@ -30,7 +30,7 @@ async function resolvePollMessage(guild, poll) {
 }
 async function pollPayload(guild, poll) {
   return {
-    embeds: await emojis.resolveEmbeds(guild.client, guild.id, [polls.buildPollEmbed(poll)]),
+    embeds: await emojis.resolveEmbeds(guild.client, guild.id, [polls.buildPollEmbed(poll, guild)]),
     components: poll.status === 'active' ? polls.buildPollComponents(poll) : [],
   };
 }
