@@ -70,12 +70,9 @@ function normaliseStickyInput(input = {}) {
 }
 
 function buildStickyPayload(sticky, channel = null) {
-  const render = value => {
-    if (!channel) return String(value ?? '');
-    const supported = new Set(guildVariables.variablesForModule('sticky'));
-    const map = guildVariables.buildVariableMap({ guild: channel.guild, channel, channelId: channel.id });
-    return String(value ?? '').replace(/\{[a-zA-Z][a-zA-Z0-9_.-]*\}/g, token => supported.has(token) && Object.hasOwn(map, token) ? String(map[token] ?? '') : token);
-  };
+  const render = value => channel
+    ? guildVariables.renderModuleTemplate(value, 'sticky', { guild: channel.guild, channel, channelId: channel.id })
+    : String(value ?? '');
   if (sticky.type === 'embed') {
     const embedData = sticky.embed || {};
     const embed = new EmbedBuilder()
